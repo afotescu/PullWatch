@@ -7,16 +7,18 @@ public sealed class CombatLogEventHandler(
     IRecordingService recordingService,
     ILogger<CombatLogEventHandler> logger)
 {
-    private long _previousChallengeEventTimestamp;
+    private long _previousRecordingEventTimestamp;
 
-    public async Task HandleAsync(string eventName, CancellationToken cancellationToken)
+    public async Task HandleAsync(CombatLogEvent combatLogEvent, CancellationToken cancellationToken)
     {
         var eventTimestamp = Stopwatch.GetTimestamp();
+        var eventName = combatLogEvent.Name;
 
         switch (eventName)
         {
             case WowEvents.ChallengeModeStart:
-                LogChallengeEventReceived(eventName, eventTimestamp);
+            case WowEvents.EncounterStart:
+                LogRecordingEventReceived(combatLogEvent, eventTimestamp);
                 await recordingService.StartAsync(cancellationToken);
                 logger.LogInformation(
                     "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
@@ -24,7 +26,8 @@ public sealed class CombatLogEventHandler(
                     Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds);
                 break;
             case WowEvents.ChallengeModeEnd:
-                LogChallengeEventReceived(eventName, eventTimestamp);
+            case WowEvents.EncounterEnd:
+                LogRecordingEventReceived(combatLogEvent, eventTimestamp);
                 await recordingService.StopAsync(cancellationToken);
                 logger.LogInformation(
                     "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
@@ -34,20 +37,65 @@ public sealed class CombatLogEventHandler(
         }
     }
 
-    private void LogChallengeEventReceived(string eventName, long eventTimestamp)
+    private void LogRecordingEventReceived(CombatLogEvent combatLogEvent, long eventTimestamp)
     {
-        if (_previousChallengeEventTimestamp == 0)
+        var eventName = combatLogEvent.Name;
+
+        if (_previousRecordingEventTimestamp == 0)
         {
             logger.LogInformation("Received {EventName}", eventName);
         }
         else
         {
             logger.LogInformation(
-                "Received {EventName}; previous challenge event was {ElapsedSincePreviousEvent}",
+                "Received {EventName}; previous recording event was {ElapsedSincePreviousEvent}",
                 eventName,
-                Stopwatch.GetElapsedTime(_previousChallengeEventTimestamp, eventTimestamp));
+                Stopwatch.GetElapsedTime(_previousRecordingEventTimestamp, eventTimestamp));
         }
 
-        _previousChallengeEventTimestamp = eventTimestamp;
+        _previousRecordingEventTimestamp = eventTimestamp;
+        logger.LogInformation("Combat log event: {CombatLogLine}", combatLogEvent.RawLine);
+        LogEventMetadata(combatLogEvent);
+    }
+
+    private void LogEventMetadata(CombatLogEvent combatLogEvent)
+    {
+        var arguments = combatLogEvent.Arguments;
+
+        if (combatLogEvent.Name == WowEvents.ChallengeModeStart && arguments.Count >= 5)
+        {
+            logger.LogInformation(
+                "Challenge started: {DungeonName}; instance {InstanceId}, challenge mode {ChallengeModeId}, level {Level}, affixes {Affixes}",
+                arguments[0],
+                arguments[1],
+                arguments[2],
+                arguments[3],
+                arguments[4]);
+            return;
+        }
+
+        if (combatLogEvent.Name == WowEvents.EncounterStart && arguments.Count >= 5)
+        {
+            logger.LogInformation(
+                "Encounter started: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, instance {InstanceId}",
+                arguments[1],
+                arguments[0],
+                arguments[2],
+                arguments[3],
+                arguments[4]);
+            return;
+        }
+
+        if (combatLogEvent.Name == WowEvents.EncounterEnd && arguments.Count >= 6)
+        {
+            logger.LogInformation(
+                "Encounter ended: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, success {Success}, duration {DurationMilliseconds} ms",
+                arguments[1],
+                arguments[0],
+                arguments[2],
+                arguments[3],
+                arguments[4],
+                arguments[5]);
+        }
     }
 }

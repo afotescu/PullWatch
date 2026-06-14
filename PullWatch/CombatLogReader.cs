@@ -10,7 +10,7 @@ public sealed class CombatLogReader(
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
     public async Task ReadAsync(
-        Func<string, CancellationToken, Task> handleEventAsync,
+        Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
         CancellationToken cancellationToken)
     {
         var combatLogPath = FindLatestCombatLog();
@@ -38,9 +38,9 @@ public sealed class CombatLogReader(
             
             logger.LogDebug(line);
 
-            if (TryGetEventName(line, out var eventName))
+            if (TryParseEvent(line, out var combatLogEvent))
             {
-                await handleEventAsync(eventName, cancellationToken);
+                await handleEventAsync(combatLogEvent, cancellationToken);
             }
         }
     }
@@ -60,9 +60,9 @@ public sealed class CombatLogReader(
             ?? throw new FileNotFoundException($"No combat log matching '{CombatLogPattern}' was found.");
     }
 
-    private static bool TryGetEventName(string line, out string eventName)
+    private static bool TryParseEvent(string line, out CombatLogEvent combatLogEvent)
     {
-        eventName = string.Empty;
+        combatLogEvent = null!;
 
         var timestampSeparator = line.IndexOf("  ", StringComparison.Ordinal);
         if (timestampSeparator < 0)
@@ -77,7 +77,16 @@ public sealed class CombatLogReader(
             eventEnd = line.Length;
         }
 
-        eventName = line[eventStart..eventEnd];
-        return eventName.Length > 0;
+        var eventName = line[eventStart..eventEnd];
+        if (eventName.Length == 0)
+        {
+            return false;
+        }
+
+        var argumentsStart = eventEnd < line.Length
+            ? eventEnd + 1
+            : line.Length;
+        combatLogEvent = new CombatLogEvent(eventName, argumentsStart, line);
+        return true;
     }
 }
