@@ -21,7 +21,11 @@ Console.CancelKeyPress += (_, eventArgs) =>
 
 var logger = loggerFactory.CreateLogger("PullWatch");
 var reader = new CombatLogReader(logsDirectory, loggerFactory.CreateLogger<CombatLogReader>());
-var eventHandler = new CombatLogEventHandler(loggerFactory.CreateLogger<CombatLogEventHandler>());
+await using var recordingService = new ScreenRecordingService(
+    loggerFactory.CreateLogger<ScreenRecordingService>());
+var eventHandler = new CombatLogEventHandler(
+    recordingService,
+    loggerFactory.CreateLogger<CombatLogEventHandler>());
 
 try
 {
