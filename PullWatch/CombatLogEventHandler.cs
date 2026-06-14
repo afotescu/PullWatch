@@ -8,6 +8,7 @@ public sealed class CombatLogEventHandler(
     ILogger<CombatLogEventHandler> logger)
 {
     private long _previousRecordingEventTimestamp;
+    private RecordingOwner _recordingOwner;
 
     public async Task HandleAsync(CombatLogEvent combatLogEvent, CancellationToken cancellationToken)
     {
@@ -17,24 +18,86 @@ public sealed class CombatLogEventHandler(
         switch (eventName)
         {
             case WowEvents.ChallengeModeStart:
+                await HandleStartAsync(
+                    combatLogEvent,
+                    eventTimestamp,
+                    RecordingOwner.ChallengeMode,
+                    cancellationToken);
+                break;
             case WowEvents.EncounterStart:
-                LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-                await recordingService.StartAsync(cancellationToken);
-                logger.LogInformation(
-                    "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
-                    eventName,
-                    Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds);
+                await HandleStartAsync(
+                    combatLogEvent,
+                    eventTimestamp,
+                    RecordingOwner.Encounter,
+                    cancellationToken);
                 break;
             case WowEvents.ChallengeModeEnd:
+                await HandleEndAsync(
+                    combatLogEvent,
+                    eventTimestamp,
+                    RecordingOwner.ChallengeMode,
+                    cancellationToken);
+                break;
             case WowEvents.EncounterEnd:
-                LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-                await recordingService.StopAsync(cancellationToken);
-                logger.LogInformation(
-                    "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
-                    eventName,
-                    Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds);
+                await HandleEndAsync(
+                    combatLogEvent,
+                    eventTimestamp,
+                    RecordingOwner.Encounter,
+                    cancellationToken);
                 break;
         }
+    }
+
+    private async Task HandleStartAsync(
+        CombatLogEvent combatLogEvent,
+        long eventTimestamp,
+        RecordingOwner owner,
+        CancellationToken cancellationToken)
+    {
+        LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+
+        if (_recordingOwner != RecordingOwner.None)
+        {
+            logger.LogInformation(
+                "Ignoring {EventName} because recording is owned by {RecordingOwner}",
+                combatLogEvent.Name,
+                _recordingOwner);
+            return;
+        }
+
+        await recordingService.StartAsync(cancellationToken);
+        _recordingOwner = owner;
+        LogEventHandled(combatLogEvent.Name, eventTimestamp);
+    }
+
+    private async Task HandleEndAsync(
+        CombatLogEvent combatLogEvent,
+        long eventTimestamp,
+        RecordingOwner owner,
+        CancellationToken cancellationToken)
+    {
+        LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+
+        if (_recordingOwner != owner)
+        {
+            logger.LogInformation(
+                "Ignoring {EventName} because recording is owned by {RecordingOwner}",
+                combatLogEvent.Name,
+                _recordingOwner);
+            return;
+        }
+
+        await recordingService.StopAsync(cancellationToken);
+        _recordingOwner = RecordingOwner.None;
+        LogEventHandled(combatLogEvent.Name, eventTimestamp);
+    }
+
+    private void LogEventHandled(string eventName, long eventTimestamp)
+    {
+        logger.LogInformation(
+            "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
+            eventName,
+            Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds);
     }
 
     private void LogRecordingEventReceived(CombatLogEvent combatLogEvent, long eventTimestamp)
@@ -97,5 +160,12 @@ public sealed class CombatLogEventHandler(
                 arguments[4],
                 arguments[5]);
         }
+    }
+
+    private enum RecordingOwner
+    {
+        None,
+        ChallengeMode,
+        Encounter
     }
 }
