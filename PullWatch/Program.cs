@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using PullWatch;
 
+var recordNow = args.Contains("--record-now", StringComparer.Ordinal);
 var logsDirectory = @"E:\World of Warcraft\_retail_\Logs";
 
 using var cancellation = new CancellationTokenSource();
@@ -20,9 +21,30 @@ Console.CancelKeyPress += (_, eventArgs) =>
 };
 
 var logger = loggerFactory.CreateLogger("PullWatch");
-var reader = new CombatLogReader(logsDirectory, loggerFactory.CreateLogger<CombatLogReader>());
 await using var recordingService = new ScreenRecordingService(
     loggerFactory.CreateLogger<ScreenRecordingService>());
+
+if (recordNow)
+{
+    try
+    {
+        await recordingService.StartAsync(cancellation.Token);
+        logger.LogInformation("Manual recording started; press Ctrl+C to stop");
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellation.Token);
+    }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+    {
+        logger.LogInformation("Stopping manual recording");
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Manual recording failed");
+    }
+
+    return;
+}
+
+var reader = new CombatLogReader(logsDirectory, loggerFactory.CreateLogger<CombatLogReader>());
 var eventHandler = new CombatLogEventHandler(
     recordingService,
     loggerFactory.CreateLogger<CombatLogEventHandler>());
