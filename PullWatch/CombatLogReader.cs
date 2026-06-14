@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Logging;
+
 namespace PullWatch;
 
-public sealed class CombatLogReader(string logsDirectory)
+public sealed class CombatLogReader(
+    string logsDirectory,
+    ILogger<CombatLogReader> logger)
 {
     private const string CombatLogPattern = "WoWCombatLog-*";
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
@@ -10,7 +14,7 @@ public sealed class CombatLogReader(string logsDirectory)
         CancellationToken cancellationToken)
     {
         var combatLogPath = FindLatestCombatLog();
-        Console.WriteLine($"Reading combat log: {combatLogPath}");
+        logger.LogInformation("Reading combat log: {CombatLogPath}", combatLogPath);
 
         await using var stream = new FileStream(
             combatLogPath,
@@ -31,6 +35,8 @@ public sealed class CombatLogReader(string logsDirectory)
                 await Task.Delay(PollInterval, cancellationToken);
                 continue;
             }
+            
+            logger.LogDebug(line);
 
             if (TryGetEventName(line, out var eventName))
             {

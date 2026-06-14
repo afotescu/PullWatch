@@ -1,8 +1,17 @@
+using Microsoft.Extensions.Logging;
 using PullWatch;
 
 var logsDirectory = @"E:\World of Warcraft\_retail_\Logs";
 
 using var cancellation = new CancellationTokenSource();
+using var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.TimestampFormat = "HH:mm:ss ";
+    });
+});
 
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -10,8 +19,9 @@ Console.CancelKeyPress += (_, eventArgs) =>
     cancellation.Cancel();
 };
 
-var reader = new CombatLogReader(logsDirectory);
-var eventHandler = new CombatLogEventHandler();
+var logger = loggerFactory.CreateLogger("PullWatch");
+var reader = new CombatLogReader(logsDirectory, loggerFactory.CreateLogger<CombatLogReader>());
+var eventHandler = new CombatLogEventHandler(loggerFactory.CreateLogger<CombatLogEventHandler>());
 
 try
 {
@@ -19,9 +29,9 @@ try
 }
 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 {
-    Console.WriteLine("Stopped.");
+    logger.LogInformation("Stopped");
 }
 catch (Exception exception)
 {
-    Console.Error.WriteLine(exception.Message);
+    logger.LogError(exception, "PullWatch stopped unexpectedly");
 }

@@ -1,16 +1,18 @@
+using Microsoft.Extensions.Logging;
+
 namespace PullWatch;
 
-public sealed class CombatLogEventHandler
+public sealed class CombatLogEventHandler(ILogger<CombatLogEventHandler> logger)
 {
     public Task HandleAsync(string eventName, CancellationToken cancellationToken)
     {
         switch (eventName)
         {
             case WowEvents.ChallengeModeStart:
-                Console.WriteLine("Mythic+ challenge started.");
+                logger.LogInformation("Mythic+ challenge started");
                 break;
             case WowEvents.ChallengeModeEnd:
-                Console.WriteLine("Mythic+ challenge ended.");
+                logger.LogInformation("Mythic+ challenge ended");
                 break;
         }
 
