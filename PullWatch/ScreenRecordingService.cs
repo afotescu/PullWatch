@@ -15,9 +15,14 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
     private TaskCompletionSource _recordingFinished = CreateCompletionSource();
     private bool _isStopping;
     private string? _outputPath;
+    private long _recordingRequestedTimestamp;
+    private long _recordingStartedTimestamp;
+    private long _stopRequestedTimestamp;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        var startRequestTimestamp = Stopwatch.GetTimestamp();
+
         await _stateLock.WaitAsync(cancellationToken);
 
         try
@@ -28,19 +33,36 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
                 return;
             }
 
+            var wowLookupTimestamp = Stopwatch.GetTimestamp();
             var windowHandle = FindWowWindowHandle();
+            logger.LogInformation(
+                "Located World of Warcraft window in {ElapsedMilliseconds:F1} ms",
+                Stopwatch.GetElapsedTime(wowLookupTimestamp).TotalMilliseconds);
+
             var outputPath = CreateOutputPath();
+
+            var recorderCreationTimestamp = Stopwatch.GetTimestamp();
             var recorder = Recorder.CreateRecorder(CreateOptions(windowHandle));
+            logger.LogInformation(
+                "Created screen recorder in {ElapsedMilliseconds:F1} ms",
+                Stopwatch.GetElapsedTime(recorderCreationTimestamp).TotalMilliseconds);
 
             _recordingFinished = CreateCompletionSource();
             _isStopping = false;
             _outputPath = outputPath;
             _recorder = recorder;
+            _recordingRequestedTimestamp = startRequestTimestamp;
+            _recordingStartedTimestamp = 0;
+            _stopRequestedTimestamp = 0;
 
             recorder.OnRecordingComplete += OnRecordingComplete;
             recorder.OnRecordingFailed += OnRecordingFailed;
+            recorder.OnStatusChanged += OnStatusChanged;
 
-            logger.LogInformation("Starting recording: {OutputPath}", outputPath);
+            logger.LogInformation(
+                "Requesting recording start after {ElapsedMilliseconds:F1} ms: {OutputPath}",
+                Stopwatch.GetElapsedTime(startRequestTimestamp).TotalMilliseconds,
+                outputPath);
             recorder.Record(outputPath);
         }
         catch
@@ -73,7 +95,11 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
             if (!_isStopping)
             {
                 _isStopping = true;
-                logger.LogInformation("Stopping recording: {OutputPath}", _outputPath);
+                _stopRequestedTimestamp = Stopwatch.GetTimestamp();
+                logger.LogInformation(
+                    "Requesting recording stop after {RecordingDuration}: {OutputPath}",
+                    GetRecordingDuration(),
+                    _outputPath);
                 _recorder.Stop();
             }
         }
@@ -160,7 +186,13 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
 
     private void OnRecordingComplete(object? sender, RecordingCompleteEventArgs eventArgs)
     {
-        logger.LogInformation("Recording completed: {OutputPath}", eventArgs.FilePath);
+        logger.LogInformation(
+            "Recording completed; duration {RecordingDuration}, finalization {FinalizationDuration}, size {FileSizeMegabytes:F1} MB: {OutputPath}",
+            GetRecordingDuration(),
+            GetElapsedTime(_stopRequestedTimestamp),
+            GetFileSizeMegabytes(eventArgs.FilePath),
+            eventArgs.FilePath);
+
         CompleteRecording();
     }
 
@@ -173,6 +205,24 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
 
         _recordingFinished.TrySetException(new InvalidOperationException(eventArgs.Error));
         DisposeRecorder();
+    }
+
+    private void OnStatusChanged(object? sender, RecordingStatusEventArgs eventArgs)
+    {
+        if (eventArgs.Status == RecorderStatus.Recording && _recordingStartedTimestamp == 0)
+        {
+            _recordingStartedTimestamp = Stopwatch.GetTimestamp();
+            logger.LogInformation(
+                "Recorder status changed to {RecorderStatus} after {StartupDuration}",
+                eventArgs.Status,
+                GetElapsedTime(_recordingRequestedTimestamp));
+            return;
+        }
+
+        logger.LogInformation(
+            "Recorder status changed to {RecorderStatus}; recording duration {RecordingDuration}",
+            eventArgs.Status,
+            GetRecordingDuration());
     }
 
     private void CompleteRecording()
@@ -194,7 +244,35 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
 
         recorder.OnRecordingComplete -= OnRecordingComplete;
         recorder.OnRecordingFailed -= OnRecordingFailed;
+        recorder.OnStatusChanged -= OnStatusChanged;
         recorder.Dispose();
+    }
+
+    private TimeSpan GetRecordingDuration()
+    {
+        return GetElapsedTime(
+            _recordingStartedTimestamp != 0
+                ? _recordingStartedTimestamp
+                : _recordingRequestedTimestamp);
+    }
+
+    private static TimeSpan GetElapsedTime(long timestamp)
+    {
+        return timestamp == 0
+            ? TimeSpan.Zero
+            : Stopwatch.GetElapsedTime(timestamp);
+    }
+
+    private static double GetFileSizeMegabytes(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length / 1024d / 1024d;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     private static TaskCompletionSource CreateCompletionSource()
