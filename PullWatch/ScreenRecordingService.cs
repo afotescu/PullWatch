@@ -107,7 +107,8 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
                 [
                     new WindowRecordingSource(windowHandle)
                     {
-                        IsCursorCaptureEnabled = false
+                        IsBorderRequired = false,
+                        IsCursorCaptureEnabled = true
                     }
                 ]
             },
