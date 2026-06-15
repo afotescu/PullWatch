@@ -21,6 +21,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         null,
         null,
         null,
+        null,
         null);
     private bool _disposed;
 
@@ -145,13 +146,23 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 return RecordingCommandResult.Suppressed;
             }
 
-            PublishStatus(RecordingCoordinatorState.Starting, owner, identity, context);
             var startTask = _recordingService.StartAsync(context, CancellationToken.None);
+            PublishStatus(
+                RecordingCoordinatorState.Starting,
+                owner,
+                identity,
+                context,
+                activeOutputPath: _recordingService.ActiveOutputPath);
 
             try
             {
                 await startTask.WaitAsync(_startTimeout);
-                PublishStatus(RecordingCoordinatorState.Recording, owner, identity, context);
+                PublishStatus(
+                    RecordingCoordinatorState.Recording,
+                    owner,
+                    identity,
+                    context,
+                    activeOutputPath: _recordingService.ActiveOutputPath);
                 return RecordingCommandResult.Started;
             }
             catch (TimeoutException exception)
@@ -386,7 +397,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         string? identity,
         RecordingContext? context,
         Exception? lastFailure = null,
-        RecordingOwner? suppressedUntilOwnerEnd = null)
+        RecordingOwner? suppressedUntilOwnerEnd = null,
+        string? activeOutputPath = null)
     {
         var current = Status;
         var snapshot = new RecordingCoordinatorStatus(
@@ -396,7 +408,10 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             context,
             suppressedUntilOwnerEnd ?? current.SuppressedUntilOwnerEnd,
             current.SuppressedIdentity,
-            lastFailure ?? current.LastFailure);
+            lastFailure ?? current.LastFailure,
+            state == RecordingCoordinatorState.Idle
+                ? null
+                : activeOutputPath ?? current.ActiveOutputPath);
 
         SetStatus(snapshot);
     }

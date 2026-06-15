@@ -22,6 +22,8 @@ public sealed class ScreenRecordingService(
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
 
+    public string? ActiveOutputPath => Volatile.Read(ref _outputPath);
+
     public async Task StartAsync(RecordingContext context, CancellationToken cancellationToken)
     {
         var startRequestTimestamp = Stopwatch.GetTimestamp();

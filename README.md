@@ -148,17 +148,15 @@ These values are the defaults used when settings are not configured.
 
 ### Next
 
-- Test reliability across real Mythic+ runs.
-- Handle new combat-log files created while PullWatch is running.
-- Add simple settings editing to the desktop UI.
-- Add user-friendly encoder selection to the desktop UI.
-- Improve recording failure recovery.
-- Add focused automated tests.
+- Restructure the recording core behind a UI-independent application
+  controller.
+- Replace the console executable with a WPF desktop and tray application.
+- Add the recording dashboard, settings workflow, and diagnostics.
+- Harden and package the first self-contained desktop release.
 
 ### Later
 
-- Add a desktop GUI.
+- Add user-friendly encoder selection.
+- Add launch-with-Windows configuration.
 - Investigate capturing audio from World of Warcraft only.
-- Add recording metadata and improved filenames.
-- Investigate raid encounter recording with pre-roll.
 - Add recording history and playback management.

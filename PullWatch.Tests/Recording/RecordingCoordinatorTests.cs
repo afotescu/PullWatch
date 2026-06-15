@@ -229,6 +229,24 @@ public sealed class RecordingCoordinatorTests
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
 
+    [Fact]
+    public async Task ActiveOutputPathIsExposedAndClearedWhenIdle()
+    {
+        var recorder = new FakeRecordingService
+        {
+            ActiveOutputPath = @"C:\Recordings\manual.mp4"
+        };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(recorder.ActiveOutputPath, coordinator.Status.ActiveOutputPath);
+
+        await coordinator.StopManualAsync(CancellationToken.None);
+
+        Assert.Null(coordinator.Status.ActiveOutputPath);
+    }
+
     private static RecordingCoordinator CreateCoordinator(
         FakeRecordingService recorder,
         TimeSpan? startTimeout = null,

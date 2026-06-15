@@ -52,7 +52,8 @@ public sealed record RecordingCoordinatorStatus(
     RecordingContext? Context,
     RecordingOwner? SuppressedUntilOwnerEnd,
     string? SuppressedIdentity,
-    Exception? LastFailure);
+    Exception? LastFailure,
+    string? ActiveOutputPath);
 
 public sealed class RecordingServiceFailedEventArgs(Exception exception) : EventArgs
 {

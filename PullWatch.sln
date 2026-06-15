@@ -1,8 +1,10 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PullWatch", "PullWatch\PullWatch.csproj", "{8B48FF1F-AB25-44CE-BDB6-28DEDB5CBED6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PullWatch.Core", "PullWatch.Core\PullWatch.Core.csproj", "{8B48FF1F-AB25-44CE-BDB6-28DEDB5CBED6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PullWatch.Tests", "PullWatch.Tests\PullWatch.Tests.csproj", "{5EE5E53D-E3DF-4C44-B155-9D55E646061B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PullWatch.App", "PullWatch.App\PullWatch.App.csproj", "{9B926C73-B034-4F4F-A4E1-94C2D73AD590}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,5 +20,9 @@ Global
 		{5EE5E53D-E3DF-4C44-B155-9D55E646061B}.Debug|x64.Build.0 = Debug|x64
 		{5EE5E53D-E3DF-4C44-B155-9D55E646061B}.Release|x64.ActiveCfg = Release|x64
 		{5EE5E53D-E3DF-4C44-B155-9D55E646061B}.Release|x64.Build.0 = Release|x64
+		{9B926C73-B034-4F4F-A4E1-94C2D73AD590}.Debug|x64.ActiveCfg = Debug|x64
+		{9B926C73-B034-4F4F-A4E1-94C2D73AD590}.Debug|x64.Build.0 = Debug|x64
+		{9B926C73-B034-4F4F-A4E1-94C2D73AD590}.Release|x64.ActiveCfg = Release|x64
+		{9B926C73-B034-4F4F-A4E1-94C2D73AD590}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal

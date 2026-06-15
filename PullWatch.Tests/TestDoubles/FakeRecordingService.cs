@@ -14,6 +14,8 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public TaskCompletionSource? PendingStop { get; set; }
 
+    public string? ActiveOutputPath { get; set; } = @"C:\Recordings\active.mp4";
+
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
 
     public Task StartAsync(RecordingContext context, CancellationToken cancellationToken)

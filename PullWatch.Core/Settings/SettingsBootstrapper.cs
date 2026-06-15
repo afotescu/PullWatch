@@ -26,7 +26,6 @@ public sealed class SettingsBootstrapper
     }
 
     public async Task<PullWatchSettings?> LoadEffectiveAsync(
-        CommandLineOptions commandLine,
         CancellationToken cancellationToken)
     {
         var loadResult = await _store.LoadAsync(cancellationToken);
@@ -105,16 +104,6 @@ public sealed class SettingsBootstrapper
             }
         }
 
-        var effectiveValidation = SettingsValidator.Validate(commandLine.ApplyTo(settings));
-
-        if (effectiveValidation.Settings is not null)
-        {
-            return effectiveValidation.Settings;
-        }
-
-        _logger.LogError(
-            "Effective settings are invalid: {ValidationErrors}",
-            string.Join(" ", effectiveValidation.Errors));
-        return null;
+        return settings;
     }
 }
