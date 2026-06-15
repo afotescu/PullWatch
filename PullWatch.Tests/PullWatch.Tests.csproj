@@ -18,6 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\PullWatch.App\PullWatch.App.csproj" />
         <ProjectReference Include="..\PullWatch.Core\PullWatch.Core.csproj" />
     </ItemGroup>
 

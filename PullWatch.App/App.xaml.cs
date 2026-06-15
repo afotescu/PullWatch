@@ -18,7 +18,7 @@ public partial class App : Application
         try
         {
             await _controller.StartAsync(CancellationToken.None);
-            new MainWindow().Show();
+            new MainWindow(_controller).Show();
         }
         catch (Exception exception)
         {
