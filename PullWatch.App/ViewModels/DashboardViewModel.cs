@@ -53,7 +53,9 @@ public sealed class DashboardViewModel : ObservableObject
 
     public string OutputPath => _recording.ActiveOutputPath ?? NoOutputPath;
 
-    public string CombatLogHealth => _combatLog.State switch
+    public string CombatLogHealth => _combatLog.LastFileSystemError is not null
+        ? "Logs directory error"
+        : _combatLog.State switch
     {
         CombatLogReaderState.ReadingCombatLog => "Monitoring",
         CombatLogReaderState.SwitchingCombatLog => "Switching logs",
@@ -61,13 +63,18 @@ public sealed class DashboardViewModel : ObservableObject
         _ => "Logs directory unavailable"
     };
 
-    public string CombatLogDetail => _combatLog.CurrentPath
+    public string CombatLogDetail => _combatLog.LastFileSystemError?.Message
+        ?? _combatLog.CurrentPath
         ?? "PullWatch will keep checking in the background.";
 
-    public string RecorderHealth => _recording.LastFailure is null ? "Ready" : "Attention needed";
+    public string RecorderHealth => _recording.LastFailure is not null
+        ? "Attention needed"
+        : _recording.State == RecordingCoordinatorState.Idle
+            ? "Idle"
+            : "Active";
 
     public string RecorderDetail => _recording.State == RecordingCoordinatorState.Idle
-        ? "Ready for automatic or manual recording."
+        ? "Recording can start when World of Warcraft is running."
         : $"Recorder is {_recording.State.ToString().ToLowerInvariant()}.";
 
     public string? FailureMessage => _recording.LastFailure?.Message;

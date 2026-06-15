@@ -106,6 +106,17 @@ public sealed class DashboardViewModelTests
         Assert.Equal("Ready to record", viewModel.StateTitle);
     }
 
+    [Fact]
+    public void IdleRecorderDoesNotClaimWowAvailability()
+    {
+        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
+
+        Assert.Equal("Idle", viewModel.RecorderHealth);
+        Assert.Equal(
+            "Recording can start when World of Warcraft is running.",
+            viewModel.RecorderDetail);
+    }
+
     [Theory]
     [InlineData(-1, "00:00:00")]
     [InlineData(65, "00:01:05")]

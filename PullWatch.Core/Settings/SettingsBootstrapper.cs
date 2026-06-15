@@ -25,6 +25,8 @@ public sealed class SettingsBootstrapper
         _detectWowLogsDirectory = detectWowLogsDirectory;
     }
 
+    internal SettingsStore Store => _store;
+
     public async Task<PullWatchSettings?> LoadEffectiveAsync(
         CancellationToken cancellationToken)
     {

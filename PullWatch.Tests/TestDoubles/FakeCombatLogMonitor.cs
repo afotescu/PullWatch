@@ -14,12 +14,22 @@ internal sealed class FakeCombatLogMonitor : ICombatLogMonitor
 
     public bool Started { get; private set; }
 
+    public bool Stopped { get; private set; }
+
     public async Task ReadAsync(
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
         CancellationToken cancellationToken)
     {
         Started = true;
-        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+        finally
+        {
+            Stopped = true;
+        }
     }
 
     public void Publish(CombatLogReaderStatus status)

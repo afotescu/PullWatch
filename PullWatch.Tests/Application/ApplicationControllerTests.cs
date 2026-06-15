@@ -46,6 +46,7 @@ public sealed class ApplicationControllerTests
             DateTimeOffset.UtcNow,
             null);
 
+        await WaitForAsync(() => monitor.Started);
         monitor.Publish(status);
         await WaitForAsync(() => controller.Status.CombatLog == status);
 
@@ -100,6 +101,87 @@ public sealed class ApplicationControllerTests
         await controller.ShutdownAsync(CancellationToken.None);
 
         Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task SavesSettingsAndRestartsMonitoringWhenLogsDirectoryChanges()
+    {
+        using var directory = new TemporaryDirectory();
+        var firstLogsDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "FirstLogs")).FullName;
+        var secondLogsDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "SecondLogs")).FullName;
+        var monitors = new List<(string Path, FakeCombatLogMonitor Monitor)>();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            firstLogsDirectory,
+            new FakeRecordingService(),
+            path =>
+            {
+                var monitor = new FakeCombatLogMonitor();
+                monitors.Add((path, monitor));
+                return monitor;
+            });
+
+        var result = await controller.SaveSettingsAsync(
+            controller.Status.EffectiveSettings! with
+            {
+                WowLogsDirectory = secondLogsDirectory,
+                Video = controller.Status.EffectiveSettings!.Video with { FrameRate = 120 }
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(SettingsSaveStatus.Saved, result.Status);
+        Assert.Equal(120, controller.Status.EffectiveSettings!.Video.FrameRate);
+        Assert.Equal(2, monitors.Count);
+        Assert.Equal(firstLogsDirectory, monitors[0].Path);
+        Assert.Equal(secondLogsDirectory, monitors[1].Path);
+        Assert.True(monitors[0].Monitor.Stopped);
+        await WaitForAsync(() => monitors[1].Monitor.Started);
+    }
+
+    [Fact]
+    public async Task ClearingLogsDirectoryStopsMonitoring()
+    {
+        using var directory = new TemporaryDirectory();
+        var logsDirectory = Directory.CreateDirectory(Path.Combine(directory.Path, "Logs")).FullName;
+        var monitor = new FakeCombatLogMonitor();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            logsDirectory,
+            new FakeRecordingService(),
+            _ => monitor);
+
+        var result = await controller.SaveSettingsAsync(
+            controller.Status.EffectiveSettings! with { WowLogsDirectory = null },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(SettingsSaveStatus.Saved, result.Status);
+        Assert.True(monitor.Stopped);
+        Assert.Null(controller.Status.EffectiveSettings!.WowLogsDirectory);
+        Assert.Equal(
+            CombatLogReaderState.WaitingForLogsDirectory,
+            controller.Status.CombatLog.State);
+    }
+
+    [Fact]
+    public async Task RejectsSettingsSaveWhileRecording()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor());
+        await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
+        var original = controller.Status.EffectiveSettings!;
+
+        var result = await controller.SaveSettingsAsync(
+            original with { RecordMythicPlus = false },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(SettingsSaveStatus.RecordingActive, result.Status);
+        Assert.Equal(original, controller.Status.EffectiveSettings);
     }
 
     [Fact]

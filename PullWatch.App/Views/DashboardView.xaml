@@ -190,6 +190,9 @@
                                         <DataTrigger Binding="{Binding RecorderHealth}" Value="Attention needed">
                                             <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding RecorderHealth}" Value="Idle">
+                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>

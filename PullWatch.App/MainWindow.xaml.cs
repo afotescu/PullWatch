@@ -11,7 +11,10 @@ public partial class MainWindow : Window
     public MainWindow(ApplicationController controller)
     {
         InitializeComponent();
-        _viewModel = new MainWindowViewModel(controller, new WpfUiDispatcher(Dispatcher));
+        _viewModel = new MainWindowViewModel(
+            controller,
+            new WpfUiDispatcher(Dispatcher),
+            new WpfSettingsDialogs());
         DataContext = _viewModel;
         _durationTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, OnTimerTick, Dispatcher);
         Closed += OnClosed;

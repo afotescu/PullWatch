@@ -30,6 +30,8 @@ public sealed class ApplicationController : IAsyncDisposable
     private Task _notificationQueue = Task.CompletedTask;
     private ApplicationStatus _status = new(null, InitialRecordingStatus, InitialCombatLogStatus);
     private RecordingCoordinator? _recordingCoordinator;
+    private ApplicationSettingsService? _settingsService;
+    private SettingsProvider? _settingsProvider;
     private ICombatLogMonitor? _combatLogMonitor;
     private CancellationTokenSource? _monitorCancellation;
     private Task? _monitorTask;
@@ -85,12 +87,17 @@ public sealed class ApplicationController : IAsyncDisposable
             var settings = await _settingsBootstrapper.LoadEffectiveAsync(cancellationToken)
                 ?? throw new InvalidOperationException("Could not load valid effective settings.");
             var settingsProvider = new SettingsProvider(settings);
+            var settingsService = new ApplicationSettingsService(
+                _settingsBootstrapper.Store,
+                settingsProvider);
             var recordingCoordinator = new RecordingCoordinator(
                 _createRecordingService(settingsProvider),
                 _loggerFactory.CreateLogger<RecordingCoordinator>());
             recordingCoordinator.StatusChanged += OnRecordingStatusChanged;
 
             _recordingCoordinator = recordingCoordinator;
+            _settingsProvider = settingsProvider;
+            _settingsService = settingsService;
             OperatingSystemActions = new OperatingSystemActions(settingsProvider);
             UpdateStatus(_ => new ApplicationStatus(
                 settings,
@@ -118,6 +125,76 @@ public sealed class ApplicationController : IAsyncDisposable
         return GetRecordingCoordinator().StopManualAsync(cancellationToken);
     }
 
+    public async Task<SettingsSaveResult> SaveSettingsAsync(
+        PullWatchSettings settings,
+        CancellationToken cancellationToken)
+    {
+        await _lifetimeLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var coordinator = GetRecordingCoordinator();
+            var settingsService = _settingsService
+                ?? throw new InvalidOperationException("The application controller has not been started.");
+
+            if (coordinator.Status.State != RecordingCoordinatorState.Idle)
+            {
+                return new SettingsSaveResult(
+                    SettingsSaveStatus.RecordingActive,
+                    null,
+                    []);
+            }
+
+            var previousSettings = settingsService.Current;
+            var result = await settingsService.SaveAsync(settings, cancellationToken);
+
+            if (!result.IsSaved)
+            {
+                return result;
+            }
+
+            var savedSettings = result.Settings!;
+            UpdateStatus(status => status with { EffectiveSettings = savedSettings });
+
+            if (PathsEqual(previousSettings.WowLogsDirectory, savedSettings.WowLogsDirectory))
+            {
+                return result;
+            }
+
+            try
+            {
+                await StopCombatLogMonitoringAsync();
+                UpdateStatus(status => status with { CombatLog = InitialCombatLogStatus });
+
+                if (savedSettings.WowLogsDirectory is not null)
+                {
+                    StartCombatLogMonitoring(savedSettings.WowLogsDirectory, GetSettingsProvider());
+                }
+
+                return result;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Could not apply the new combat-log directory");
+                UpdateStatus(status => status with
+                {
+                    CombatLog = InitialCombatLogStatus with { LastFileSystemError = exception }
+                });
+                return result with
+                {
+                    Status = SettingsSaveStatus.ApplicationFailed,
+                    Error = exception
+                };
+            }
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
         await _lifetimeLock.WaitAsync(cancellationToken);
@@ -132,6 +209,8 @@ public sealed class ApplicationController : IAsyncDisposable
             }
 
             _recordingCoordinator = null;
+            _settingsService = null;
+            _settingsProvider = null;
             await StopCombatLogMonitoringAsync();
 
             try
@@ -236,6 +315,17 @@ public sealed class ApplicationController : IAsyncDisposable
     {
         return _recordingCoordinator
             ?? throw new InvalidOperationException("The application controller has not been started.");
+    }
+
+    private SettingsProvider GetSettingsProvider()
+    {
+        return _settingsProvider
+            ?? throw new InvalidOperationException("The application controller has not been started.");
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        return StringComparer.OrdinalIgnoreCase.Equals(left, right);
     }
 
     private void OnRecordingStatusChanged(RecordingCoordinatorStatus status)

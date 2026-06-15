@@ -219,11 +219,6 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
     private DiscoveryResult DiscoverLatestCombatLog()
     {
-        if (!Directory.Exists(_logsDirectory))
-        {
-            return new DiscoveryResult(false, null, null);
-        }
-
         try
         {
             var latestCombatLog = new DirectoryInfo(_logsDirectory)
@@ -239,6 +234,10 @@ public sealed class CombatLogReader : ICombatLogMonitor
                         latestCombatLog.LastWriteTimeUtc,
                         latestCombatLog.Length),
                     null);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return new DiscoveryResult(false, null, null);
         }
         catch (Exception exception) when (IsTransientFileSystemException(exception))
         {
