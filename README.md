@@ -78,6 +78,14 @@ Run a Release build:
 dotnet run --project PullWatch -c Release -p:Platform=x64
 ```
 
+## Testing
+
+Run the fast automated test suite:
+
+```powershell
+dotnet test PullWatch.sln
+```
+
 ## Publishing
 
 Create a self-contained Windows x64 release:
