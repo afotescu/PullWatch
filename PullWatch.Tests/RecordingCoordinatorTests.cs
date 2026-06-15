@@ -1,0 +1,261 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using PullWatch.Tests.TestDoubles;
+
+namespace PullWatch.Tests;
+
+public sealed class RecordingCoordinatorTests
+{
+    [Fact]
+    public async Task MatchingOwnerAndIdentityStopsRecording()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        var startResult = await coordinator.StartAutomaticAsync(
+            RecordingOwner.Encounter,
+            "123",
+            CancellationToken.None);
+        var wrongEndResult = await coordinator.StopAutomaticAsync(
+            RecordingOwner.Encounter,
+            "456",
+            CancellationToken.None);
+        var matchingEndResult = await coordinator.StopAutomaticAsync(
+            RecordingOwner.Encounter,
+            "123",
+            CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.Started, startResult);
+        Assert.Equal(RecordingCommandResult.OwnerMismatch, wrongEndResult);
+        Assert.Equal(RecordingCommandResult.Stopped, matchingEndResult);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task ManualStopSuppressesAutomaticStartsUntilMatchingOwnerEnds()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartAutomaticAsync(
+            RecordingOwner.ChallengeMode,
+            null,
+            CancellationToken.None);
+        await coordinator.StopManualAsync(CancellationToken.None);
+
+        var nestedEncounterResult = await coordinator.StartAutomaticAsync(
+            RecordingOwner.Encounter,
+            "123",
+            CancellationToken.None);
+        await coordinator.StopAutomaticAsync(
+            RecordingOwner.ChallengeMode,
+            null,
+            CancellationToken.None);
+        var nextEncounterResult = await coordinator.StartAutomaticAsync(
+            RecordingOwner.Encounter,
+            "456",
+            CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.Suppressed, nestedEncounterResult);
+        Assert.Equal(RecordingCommandResult.Started, nextEncounterResult);
+        Assert.Equal(["start", "stop", "start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task ManualStartIsRejectedWhileAutomaticRecordingIsActive()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartAutomaticAsync(
+            RecordingOwner.ChallengeMode,
+            null,
+            CancellationToken.None);
+        var result = await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.AlreadyActive, result);
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task SuppressionEndDoesNotStopActiveManualRecording()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartAutomaticAsync(
+            RecordingOwner.ChallengeMode,
+            null,
+            CancellationToken.None);
+        await coordinator.StopManualAsync(CancellationToken.None);
+        await coordinator.StartManualAsync(CancellationToken.None);
+
+        var endResult = await coordinator.StopAutomaticAsync(
+            RecordingOwner.ChallengeMode,
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.OwnerMismatch, endResult);
+        Assert.Null(coordinator.Status.SuppressedUntilOwnerEnd);
+        Assert.Equal(RecordingOwner.Manual, coordinator.Status.Owner);
+        Assert.Equal(["start", "stop", "start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task StopWaitsForPendingStartBecauseOperationsAreSerialized()
+    {
+        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingStart = pendingStart };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        var startTask = coordinator.StartAutomaticAsync(
+            RecordingOwner.Encounter,
+            "123",
+            CancellationToken.None);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
+
+        var stopTask = coordinator.StopAutomaticAsync(
+            RecordingOwner.Encounter,
+            "123",
+            CancellationToken.None);
+
+        Assert.False(stopTask.IsCompleted);
+        pendingStart.SetResult();
+
+        Assert.Equal(RecordingCommandResult.Started, await startTask);
+        Assert.Equal(RecordingCommandResult.Stopped, await stopTask);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task CallerCancellationDoesNotCancelAcceptedStart()
+    {
+        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingStart = pendingStart };
+        await using var coordinator = CreateCoordinator(recorder);
+        using var cancellation = new CancellationTokenSource();
+
+        var startTask = coordinator.StartManualAsync(cancellation.Token);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => startTask);
+        pendingStart.SetResult();
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Recording);
+
+        Assert.Equal(RecordingOwner.Manual, coordinator.Status.Owner);
+    }
+
+    [Fact]
+    public async Task RecorderFailureReturnsToIdleAndRetainsFailure()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        recorder.RaiseFailure(new InvalidOperationException("capture failed"));
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
+
+        Assert.Equal("capture failed", coordinator.Status.LastFailure?.Message);
+    }
+
+    [Fact]
+    public async Task StopTimeoutBlocksStartsUntilCleanupCompletes()
+    {
+        var pendingStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingStop = pendingStop };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            stopTimeout: TimeSpan.FromMilliseconds(20));
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        var stopResult = await coordinator.StopManualAsync(CancellationToken.None);
+        var blockedStartResult = await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.TimedOut, stopResult);
+        Assert.Equal(RecordingCommandResult.AlreadyActive, blockedStartResult);
+        Assert.Equal(RecordingCoordinatorState.Stopping, coordinator.Status.State);
+
+        pendingStop.SetResult();
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
+
+        Assert.Equal(
+            RecordingCommandResult.Started,
+            await coordinator.StartManualAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StartConfirmationTimeoutStopsAndReleasesRecorder()
+    {
+        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingStart = pendingStart };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            startTimeout: TimeSpan.FromMilliseconds(20));
+
+        var result = await coordinator.StartManualAsync(CancellationToken.None);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
+        pendingStart.TrySetException(new InvalidOperationException("stopped before startup"));
+
+        Assert.Equal(RecordingCommandResult.TimedOut, result);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task StopFailureReleasesOwnershipAndAllowsRetry()
+    {
+        var recorder = new FakeRecordingService
+        {
+            StopException = new InvalidOperationException("finalization failed")
+        };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        var stopResult = await coordinator.StopManualAsync(CancellationToken.None);
+        recorder.StopException = null;
+        var retryResult = await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.Failed, stopResult);
+        Assert.Equal("finalization failed", coordinator.Status.LastFailure?.Message);
+        Assert.Equal(RecordingCommandResult.Started, retryResult);
+    }
+
+    [Fact]
+    public async Task ShutdownStopsActiveRecordingExactlyOnce()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        var firstResult = await coordinator.ShutdownAsync(CancellationToken.None);
+        var secondResult = await coordinator.ShutdownAsync(CancellationToken.None);
+
+        Assert.Equal(RecordingCommandResult.Stopped, firstResult);
+        Assert.Equal(RecordingCommandResult.NoActiveRecording, secondResult);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    private static RecordingCoordinator CreateCoordinator(
+        FakeRecordingService recorder,
+        TimeSpan? startTimeout = null,
+        TimeSpan? stopTimeout = null)
+    {
+        return new RecordingCoordinator(
+            recorder,
+            NullLogger<RecordingCoordinator>.Instance,
+            startTimeout ?? TimeSpan.FromSeconds(2),
+            stopTimeout ?? TimeSpan.FromSeconds(2));
+    }
+
+    private static async Task WaitForStateAsync(
+        RecordingCoordinator coordinator,
+        RecordingCoordinatorState expectedState)
+    {
+        var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+        while (coordinator.Status.State != expectedState)
+        {
+            Assert.True(DateTime.UtcNow < timeout, $"Coordinator did not reach state {expectedState}.");
+            await Task.Delay(10);
+        }
+    }
+}

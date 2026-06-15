@@ -71,8 +71,7 @@ public sealed class CombatLogEventHandlerTests
         };
         var handler = CreateHandler(recorder);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => HandleAsync(handler, WowEvents.ChallengeModeStart));
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
 
         recorder.StartException = null;
         await HandleAsync(handler, WowEvents.EncounterStart);
@@ -81,10 +80,27 @@ public sealed class CombatLogEventHandlerTests
         Assert.Equal(["start", "start", "stop"], recorder.Calls);
     }
 
+    [Fact]
+    public async Task EncounterEndMustMatchActiveEncounterIdentity()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleAsync(handler, WowEvents.EncounterStart, "123");
+        await HandleAsync(handler, WowEvents.EncounterEnd, "456");
+        await HandleAsync(handler, WowEvents.EncounterEnd, "123");
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
     private static CombatLogEventHandler CreateHandler(IRecordingService recordingService)
     {
-        return new CombatLogEventHandler(
+        var coordinator = new RecordingCoordinator(
             recordingService,
+            NullLogger<RecordingCoordinator>.Instance);
+
+        return new CombatLogEventHandler(
+            coordinator,
             NullLogger<CombatLogEventHandler>.Instance);
     }
 
@@ -92,6 +108,18 @@ public sealed class CombatLogEventHandlerTests
     {
         return handler.HandleAsync(
             new CombatLogEvent(eventName, eventName.Length, eventName),
+            CancellationToken.None);
+    }
+
+    private static Task HandleAsync(
+        CombatLogEventHandler handler,
+        string eventName,
+        string firstArgument)
+    {
+        var rawLine = $"{eventName},{firstArgument}";
+
+        return handler.HandleAsync(
+            new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
             CancellationToken.None);
     }
 }

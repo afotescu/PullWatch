@@ -4,11 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace PullWatch;
 
 public sealed class CombatLogEventHandler(
-    IRecordingService recordingService,
+    RecordingCoordinator recordingCoordinator,
     ILogger<CombatLogEventHandler> logger)
 {
     private long _previousRecordingEventTimestamp;
-    private RecordingOwner _recordingOwner;
 
     public async Task HandleAsync(CombatLogEvent combatLogEvent, CancellationToken cancellationToken)
     {
@@ -22,6 +21,7 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.ChallengeMode,
+                    null,
                     cancellationToken);
                 break;
             case WowEvents.EncounterStart:
@@ -29,6 +29,7 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.Encounter,
+                    GetEncounterIdentity(combatLogEvent),
                     cancellationToken);
                 break;
             case WowEvents.ChallengeModeEnd:
@@ -36,6 +37,7 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.ChallengeMode,
+                    null,
                     cancellationToken);
                 break;
             case WowEvents.EncounterEnd:
@@ -43,6 +45,7 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.Encounter,
+                    GetEncounterIdentity(combatLogEvent),
                     cancellationToken);
                 break;
         }
@@ -52,21 +55,12 @@ public sealed class CombatLogEventHandler(
         CombatLogEvent combatLogEvent,
         long eventTimestamp,
         RecordingOwner owner,
+        string? identity,
         CancellationToken cancellationToken)
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-
-        if (_recordingOwner != RecordingOwner.None)
-        {
-            logger.LogInformation(
-                "Ignoring {EventName} because recording is owned by {RecordingOwner}",
-                combatLogEvent.Name,
-                _recordingOwner);
-            return;
-        }
-
-        await recordingService.StartAsync(cancellationToken);
-        _recordingOwner = owner;
+        var result = await recordingCoordinator.StartAutomaticAsync(owner, identity, cancellationToken);
+        LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
     }
 
@@ -74,22 +68,28 @@ public sealed class CombatLogEventHandler(
         CombatLogEvent combatLogEvent,
         long eventTimestamp,
         RecordingOwner owner,
+        string? identity,
         CancellationToken cancellationToken)
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-
-        if (_recordingOwner != owner)
-        {
-            logger.LogInformation(
-                "Ignoring {EventName} because recording is owned by {RecordingOwner}",
-                combatLogEvent.Name,
-                _recordingOwner);
-            return;
-        }
-
-        await recordingService.StopAsync(cancellationToken);
-        _recordingOwner = RecordingOwner.None;
+        var result = await recordingCoordinator.StopAutomaticAsync(owner, identity, cancellationToken);
+        LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
+    }
+
+    private void LogCommandResult(string eventName, RecordingCommandResult result)
+    {
+        logger.LogInformation(
+            "Recording coordinator handled {EventName} with result {RecordingCommandResult}",
+            eventName,
+            result);
+    }
+
+    private static string? GetEncounterIdentity(CombatLogEvent combatLogEvent)
+    {
+        return combatLogEvent.Arguments.Count > 0
+            ? combatLogEvent.Arguments[0]
+            : null;
     }
 
     private void LogEventHandled(string eventName, long eventTimestamp)
@@ -160,12 +160,5 @@ public sealed class CombatLogEventHandler(
                 arguments[4],
                 arguments[5]);
         }
-    }
-
-    private enum RecordingOwner
-    {
-        None,
-        ChallengeMode,
-        Encounter
     }
 }

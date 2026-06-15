@@ -29,6 +29,7 @@ Videos/PullWatch
 WoW Combat Log
     -> CombatLogReader
     -> CombatLogEventHandler
+    -> RecordingCoordinator
     -> ScreenRecordingService
     -> MP4 recording
 ```

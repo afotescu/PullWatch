@@ -6,19 +6,41 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public Exception? StartException { get; set; }
 
+    public Exception? StopException { get; set; }
+
+    public TaskCompletionSource? PendingStart { get; set; }
+
+    public TaskCompletionSource? PendingStop { get; set; }
+
+    public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         Calls.Add("start");
 
-        return StartException is null
-            ? Task.CompletedTask
-            : Task.FromException(StartException);
+        if (StartException is not null)
+        {
+            return Task.FromException(StartException);
+        }
+
+        return PendingStart?.Task ?? Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         Calls.Add("stop");
-        return Task.CompletedTask;
+
+        if (StopException is not null)
+        {
+            return Task.FromException(StopException);
+        }
+
+        return PendingStop?.Task ?? Task.CompletedTask;
+    }
+
+    public void RaiseFailure(Exception exception)
+    {
+        Failed?.Invoke(this, new RecordingServiceFailedEventArgs(exception));
     }
 
     public ValueTask DisposeAsync()

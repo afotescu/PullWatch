@@ -21,15 +21,26 @@ Console.CancelKeyPress += (_, eventArgs) =>
 };
 
 var logger = loggerFactory.CreateLogger("PullWatch");
-await using var recordingService = new ScreenRecordingService(
+var recordingService = new ScreenRecordingService(
     loggerFactory.CreateLogger<ScreenRecordingService>());
+await using var recordingCoordinator = new RecordingCoordinator(
+    recordingService,
+    loggerFactory.CreateLogger<RecordingCoordinator>());
 
 if (recordNow)
 {
     try
     {
-        await recordingService.StartAsync(cancellation.Token);
-        logger.LogInformation("Manual recording started; press Ctrl+C to stop");
+        var result = await recordingCoordinator.StartManualAsync(cancellation.Token);
+        logger.LogInformation(
+            "Manual recording start result: {RecordingCommandResult}; press Ctrl+C to stop",
+            result);
+
+        if (result != RecordingCommandResult.Started)
+        {
+            return;
+        }
+
         await Task.Delay(Timeout.InfiniteTimeSpan, cancellation.Token);
     }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -41,12 +52,13 @@ if (recordNow)
         logger.LogError(exception, "Manual recording failed");
     }
 
+    await recordingCoordinator.StopManualAsync(CancellationToken.None);
     return;
 }
 
 var reader = new CombatLogReader(logsDirectory, loggerFactory.CreateLogger<CombatLogReader>());
 var eventHandler = new CombatLogEventHandler(
-    recordingService,
+    recordingCoordinator,
     loggerFactory.CreateLogger<CombatLogEventHandler>());
 
 try
