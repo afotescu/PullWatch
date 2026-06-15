@@ -1,5 +1,23 @@
 namespace PullWatch;
 
+public abstract record RecordingContext(DateTimeOffset StartedAt);
+
+public sealed record ManualRecordingContext(DateTimeOffset StartedAt)
+    : RecordingContext(StartedAt);
+
+public sealed record ChallengeRecordingContext(
+    DateTimeOffset StartedAt,
+    string DungeonName,
+    int Level)
+    : RecordingContext(StartedAt);
+
+public sealed record EncounterRecordingContext(
+    DateTimeOffset StartedAt,
+    int EncounterId,
+    string EncounterName,
+    int DifficultyId)
+    : RecordingContext(StartedAt);
+
 public enum RecordingOwner
 {
     Manual,
@@ -31,6 +49,7 @@ public sealed record RecordingCoordinatorStatus(
     RecordingCoordinatorState State,
     RecordingOwner? Owner,
     string? Identity,
+    RecordingContext? Context,
     RecordingOwner? SuppressedUntilOwnerEnd,
     string? SuppressedIdentity,
     Exception? LastFailure);

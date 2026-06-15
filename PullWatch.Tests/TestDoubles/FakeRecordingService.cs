@@ -4,6 +4,8 @@ internal sealed class FakeRecordingService : IRecordingService
 {
     public List<string> Calls { get; } = [];
 
+    public List<RecordingContext> StartedContexts { get; } = [];
+
     public Exception? StartException { get; set; }
 
     public Exception? StopException { get; set; }
@@ -14,9 +16,10 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(RecordingContext context, CancellationToken cancellationToken)
     {
         Calls.Add("start");
+        StartedContexts.Add(context);
 
         if (StartException is not null)
         {

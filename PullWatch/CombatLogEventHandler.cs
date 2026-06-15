@@ -12,6 +12,7 @@ public sealed class CombatLogEventHandler(
     public async Task HandleAsync(CombatLogEvent combatLogEvent, CancellationToken cancellationToken)
     {
         var eventTimestamp = Stopwatch.GetTimestamp();
+        var receivedAt = DateTimeOffset.Now;
         var eventName = combatLogEvent.Name;
 
         switch (eventName)
@@ -20,16 +21,14 @@ public sealed class CombatLogEventHandler(
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
-                    RecordingOwner.ChallengeMode,
-                    null,
+                    CombatLogEventMetadataParser.ParseChallengeStart(combatLogEvent, receivedAt),
                     cancellationToken);
                 break;
             case WowEvents.EncounterStart:
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
-                    RecordingOwner.Encounter,
-                    GetEncounterIdentity(combatLogEvent),
+                    CombatLogEventMetadataParser.ParseEncounterStart(combatLogEvent, receivedAt),
                     cancellationToken);
                 break;
             case WowEvents.ChallengeModeEnd:
@@ -54,12 +53,11 @@ public sealed class CombatLogEventHandler(
     private async Task HandleStartAsync(
         CombatLogEvent combatLogEvent,
         long eventTimestamp,
-        RecordingOwner owner,
-        string? identity,
+        RecordingContext context,
         CancellationToken cancellationToken)
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-        var result = await recordingCoordinator.StartAutomaticAsync(owner, identity, cancellationToken);
+        var result = await recordingCoordinator.StartAutomaticAsync(context, cancellationToken);
         LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
     }

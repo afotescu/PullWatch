@@ -10,10 +10,10 @@ public sealed class RecordingCoordinatorTests
     {
         var recorder = new FakeRecordingService();
         await using var coordinator = CreateCoordinator(recorder);
+        var context = Encounter(123);
 
         var startResult = await coordinator.StartAutomaticAsync(
-            RecordingOwner.Encounter,
-            "123",
+            context,
             CancellationToken.None);
         var wrongEndResult = await coordinator.StopAutomaticAsync(
             RecordingOwner.Encounter,
@@ -28,6 +28,7 @@ public sealed class RecordingCoordinatorTests
         Assert.Equal(RecordingCommandResult.OwnerMismatch, wrongEndResult);
         Assert.Equal(RecordingCommandResult.Stopped, matchingEndResult);
         Assert.Equal(["start", "stop"], recorder.Calls);
+        Assert.Same(context, recorder.StartedContexts.Single());
     }
 
     [Fact]
@@ -37,22 +38,19 @@ public sealed class RecordingCoordinatorTests
         await using var coordinator = CreateCoordinator(recorder);
 
         await coordinator.StartAutomaticAsync(
-            RecordingOwner.ChallengeMode,
-            null,
+            Challenge(),
             CancellationToken.None);
         await coordinator.StopManualAsync(CancellationToken.None);
 
         var nestedEncounterResult = await coordinator.StartAutomaticAsync(
-            RecordingOwner.Encounter,
-            "123",
+            Encounter(123),
             CancellationToken.None);
         await coordinator.StopAutomaticAsync(
             RecordingOwner.ChallengeMode,
             null,
             CancellationToken.None);
         var nextEncounterResult = await coordinator.StartAutomaticAsync(
-            RecordingOwner.Encounter,
-            "456",
+            Encounter(456),
             CancellationToken.None);
 
         Assert.Equal(RecordingCommandResult.Suppressed, nestedEncounterResult);
@@ -67,8 +65,7 @@ public sealed class RecordingCoordinatorTests
         await using var coordinator = CreateCoordinator(recorder);
 
         await coordinator.StartAutomaticAsync(
-            RecordingOwner.ChallengeMode,
-            null,
+            Challenge(),
             CancellationToken.None);
         var result = await coordinator.StartManualAsync(CancellationToken.None);
 
@@ -83,8 +80,7 @@ public sealed class RecordingCoordinatorTests
         await using var coordinator = CreateCoordinator(recorder);
 
         await coordinator.StartAutomaticAsync(
-            RecordingOwner.ChallengeMode,
-            null,
+            Challenge(),
             CancellationToken.None);
         await coordinator.StopManualAsync(CancellationToken.None);
         await coordinator.StartManualAsync(CancellationToken.None);
@@ -108,8 +104,7 @@ public sealed class RecordingCoordinatorTests
         await using var coordinator = CreateCoordinator(recorder);
 
         var startTask = coordinator.StartAutomaticAsync(
-            RecordingOwner.Encounter,
-            "123",
+            Encounter(123),
             CancellationToken.None);
         await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
 
@@ -244,6 +239,23 @@ public sealed class RecordingCoordinatorTests
             NullLogger<RecordingCoordinator>.Instance,
             startTimeout ?? TimeSpan.FromSeconds(2),
             stopTimeout ?? TimeSpan.FromSeconds(2));
+    }
+
+    private static ChallengeRecordingContext Challenge()
+    {
+        return new ChallengeRecordingContext(
+            DateTimeOffset.Now,
+            "Magisters' Terrace",
+            22);
+    }
+
+    private static EncounterRecordingContext Encounter(int encounterId)
+    {
+        return new EncounterRecordingContext(
+            DateTimeOffset.Now,
+            encounterId,
+            "Plexus Sentinel",
+            16);
     }
 
     private static async Task WaitForStateAsync(

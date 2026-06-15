@@ -106,8 +106,18 @@ public sealed class CombatLogEventHandlerTests
 
     private static Task HandleAsync(CombatLogEventHandler handler, string eventName)
     {
+        var arguments = eventName switch
+        {
+            WowEvents.ChallengeModeStart => "\"Magisters' Terrace\",2811,558,22,[9,10,147]",
+            WowEvents.ChallengeModeEnd => "2811,0,0,0,0.000000,0.000000",
+            WowEvents.EncounterStart => "3129,\"Plexus Sentinel\",16,20,2810",
+            WowEvents.EncounterEnd => "3129,\"Plexus Sentinel\",16,20,1,70964",
+            _ => ""
+        };
+        var rawLine = $"{eventName},{arguments}";
+
         return handler.HandleAsync(
-            new CombatLogEvent(eventName, eventName.Length, eventName),
+            new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
             CancellationToken.None);
     }
 
@@ -116,7 +126,13 @@ public sealed class CombatLogEventHandlerTests
         string eventName,
         string firstArgument)
     {
-        var rawLine = $"{eventName},{firstArgument}";
+        var arguments = eventName switch
+        {
+            WowEvents.EncounterStart => $"{firstArgument},\"Plexus Sentinel\",16,20,2810",
+            WowEvents.EncounterEnd => $"{firstArgument},\"Plexus Sentinel\",16,20,1,70964",
+            _ => firstArgument
+        };
+        var rawLine = $"{eventName},{arguments}";
 
         return handler.HandleAsync(
             new CombatLogEvent(eventName, eventName.Length + 1, rawLine),

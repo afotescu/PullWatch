@@ -22,7 +22,7 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(RecordingContext context, CancellationToken cancellationToken)
     {
         var startRequestTimestamp = Stopwatch.GetTimestamp();
         Task recordingStarted;
@@ -43,7 +43,7 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
                 "Located World of Warcraft window in {ElapsedMilliseconds:F1} ms",
                 Stopwatch.GetElapsedTime(wowLookupTimestamp).TotalMilliseconds);
 
-            var outputPath = CreateOutputPath();
+            var outputPath = CreateOutputPath(context);
 
             var recorderCreationTimestamp = Stopwatch.GetTimestamp();
             var recorder = Recorder.CreateRecorder(CreateOptions(windowHandle));
@@ -186,7 +186,7 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
         throw new InvalidOperationException("Could not find a running World of Warcraft window.");
     }
 
-    private static string CreateOutputPath()
+    private static string CreateOutputPath(RecordingContext context)
     {
         var recordingsDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
@@ -194,9 +194,7 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
 
         Directory.CreateDirectory(recordingsDirectory);
 
-        return Path.Combine(
-            recordingsDirectory,
-            $"mythic-plus_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
+        return RecordingFilenameBuilder.CreateAvailablePath(recordingsDirectory, context);
     }
 
     private void OnRecordingComplete(object? sender, RecordingCompleteEventArgs eventArgs)
