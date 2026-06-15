@@ -128,6 +128,7 @@
                                 Content="Start manual recording" />
                         <Button Margin="10,0,0,0"
                                 Command="{Binding StopManualCommand}"
+                                Style="{StaticResource StopButtonStyle}"
                                 Content="Stop recording" />
                         <Button Margin="10,0,0,0"
                                 Command="{Binding OpenRecordingsFolderCommand}"
@@ -200,6 +201,10 @@
                         <TextBlock Margin="0,7,0,0"
                                    Style="{StaticResource SecondaryTextStyle}"
                                    Text="{Binding RecorderDetail}" />
+                        <TextBlock Margin="0,7,0,0"
+                                   Style="{StaticResource SecondaryTextStyle}"
+                                   Text="{Binding RecordingStatistics}"
+                                   ToolTip="Expected counts accepted recording requests. Saved counts recordings finalized successfully." />
                     </StackPanel>
                 </Border>
             </Grid>

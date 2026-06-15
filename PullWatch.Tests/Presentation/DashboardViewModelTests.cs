@@ -117,6 +117,21 @@ public sealed class DashboardViewModelTests
             viewModel.RecorderDetail);
     }
 
+    [Fact]
+    public void PresentsSessionRecordingStatistics()
+    {
+        var status = Status(RecordingCoordinatorState.Idle);
+        var viewModel = CreateViewModel(status with
+        {
+            Recording = status.Recording with
+            {
+                Statistics = new RecordingStatistics(3, 2)
+            }
+        });
+
+        Assert.Equal("3 expected · 2 saved this session", viewModel.RecordingStatistics);
+    }
+
     [Theory]
     [InlineData(-1, "00:00:00")]
     [InlineData(65, "00:01:05")]

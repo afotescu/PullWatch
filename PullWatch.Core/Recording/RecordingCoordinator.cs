@@ -14,6 +14,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _notificationLock = new();
     private Task _notificationQueue = Task.CompletedTask;
+    private int _expectedCount;
+    private int _savedCount;
     private RecordingCoordinatorStatus _status = new(
         RecordingCoordinatorState.Idle,
         null,
@@ -43,6 +45,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         _startTimeout = startTimeout ?? DefaultStartTimeout;
         _stopTimeout = stopTimeout ?? DefaultStopTimeout;
         _recordingService.Failed += OnRecordingServiceFailed;
+        _recordingService.CaptureTargetExited += OnCaptureTargetExited;
     }
 
     public event Action<RecordingCoordinatorStatus>? StatusChanged;
@@ -106,6 +109,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 
         _disposed = true;
         _recordingService.Failed -= OnRecordingServiceFailed;
+        _recordingService.CaptureTargetExited -= OnCaptureTargetExited;
 
         try
         {
@@ -146,6 +150,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 return RecordingCommandResult.Suppressed;
             }
 
+            _expectedCount++;
             var startTask = _recordingService.StartAsync(context, CancellationToken.None);
             PublishStatus(
                 RecordingCoordinatorState.Starting,
@@ -241,6 +246,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             try
             {
                 await stopTask.WaitAsync(_stopTimeout);
+                _savedCount++;
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
                 return RecordingCommandResult.Stopped;
             }
@@ -302,6 +308,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         {
             if (Status.State == RecordingCoordinatorState.Stopping)
             {
+                _savedCount++;
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
             }
         }
@@ -314,6 +321,24 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private void OnRecordingServiceFailed(object? sender, RecordingServiceFailedEventArgs eventArgs)
     {
         _ = RecoverFromRecorderFailureAsync(eventArgs.Exception);
+    }
+
+    private void OnCaptureTargetExited(object? sender, EventArgs eventArgs)
+    {
+        _logger.LogInformation("Stopping recording because the capture target exited");
+        _ = StopAfterCaptureTargetExitAsync();
+    }
+
+    private async Task StopAfterCaptureTargetExitAsync()
+    {
+        var result = await StopCoreAsync(null, null, StopRequestKind.Shutdown);
+
+        if (result is RecordingCommandResult.Failed or RecordingCommandResult.TimedOut)
+        {
+            _logger.LogError(
+                "Could not gracefully stop recording after the capture target exited: {RecordingCommandResult}",
+                result);
+        }
     }
 
     private async Task RecoverFromRecorderFailureAsync(Exception exception)
@@ -411,7 +436,10 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             lastFailure ?? current.LastFailure,
             state == RecordingCoordinatorState.Idle
                 ? null
-                : activeOutputPath ?? current.ActiveOutputPath);
+                : activeOutputPath ?? current.ActiveOutputPath)
+        {
+            Statistics = new RecordingStatistics(_expectedCount, _savedCount)
+        };
 
         SetStatus(snapshot);
     }

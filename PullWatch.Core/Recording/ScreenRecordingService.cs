@@ -12,6 +12,7 @@ public sealed class ScreenRecordingService(
 
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private Recorder? _recorder;
+    private Process? _wowProcess;
     private TaskCompletionSource _recordingStarted = CreateCompletionSource();
     private TaskCompletionSource _recordingFinished = CreateCompletionSource();
     private bool _isStopping;
@@ -21,6 +22,8 @@ public sealed class ScreenRecordingService(
     private long _stopRequestedTimestamp;
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
+
+    public event EventHandler? CaptureTargetExited;
 
     public string? ActiveOutputPath => Volatile.Read(ref _outputPath);
 
@@ -40,7 +43,8 @@ public sealed class ScreenRecordingService(
             }
 
             var wowLookupTimestamp = Stopwatch.GetTimestamp();
-            var windowHandle = FindWowWindowHandle();
+            var (wowProcess, windowHandle) = FindWowProcess();
+            _wowProcess = wowProcess;
             logger.LogInformation(
                 "Located World of Warcraft window in {ElapsedMilliseconds:F1} ms",
                 Stopwatch.GetElapsedTime(wowLookupTimestamp).TotalMilliseconds);
@@ -66,6 +70,8 @@ public sealed class ScreenRecordingService(
             recorder.OnRecordingComplete += OnRecordingComplete;
             recorder.OnRecordingFailed += OnRecordingFailed;
             recorder.OnStatusChanged += OnStatusChanged;
+            wowProcess.Exited += OnWowProcessExited;
+            wowProcess.EnableRaisingEvents = true;
 
             logger.LogInformation(
                 "Requesting recording start after {ElapsedMilliseconds:F1} ms: {OutputPath}",
@@ -175,17 +181,25 @@ public sealed class ScreenRecordingService(
         };
     }
 
-    private static nint FindWowWindowHandle()
+    private static (Process Process, nint WindowHandle) FindWowProcess()
     {
         foreach (var process in Process.GetProcessesByName(WowProcessName))
         {
-            using (process)
+            try
             {
-                if (process.MainWindowHandle != nint.Zero)
+                var windowHandle = process.MainWindowHandle;
+
+                if (windowHandle != nint.Zero)
                 {
-                    return process.MainWindowHandle;
+                    return (process, windowHandle);
                 }
             }
+            catch (InvalidOperationException)
+            {
+                // The process exited while it was being inspected.
+            }
+
+            process.Dispose();
         }
 
         throw new InvalidOperationException("Could not find a running World of Warcraft window.");
@@ -230,6 +244,12 @@ public sealed class ScreenRecordingService(
         Failed?.Invoke(this, new RecordingServiceFailedEventArgs(exception));
     }
 
+    private void OnWowProcessExited(object? sender, EventArgs eventArgs)
+    {
+        logger.LogInformation("World of Warcraft exited while a recording was active");
+        CaptureTargetExited?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnStatusChanged(object? sender, RecordingStatusEventArgs eventArgs)
     {
         if (eventArgs.Status == RecorderStatus.Recording && _recordingStartedTimestamp == 0)
@@ -258,18 +278,23 @@ public sealed class ScreenRecordingService(
     private void DisposeRecorder()
     {
         var recorder = Interlocked.Exchange(ref _recorder, null);
+        var wowProcess = Interlocked.Exchange(ref _wowProcess, null);
         _isStopping = false;
         _outputPath = null;
 
-        if (recorder is null)
+        if (wowProcess is not null)
         {
-            return;
+            wowProcess.Exited -= OnWowProcessExited;
+            wowProcess.Dispose();
         }
 
-        recorder.OnRecordingComplete -= OnRecordingComplete;
-        recorder.OnRecordingFailed -= OnRecordingFailed;
-        recorder.OnStatusChanged -= OnStatusChanged;
-        recorder.Dispose();
+        if (recorder is not null)
+        {
+            recorder.OnRecordingComplete -= OnRecordingComplete;
+            recorder.OnRecordingFailed -= OnRecordingFailed;
+            recorder.OnStatusChanged -= OnStatusChanged;
+            recorder.Dispose();
+        }
     }
 
     private TimeSpan GetRecordingDuration()

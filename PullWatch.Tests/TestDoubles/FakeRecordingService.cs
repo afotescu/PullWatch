@@ -18,6 +18,8 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
 
+    public event EventHandler? CaptureTargetExited;
+
     public Task StartAsync(RecordingContext context, CancellationToken cancellationToken)
     {
         Calls.Add("start");
@@ -46,6 +48,11 @@ internal sealed class FakeRecordingService : IRecordingService
     public void RaiseFailure(Exception exception)
     {
         Failed?.Invoke(this, new RecordingServiceFailedEventArgs(exception));
+    }
+
+    public void RaiseCaptureTargetExited()
+    {
+        CaptureTargetExited?.Invoke(this, EventArgs.Empty);
     }
 
     public ValueTask DisposeAsync()

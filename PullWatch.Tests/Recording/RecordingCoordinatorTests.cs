@@ -154,6 +154,37 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
+    public async Task CaptureTargetExitGracefullyStopsRecording()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        recorder.RaiseCaptureTargetExited();
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+        Assert.Null(coordinator.Status.LastFailure);
+    }
+
+    [Fact]
+    public async Task CaptureTargetExitDuringStartupStopsAfterStartupCompletes()
+    {
+        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingStart = pendingStart };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        var startTask = coordinator.StartManualAsync(CancellationToken.None);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
+        recorder.RaiseCaptureTargetExited();
+        pendingStart.SetResult();
+
+        Assert.Equal(RecordingCommandResult.Started, await startTask);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
     public async Task StopTimeoutBlocksStartsUntilCleanupCompletes()
     {
         var pendingStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -173,6 +204,7 @@ public sealed class RecordingCoordinatorTests
         pendingStop.SetResult();
         await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
 
+        Assert.Equal(new RecordingStatistics(1, 1), coordinator.Status.Statistics);
         Assert.Equal(
             RecordingCommandResult.Started,
             await coordinator.StartManualAsync(CancellationToken.None));
@@ -206,6 +238,8 @@ public sealed class RecordingCoordinatorTests
 
         await coordinator.StartManualAsync(CancellationToken.None);
         var stopResult = await coordinator.StopManualAsync(CancellationToken.None);
+        Assert.Equal(new RecordingStatistics(1, 0), coordinator.Status.Statistics);
+
         recorder.StopException = null;
         var retryResult = await coordinator.StartManualAsync(CancellationToken.None);
 
@@ -245,6 +279,36 @@ public sealed class RecordingCoordinatorTests
         await coordinator.StopManualAsync(CancellationToken.None);
 
         Assert.Null(coordinator.Status.ActiveOutputPath);
+    }
+
+    [Fact]
+    public async Task StatisticsCountAcceptedRequestsAndSuccessfulFinalizations()
+    {
+        var recorder = new FakeRecordingService();
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(new RecordingStatistics(1, 0), coordinator.Status.Statistics);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        await coordinator.StopManualAsync(CancellationToken.None);
+
+        Assert.Equal(new RecordingStatistics(1, 1), coordinator.Status.Statistics);
+    }
+
+    [Fact]
+    public async Task FailedRecordingIsExpectedButNotSaved()
+    {
+        var recorder = new FakeRecordingService
+        {
+            StartException = new InvalidOperationException("capture failed")
+        };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+
+        Assert.Equal(new RecordingStatistics(1, 0), coordinator.Status.Statistics);
     }
 
     private static RecordingCoordinator CreateCoordinator(

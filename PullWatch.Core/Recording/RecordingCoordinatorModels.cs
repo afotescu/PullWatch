@@ -53,7 +53,14 @@ public sealed record RecordingCoordinatorStatus(
     RecordingOwner? SuppressedUntilOwnerEnd,
     string? SuppressedIdentity,
     Exception? LastFailure,
-    string? ActiveOutputPath);
+    string? ActiveOutputPath)
+{
+    public RecordingStatistics Statistics { get; init; } = new(0, 0);
+}
+
+public sealed record RecordingStatistics(
+    int ExpectedCount,
+    int SavedCount);
 
 public sealed class RecordingServiceFailedEventArgs(Exception exception) : EventArgs
 {

@@ -53,6 +53,9 @@ public sealed class DashboardViewModel : ObservableObject
 
     public string OutputPath => _recording.ActiveOutputPath ?? NoOutputPath;
 
+    public string RecordingStatistics =>
+        $"{_recording.Statistics.ExpectedCount} expected · {_recording.Statistics.SavedCount} saved this session";
+
     public string CombatLogHealth => _combatLog.LastFileSystemError is not null
         ? "Logs directory error"
         : _combatLog.State switch
