@@ -70,6 +70,23 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.IsDirty);
     }
 
+    [Fact]
+    public async Task UnexpectedSaveFailureIsDisplayed()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            _ => Task.FromException<SettingsSaveResult>(
+                new InvalidOperationException("settings service unavailable")));
+        viewModel.RecordMythicPlus = false;
+
+        await viewModel.SaveCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsSaveError);
+        Assert.Equal(
+            "Could not save settings: settings service unavailable",
+            viewModel.SaveMessage);
+    }
+
     private static SettingsViewModel CreateViewModel(
         ApplicationStatus status,
         Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null)

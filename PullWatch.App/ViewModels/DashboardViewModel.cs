@@ -24,9 +24,17 @@ public sealed class DashboardViewModel : ObservableObject
         _startManual = startManual;
         _stopManual = stopManual;
         _openRecordingsFolder = openRecordingsFolder;
-        StartManualCommand = new AsyncRelayCommand(StartManualAsync, () => CanStartManual);
-        StopManualCommand = new AsyncRelayCommand(StopManualAsync, () => CanStopManual);
-        OpenRecordingsFolderCommand = new AsyncRelayCommand(OpenRecordingsFolderAsync);
+        StartManualCommand = new AsyncRelayCommand(
+            StartManualAsync,
+            () => CanStartManual,
+            HandleCommandFailure);
+        StopManualCommand = new AsyncRelayCommand(
+            StopManualAsync,
+            () => CanStopManual,
+            HandleCommandFailure);
+        OpenRecordingsFolderCommand = new AsyncRelayCommand(
+            OpenRecordingsFolderAsync,
+            onException: HandleCommandFailure);
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
     }
@@ -59,12 +67,12 @@ public sealed class DashboardViewModel : ObservableObject
     public string CombatLogHealth => _combatLog.LastFileSystemError is not null
         ? "Logs directory error"
         : _combatLog.State switch
-    {
-        CombatLogReaderState.ReadingCombatLog => "Monitoring",
-        CombatLogReaderState.SwitchingCombatLog => "Switching logs",
-        CombatLogReaderState.WaitingForCombatLog => "Waiting for combat log",
-        _ => "Logs directory unavailable"
-    };
+        {
+            CombatLogReaderState.ReadingCombatLog => "Monitoring",
+            CombatLogReaderState.SwitchingCombatLog => "Switching logs",
+            CombatLogReaderState.WaitingForCombatLog => "Waiting for combat log",
+            _ => "Logs directory unavailable"
+        };
 
     public string CombatLogDetail => _combatLog.LastFileSystemError?.Message
         ?? _combatLog.CurrentPath
@@ -156,6 +164,11 @@ public sealed class DashboardViewModel : ObservableObject
         _dismissedFailure = _recording.LastFailure;
         OnPropertyChanged(nameof(IsFailureVisible));
         DismissFailureCommand.NotifyCanExecuteChanged();
+    }
+
+    private void HandleCommandFailure(Exception exception)
+    {
+        CommandMessage = $"Command failed: {exception.Message}";
     }
 
     private static string GetStateTitle(RecordingCoordinatorState state)

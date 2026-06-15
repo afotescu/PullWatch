@@ -264,6 +264,54 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
+    public async Task DisposeReturnsWhenRecordingServiceDisposalTimesOut()
+    {
+        var pendingDispose = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new FakeRecordingService { PendingDispose = pendingDispose };
+        var coordinator = CreateCoordinator(
+            recorder,
+            disposeTimeout: TimeSpan.FromMilliseconds(20));
+
+        await coordinator.DisposeAsync();
+
+        Assert.Equal(1, recorder.DisposeCalls);
+        Assert.False(pendingDispose.Task.IsCompleted);
+        pendingDispose.SetResult();
+    }
+
+    [Fact]
+    public async Task DisposeReturnsWhenRecordingServiceDisposalBlocksSynchronously()
+    {
+        using var disposalStarted = new ManualResetEventSlim();
+        using var disposeBlocker = new ManualResetEventSlim();
+        var recorder = new FakeRecordingService
+        {
+            DisposeAction = () =>
+            {
+                disposalStarted.Set();
+                disposeBlocker.Wait();
+            }
+        };
+        var coordinator = CreateCoordinator(
+            recorder,
+            disposeTimeout: TimeSpan.FromMilliseconds(20));
+
+        await coordinator.DisposeAsync();
+
+        try
+        {
+            Assert.True(disposalStarted.Wait(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken));
+            Assert.Equal(1, recorder.DisposeCalls);
+        }
+        finally
+        {
+            disposeBlocker.Set();
+        }
+    }
+
+    [Fact]
     public async Task ActiveOutputPathIsExposedAndClearedWhenIdle()
     {
         var recorder = new FakeRecordingService
@@ -314,13 +362,15 @@ public sealed class RecordingCoordinatorTests
     private static RecordingCoordinator CreateCoordinator(
         FakeRecordingService recorder,
         TimeSpan? startTimeout = null,
-        TimeSpan? stopTimeout = null)
+        TimeSpan? stopTimeout = null,
+        TimeSpan? disposeTimeout = null)
     {
         return new RecordingCoordinator(
             recorder,
             NullLogger<RecordingCoordinator>.Instance,
             startTimeout ?? TimeSpan.FromSeconds(2),
-            stopTimeout ?? TimeSpan.FromSeconds(2));
+            stopTimeout ?? TimeSpan.FromSeconds(2),
+            disposeTimeout ?? TimeSpan.FromSeconds(2));
     }
 
     private static ChallengeRecordingContext Challenge()

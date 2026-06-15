@@ -80,6 +80,19 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
+    public async Task UnexpectedManualCommandFailureIsDisplayed()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            _ => Task.FromException<RecordingCommandResult>(
+                new InvalidOperationException("controller unavailable")));
+
+        await viewModel.StartManualCommand.ExecuteAsync();
+
+        Assert.Equal("Command failed: controller unavailable", viewModel.CommandMessage);
+    }
+
+    [Fact]
     public void FailureBannerPersistsUntilDismissedAndReturnsForNewFailure()
     {
         var firstFailure = new InvalidOperationException("capture failed");

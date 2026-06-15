@@ -6,11 +6,13 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultStartTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan DefaultStopTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultDisposeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IRecordingService _recordingService;
     private readonly ILogger<RecordingCoordinator> _logger;
     private readonly TimeSpan _startTimeout;
     private readonly TimeSpan _stopTimeout;
+    private readonly TimeSpan _disposeTimeout;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly object _notificationLock = new();
     private Task _notificationQueue = Task.CompletedTask;
@@ -38,12 +40,14 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         IRecordingService recordingService,
         ILogger<RecordingCoordinator> logger,
         TimeSpan? startTimeout = null,
-        TimeSpan? stopTimeout = null)
+        TimeSpan? stopTimeout = null,
+        TimeSpan? disposeTimeout = null)
     {
         _recordingService = recordingService;
         _logger = logger;
         _startTimeout = startTimeout ?? DefaultStartTimeout;
         _stopTimeout = stopTimeout ?? DefaultStopTimeout;
+        _disposeTimeout = disposeTimeout ?? DefaultDisposeTimeout;
         _recordingService.Failed += OnRecordingServiceFailed;
         _recordingService.CaptureTargetExited += OnCaptureTargetExited;
     }
@@ -117,7 +121,33 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
         finally
         {
-            await _recordingService.DisposeAsync();
+            Task? disposeTask = null;
+
+            try
+            {
+                disposeTask = Task.Run(
+                    async () => await _recordingService.DisposeAsync(),
+                    CancellationToken.None);
+                await disposeTask.WaitAsync(_disposeTimeout);
+            }
+            catch (TimeoutException exception)
+            {
+                if (disposeTask is not null)
+                {
+                    _ = ObserveBackgroundTaskAsync(
+                        disposeTask,
+                        "Recording service disposal failed after timing out");
+                }
+
+                _logger.LogError(
+                    exception,
+                    "Recording service disposal timed out after {DisposeTimeout}",
+                    _disposeTimeout);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Recording service disposal failed");
+            }
         }
     }
 

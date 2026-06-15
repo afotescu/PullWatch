@@ -272,7 +272,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
         {
             State = CombatLogReaderState.ReadingCombatLog,
             CurrentPath = path,
-            LastSuccessfulReadTime = DateTimeOffset.UtcNow
+            LastSuccessfulReadTime = DateTimeOffset.UtcNow,
+            LastFileSystemError = null
         });
     }
 

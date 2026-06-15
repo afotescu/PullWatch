@@ -160,6 +160,40 @@ public sealed class CombatLogReaderTests
         Assert.Equal("Handler failed.", exception.Message);
     }
 
+    [Fact]
+    public async Task SuccessfulReadClearsTransientFileSystemError()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(path, "", cancellationToken);
+        await using var exclusiveLock = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+        var events = new ConcurrentQueue<CombatLogEvent>();
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var reader = CreateReader(directory.Path);
+        var readTask = reader.ReadAsync(
+            (combatLogEvent, _) =>
+            {
+                events.Enqueue(combatLogEvent);
+                return Task.CompletedTask;
+            },
+            readerCancellation.Token);
+
+        await WaitForAsync(() => reader.Status.LastFileSystemError is not null);
+        await exclusiveLock.DisposeAsync();
+        await File.AppendAllTextAsync(path, FirstLine + Environment.NewLine, cancellationToken);
+        await WaitForCountAsync(events, 1);
+
+        Assert.Null(reader.Status.LastFileSystemError);
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+    }
+
     private static CombatLogReader CreateReader(string logsDirectory)
     {
         return new CombatLogReader(
@@ -191,6 +225,17 @@ public sealed class CombatLogReaderTests
         while (events.Count < expectedCount)
         {
             Assert.True(DateTime.UtcNow < timeout, $"Reader did not emit {expectedCount} events.");
+            await Task.Delay(10);
+        }
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < timeout, "Condition was not reached.");
             await Task.Delay(10);
         }
     }

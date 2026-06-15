@@ -91,16 +91,24 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var server = new NamedPipeServerStream(
-                _pipeName,
-                PipeDirection.In,
-                1,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
-            await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-            var buffer = new byte[1];
-            await server.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
-            activate();
+
+            try
+            {
+                await using var server = new NamedPipeServerStream(
+                    _pipeName,
+                    PipeDirection.In,
+                    1,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous);
+                await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = new byte[1];
+                await server.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+                activate();
+            }
+            catch (System.IO.IOException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A client disconnected before sending a complete activation request.
+            }
         }
     }
 }

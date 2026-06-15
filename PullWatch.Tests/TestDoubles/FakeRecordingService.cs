@@ -14,6 +14,12 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public TaskCompletionSource? PendingStop { get; set; }
 
+    public TaskCompletionSource? PendingDispose { get; set; }
+
+    public int DisposeCalls { get; private set; }
+
+    public Action? DisposeAction { get; set; }
+
     public string? ActiveOutputPath { get; set; } = @"C:\Recordings\active.mp4";
 
     public event EventHandler<RecordingServiceFailedEventArgs>? Failed;
@@ -57,6 +63,10 @@ internal sealed class FakeRecordingService : IRecordingService
 
     public ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        DisposeCalls++;
+        DisposeAction?.Invoke();
+        return PendingDispose is null
+            ? ValueTask.CompletedTask
+            : new ValueTask(PendingDispose.Task);
     }
 }

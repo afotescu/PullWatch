@@ -36,7 +36,10 @@ public sealed class SettingsViewModel : ObservableObject
         _saveSettings = saveSettings;
         _dialogs = dialogs;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
-        SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave);
+        SaveCommand = new AsyncRelayCommand(
+            SaveAsync,
+            () => CanSave,
+            HandleCommandFailure);
         PickWowLogsDirectoryCommand = new RelayCommand(PickWowLogsDirectory, () => IsEditingEnabled);
         PickRecordingsDirectoryCommand = new RelayCommand(PickRecordingsDirectory, () => IsEditingEnabled);
         LoadSettings(_savedSettings);
@@ -340,6 +343,12 @@ public sealed class SettingsViewModel : ObservableObject
                 FrameRateError = error;
             }
         }
+    }
+
+    private void HandleCommandFailure(Exception exception)
+    {
+        IsSaveError = true;
+        SaveMessage = $"Could not save settings: {exception.Message}";
     }
 
     private void LoadSettings(PullWatchSettings settings)

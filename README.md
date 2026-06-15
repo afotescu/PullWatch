@@ -1,6 +1,7 @@
 # PullWatch
 
-PullWatch is a lightweight World of Warcraft gameplay recorder that automatically records Mythic+ runs using combat-log events.
+PullWatch is a lightweight Windows desktop application that automatically records
+World of Warcraft Mythic+ runs and raid encounters using combat-log events.
 
 The current goal is reliable Mythic+ recording without requiring OBS or another external recording application.
 
@@ -11,11 +12,14 @@ PullWatch currently:
 - Reads and tails the latest WoW combat log.
 - Starts recording on `CHALLENGE_MODE_START`.
 - Stops recording on `CHALLENGE_MODE_END`.
+- Starts and stops raid encounter recordings using `ENCOUNTER_START` and
+  `ENCOUNTER_END`.
 - Captures the World of Warcraft window at its current resolution.
-- Records system audio without microphone input.
+- Supports configurable system-audio and microphone capture.
 - Uses hardware-accelerated H.264 encoding at 60 FPS.
 - Finalizes active recordings when PullWatch exits.
 - Logs recording startup, duration, finalization time, file size, and failures.
+- Provides a WPF dashboard, settings, diagnostics, and system tray controls.
 
 Recordings are saved to:
 
@@ -38,8 +42,8 @@ PullWatch currently handles:
 
 - `CHALLENGE_MODE_START`
 - `CHALLENGE_MODE_END`
-
-Other WoW events are defined for future encounter and raid support.
+- `ENCOUNTER_START`
+- `ENCOUNTER_END`
 
 ## Requirements
 
@@ -93,14 +97,10 @@ When no file exists, PullWatch creates it with defaults and attempts to detect
 the WoW retail logs directory. An unreadable or invalid file is rejected as a
 whole and defaults are used without overwriting the file.
 
-Runtime-only overrides are available with `--wow-logs-directory`,
-`--recordings-directory`, `--record-mythic-plus true|false`, and
-`--record-raid-encounters true|false`.
-
 Run a Release build:
 
 ```powershell
-dotnet run --project PullWatch -c Release -p:Platform=x64
+dotnet run --project PullWatch.App/PullWatch.App.csproj -c Release -p:Platform=x64
 ```
 
 ## Testing
@@ -116,13 +116,13 @@ dotnet test PullWatch.sln
 Create a self-contained Windows x64 release:
 
 ```powershell
-dotnet publish PullWatch/PullWatch.csproj `
+dotnet publish PullWatch.App/PullWatch.App.csproj `
   -c Release `
   -r win-x64 `
   --self-contained true
 ```
 
-Users can run the resulting `PullWatch.exe` without installing .NET 10.
+Users can run the resulting `PullWatch.App.exe` without installing .NET 10.
 
 ## Current Recording Configuration
 
@@ -140,19 +140,19 @@ These values are the defaults used when settings are not configured.
 ## Current Scope
 
 - Mythic+ recording
+- Raid encounter recording
 - Latest combat-log file monitoring
-- System output audio capture
-- Command-line operation with initial recording defaults
+- Configurable system-output and microphone capture
+- WPF dashboard, settings, diagnostics, and tray controls
+- Single-instance desktop operation
 
 ## Roadmap
 
 ### Next
 
-- Restructure the recording core behind a UI-independent application
-  controller.
-- Replace the console executable with a WPF desktop and tray application.
-- Add the recording dashboard, settings workflow, and diagnostics.
 - Harden and package the first self-contained desktop release.
+- Improve recovery from malformed combat-log events.
+- Add release automation and continuous integration.
 
 ### Later
 

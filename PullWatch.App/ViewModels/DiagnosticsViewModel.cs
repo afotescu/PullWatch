@@ -18,7 +18,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
         _logs = logs;
         _dialogs = dialogs;
         CopyDiagnosticsCommand = new RelayCommand(CopyDiagnostics);
-        ExportDiagnosticsCommand = new AsyncRelayCommand(ExportDiagnosticsAsync);
+        ExportDiagnosticsCommand = new AsyncRelayCommand(
+            ExportDiagnosticsAsync,
+            onException: HandleCommandFailure);
     }
 
     public RelayCommand CopyDiagnosticsCommand { get; }
@@ -100,6 +102,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
             Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown",
             _status,
             _logs.GetSnapshot());
+    }
+
+    private void HandleCommandFailure(Exception exception)
+    {
+        ActionMessage = $"Diagnostics command failed: {exception.Message}";
     }
 
     private static string FormatLogs(IReadOnlyList<ApplicationLogEntry> logs)
