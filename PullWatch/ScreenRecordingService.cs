@@ -4,11 +4,11 @@ using ScreenRecorderLib;
 
 namespace PullWatch;
 
-public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logger) : IRecordingService
+public sealed class ScreenRecordingService(
+    SettingsProvider settingsProvider,
+    ILogger<ScreenRecordingService> logger) : IRecordingService
 {
     private const string WowProcessName = "Wow";
-    private const int VideoBitrate = 12_000_000;
-    private const int VideoFramerate = 60;
 
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private Recorder? _recorder;
@@ -43,10 +43,11 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
                 "Located World of Warcraft window in {ElapsedMilliseconds:F1} ms",
                 Stopwatch.GetElapsedTime(wowLookupTimestamp).TotalMilliseconds);
 
-            var outputPath = CreateOutputPath(context);
+            var settings = settingsProvider.Current;
+            var outputPath = CreateOutputPath(context, settings);
 
             var recorderCreationTimestamp = Stopwatch.GetTimestamp();
-            var recorder = Recorder.CreateRecorder(CreateOptions(windowHandle));
+            var recorder = Recorder.CreateRecorder(CreateOptions(windowHandle, settings));
             logger.LogInformation(
                 "Created screen recorder in {ElapsedMilliseconds:F1} ms",
                 Stopwatch.GetElapsedTime(recorderCreationTimestamp).TotalMilliseconds);
@@ -138,7 +139,7 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
         }
     }
 
-    private static RecorderOptions CreateOptions(nint windowHandle)
+    private static RecorderOptions CreateOptions(nint windowHandle, PullWatchSettings settings)
     {
         return new RecorderOptions
         {
@@ -148,22 +149,24 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
                 [
                     new WindowRecordingSource(windowHandle)
                     {
-                        IsBorderRequired = false,
-                        IsCursorCaptureEnabled = true
+                        IsBorderRequired = settings.Video.ShowCaptureBorder,
+                        IsCursorCaptureEnabled = settings.Video.CaptureCursor
                     }
                 ]
             },
             AudioOptions = new AudioOptions
             {
-                IsAudioEnabled = true,
-                IsOutputDeviceEnabled = true,
-                IsInputDeviceEnabled = false
+                IsAudioEnabled =
+                    settings.Audio.CaptureSystemAudio ||
+                    settings.Audio.CaptureMicrophone,
+                IsOutputDeviceEnabled = settings.Audio.CaptureSystemAudio,
+                IsInputDeviceEnabled = settings.Audio.CaptureMicrophone
             },
             VideoEncoderOptions = new VideoEncoderOptions
             {
                 Encoder = new H264VideoEncoder(),
-                Bitrate = VideoBitrate,
-                Framerate = VideoFramerate,
+                Bitrate = settings.Video.Bitrate,
+                Framerate = settings.Video.FrameRate,
                 IsHardwareEncodingEnabled = true,
                 IsThrottlingDisabled = false
             }
@@ -186,11 +189,10 @@ public sealed class ScreenRecordingService(ILogger<ScreenRecordingService> logge
         throw new InvalidOperationException("Could not find a running World of Warcraft window.");
     }
 
-    private static string CreateOutputPath(RecordingContext context)
+    private static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
     {
-        var recordingsDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-            "PullWatch");
+        var recordingsDirectory = settings.RecordingsDirectory
+            ?? throw new InvalidOperationException("Recordings directory was not configured.");
 
         Directory.CreateDirectory(recordingsDirectory);
 

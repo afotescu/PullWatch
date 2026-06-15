@@ -5,6 +5,7 @@ namespace PullWatch;
 
 public sealed class CombatLogEventHandler(
     RecordingCoordinator recordingCoordinator,
+    SettingsProvider settingsProvider,
     ILogger<CombatLogEventHandler> logger)
 {
     private long _previousRecordingEventTimestamp;
@@ -18,6 +19,11 @@ public sealed class CombatLogEventHandler(
         switch (eventName)
         {
             case WowEvents.ChallengeModeStart:
+                if (!settingsProvider.Current.RecordMythicPlus)
+                {
+                    break;
+                }
+
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
@@ -25,6 +31,11 @@ public sealed class CombatLogEventHandler(
                     cancellationToken);
                 break;
             case WowEvents.EncounterStart:
+                if (!settingsProvider.Current.RecordRaidEncounters)
+                {
+                    break;
+                }
+
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,

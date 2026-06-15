@@ -93,7 +93,40 @@ public sealed class CombatLogEventHandlerTests
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
 
-    private static CombatLogEventHandler CreateHandler(IRecordingService recordingService)
+    [Fact]
+    public async Task DisabledAutomaticRecordingTypesDoNotStart()
+    {
+        var recorder = new FakeRecordingService();
+        var settingsProvider = new SettingsProvider(new PullWatchSettings
+        {
+            RecordMythicPlus = false,
+            RecordRaidEncounters = false
+        });
+        var handler = CreateHandler(recorder, settingsProvider);
+
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
+        await HandleAsync(handler, WowEvents.EncounterStart);
+
+        Assert.Empty(recorder.Calls);
+    }
+
+    [Fact]
+    public async Task SettingChangeDoesNotPreventActiveRecordingFromStopping()
+    {
+        var recorder = new FakeRecordingService();
+        var settingsProvider = new SettingsProvider(new PullWatchSettings());
+        var handler = CreateHandler(recorder, settingsProvider);
+
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
+        settingsProvider.TryUpdate(settingsProvider.Current with { RecordMythicPlus = false });
+        await HandleAsync(handler, WowEvents.ChallengeModeEnd);
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    private static CombatLogEventHandler CreateHandler(
+        IRecordingService recordingService,
+        SettingsProvider? settingsProvider = null)
     {
         var coordinator = new RecordingCoordinator(
             recordingService,
@@ -101,6 +134,7 @@ public sealed class CombatLogEventHandlerTests
 
         return new CombatLogEventHandler(
             coordinator,
+            settingsProvider ?? new SettingsProvider(new PullWatchSettings()),
             NullLogger<CombatLogEventHandler>.Instance);
     }
 

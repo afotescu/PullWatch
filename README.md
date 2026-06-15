@@ -67,11 +67,35 @@ PullWatch does not require OBS or another external recording application.
 
 ## Running Locally
 
-Update the WoW log directory in `PullWatch/Program.cs`:
+Create `%LocalAppData%\PullWatch\settings.json` to configure PullWatch:
 
-```csharp
-var logsDirectory = @"E:\World of Warcraft\_retail_\Logs";
+```json
+{
+  "Version": 1,
+  "WowLogsDirectory": "E:\\World of Warcraft\\_retail_\\Logs",
+  "RecordingsDirectory": "D:\\Videos\\PullWatch",
+  "RecordMythicPlus": true,
+  "RecordRaidEncounters": true,
+  "Video": {
+    "Bitrate": 12000000,
+    "FrameRate": 60,
+    "CaptureCursor": true,
+    "ShowCaptureBorder": false
+  },
+  "Audio": {
+    "CaptureSystemAudio": true,
+    "CaptureMicrophone": false
+  }
+}
 ```
+
+When no file exists, PullWatch creates it with defaults and attempts to detect
+the WoW retail logs directory. An unreadable or invalid file is rejected as a
+whole and defaults are used without overwriting the file.
+
+Runtime-only overrides are available with `--wow-logs-directory`,
+`--recordings-directory`, `--record-mythic-plus true|false`, and
+`--record-raid-encounters true|false`.
 
 Run a Release build:
 
@@ -111,7 +135,7 @@ Users can run the resulting `PullWatch.exe` without installing .NET 10.
 - Cursor capture enabled
 - Windows capture border disabled
 
-These values are initial defaults and will become configurable later.
+These values are the defaults used when settings are not configured.
 
 ## Current Scope
 
@@ -125,10 +149,9 @@ These values are initial defaults and will become configurable later.
 ### Next
 
 - Test reliability across real Mythic+ runs.
-- Make the WoW log directory configurable.
-- Make the recording output folder configurable.
 - Handle new combat-log files created while PullWatch is running.
-- Make bitrate, frame rate, encoder, and audio settings configurable.
+- Add simple settings editing to the desktop UI.
+- Add user-friendly encoder selection to the desktop UI.
 - Improve recording failure recovery.
 - Add focused automated tests.
 
