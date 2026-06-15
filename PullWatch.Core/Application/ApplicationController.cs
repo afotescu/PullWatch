@@ -125,6 +125,11 @@ public sealed class ApplicationController : IAsyncDisposable
         return GetRecordingCoordinator().StopManualAsync(cancellationToken);
     }
 
+    public Task<RecordingCommandResult> FinalizeRecordingForExitAsync(CancellationToken cancellationToken)
+    {
+        return GetRecordingCoordinator().ShutdownAsync(cancellationToken);
+    }
+
     public async Task<SettingsSaveResult> SaveSettingsAsync(
         PullWatchSettings settings,
         CancellationToken cancellationToken)

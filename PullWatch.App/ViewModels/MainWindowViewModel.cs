@@ -5,16 +5,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
     private readonly ISettingsDialogs _settingsDialogs;
+    private readonly InMemoryLogProvider _logs;
     private NavigationItemViewModel _selectedNavigationItem;
 
     public MainWindowViewModel(
         ApplicationController controller,
         IUiDispatcher dispatcher,
-        ISettingsDialogs settingsDialogs)
+        ISettingsDialogs settingsDialogs,
+        InMemoryLogProvider logs,
+        IDiagnosticsDialogs diagnosticsDialogs)
     {
         _controller = controller;
         _dispatcher = dispatcher;
         _settingsDialogs = settingsDialogs;
+        _logs = logs;
         Dashboard = new DashboardViewModel(
             controller.Status,
             controller.StartManualRecordingAsync,
@@ -24,19 +28,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             controller.Status,
             controller.SaveSettingsAsync,
             settingsDialogs);
+        Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
         [
             new NavigationItemViewModel("Dashboard", "\uE80F", Dashboard),
             new NavigationItemViewModel("Settings", "\uE713", Settings),
-            new NavigationItemViewModel(
-                "Diagnostics",
-                "\uE9D9",
-                new PlaceholderViewModel(
-                    "Diagnostics",
-                    "Detailed application diagnostics will be added after settings."))
+            new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics)
         ];
         _selectedNavigationItem = NavigationItems[0];
         _controller.StatusChanged += OnStatusChanged;
+        _logs.LogsChanged += OnLogsChanged;
     }
 
     public IReadOnlyList<NavigationItemViewModel> NavigationItems { get; }
@@ -44,6 +45,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public DashboardViewModel Dashboard { get; }
 
     public SettingsViewModel Settings { get; }
+
+    public DiagnosticsViewModel Diagnostics { get; }
 
     public NavigationItemViewModel SelectedNavigationItem
     {
@@ -74,6 +77,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _controller.StatusChanged -= OnStatusChanged;
+        _logs.LogsChanged -= OnLogsChanged;
     }
 
     private Task OpenRecordingsFolderAsync()
@@ -88,7 +92,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             Dashboard.ApplyStatus(status);
             Settings.ApplyStatus(status);
+            Diagnostics.ApplyStatus(status);
         });
+    }
+
+    private void OnLogsChanged()
+    {
+        _dispatcher.Post(Diagnostics.RefreshLogs);
     }
 
     private async Task SaveAndSelectAsync(NavigationItemViewModel navigationItem)
