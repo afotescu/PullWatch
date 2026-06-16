@@ -133,6 +133,7 @@ public sealed class ScreenRecordingService(
         }
 
         await recordingFinished.WaitAsync(cancellationToken);
+        DisposeRecorder();
     }
 
     public async ValueTask DisposeAsync()
@@ -227,6 +228,11 @@ public sealed class ScreenRecordingService(
         _recordingStarted.TrySetException(
             new InvalidOperationException("Recording completed before the recorder confirmed startup."));
         CompleteRecording();
+
+        if (!Volatile.Read(ref _isStopping))
+        {
+            QueueRecorderCleanup("Recorder completed without an active stop request");
+        }
     }
 
     private void OnRecordingFailed(object? sender, RecordingFailedEventArgs eventArgs)
@@ -240,7 +246,7 @@ public sealed class ScreenRecordingService(
 
         _recordingStarted.TrySetException(exception);
         _recordingFinished.TrySetException(exception);
-        DisposeRecorder();
+        QueueRecorderCleanup("Recorder failed");
         Failed?.Invoke(this, new RecordingServiceFailedEventArgs(exception));
     }
 
@@ -272,7 +278,21 @@ public sealed class ScreenRecordingService(
     private void CompleteRecording()
     {
         _recordingFinished.TrySetResult();
-        DisposeRecorder();
+    }
+
+    private void QueueRecorderCleanup(string reason)
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                DisposeRecorder();
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "{RecorderCleanupReason}; recorder cleanup failed", reason);
+            }
+        });
     }
 
     private void DisposeRecorder()
