@@ -6,6 +6,7 @@
         Height="760"
         MinWidth="900"
         MinHeight="600"
+        Icon="Assets/favicon.ico"
         WindowStartupLocation="CenterScreen">
     <Grid Background="{StaticResource WindowBrush}">
         <Grid.ColumnDefinitions>

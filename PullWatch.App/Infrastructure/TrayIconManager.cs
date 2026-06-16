@@ -6,6 +6,9 @@ namespace PullWatch;
 
 public sealed class TrayIconManager : IDisposable
 {
+    private static readonly Uri TrayIconUri = new("pack://application:,,,/Assets/favicon.ico", UriKind.Absolute);
+
+    private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _recordingItem;
     private readonly ApplicationController _controller;
@@ -25,6 +28,7 @@ public sealed class TrayIconManager : IDisposable
         _logger = logger;
         _recordingItem = new ToolStripMenuItem();
         _recordingItem.Click += OnRecordingClick;
+        _trayIcon = LoadTrayIcon(_logger);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open PullWatch", null, (_, _) => _showWindow());
@@ -35,7 +39,7 @@ public sealed class TrayIconManager : IDisposable
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _trayIcon,
             Text = "PullWatch",
             ContextMenuStrip = menu,
             Visible = true
@@ -50,6 +54,7 @@ public sealed class TrayIconManager : IDisposable
         _controller.StatusChanged -= OnStatusChanged;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _trayIcon.Dispose();
     }
 
     private async void OnRecordingClick(object? sender, EventArgs eventArgs)
@@ -95,6 +100,27 @@ public sealed class TrayIconManager : IDisposable
             : "Stop recording";
         _recordingItem.Enabled = status.Recording.State is
             RecordingCoordinatorState.Idle or RecordingCoordinatorState.Recording;
+    }
+
+    private static Icon LoadTrayIcon(ILogger logger)
+    {
+        try
+        {
+            var iconResource = System.Windows.Application.GetResourceStream(TrayIconUri);
+            if (iconResource is null)
+            {
+                logger.LogWarning("Tray icon resource was not found at {IconUri}", TrayIconUri);
+                return (Icon)SystemIcons.Application.Clone();
+            }
+
+            using var iconStream = iconResource.Stream;
+            return new Icon(iconStream);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Failed to load tray icon resource");
+            return (Icon)SystemIcons.Application.Clone();
+        }
     }
 
     private async Task RunCommandAsync(Func<Task> command)
