@@ -7,6 +7,27 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot "PullWatch.App/PullWatch.App.csproj"
 $publishPath = Join-Path $repoRoot $OutputPath
+$resolvedPublishPath = [System.IO.Path]::GetFullPath($publishPath)
+
+$lockingProcesses = Get-Process |
+    Where-Object {
+        try {
+            $_.Path -and
+            [System.IO.Path]::GetFullPath($_.Path).StartsWith(
+                $resolvedPublishPath,
+                [System.StringComparison]::OrdinalIgnoreCase)
+        }
+        catch {
+            $false
+        }
+    } |
+    Select-Object Id, ProcessName, Path
+
+if ($lockingProcesses) {
+    Write-Host "Close these running processes before publishing:"
+    $lockingProcesses | Format-Table -AutoSize
+    throw "The publish directory is in use: $resolvedPublishPath"
+}
 
 if (Test-Path -LiteralPath $publishPath) {
     Remove-Item -LiteralPath $publishPath -Recurse -Force
