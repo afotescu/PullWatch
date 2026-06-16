@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Principal;
 using Microsoft.Extensions.Logging;
 using ScreenRecorderLib;
 
@@ -42,18 +43,21 @@ public sealed class ScreenRecordingService(
                 return;
             }
 
-            var wowLookupTimestamp = Stopwatch.GetTimestamp();
-            var (wowProcess, windowHandle) = FindWowProcess();
+            var settings = settingsProvider.Current;
+            LogRecorderPreflight(context);
+
+            var sourceLookupTimestamp = Stopwatch.GetTimestamp();
+            var (wowProcess, recordingSource, sourceDescription) = CreateRecordingSource(context, settings);
             _wowProcess = wowProcess;
             logger.LogInformation(
-                "Located World of Warcraft window in {ElapsedMilliseconds:F1} ms",
-                Stopwatch.GetElapsedTime(wowLookupTimestamp).TotalMilliseconds);
+                "Located recording source {RecordingSource} in {ElapsedMilliseconds:F1} ms",
+                sourceDescription,
+                Stopwatch.GetElapsedTime(sourceLookupTimestamp).TotalMilliseconds);
 
-            var settings = settingsProvider.Current;
             var outputPath = CreateOutputPath(context, settings);
 
             var recorderCreationTimestamp = Stopwatch.GetTimestamp();
-            var recorder = Recorder.CreateRecorder(CreateOptions(windowHandle, settings));
+            var recorder = Recorder.CreateRecorder(CreateOptions(recordingSource, settings));
             logger.LogInformation(
                 "Created screen recorder in {ElapsedMilliseconds:F1} ms",
                 Stopwatch.GetElapsedTime(recorderCreationTimestamp).TotalMilliseconds);
@@ -70,8 +74,11 @@ public sealed class ScreenRecordingService(
             recorder.OnRecordingComplete += OnRecordingComplete;
             recorder.OnRecordingFailed += OnRecordingFailed;
             recorder.OnStatusChanged += OnStatusChanged;
-            wowProcess.Exited += OnWowProcessExited;
-            wowProcess.EnableRaisingEvents = true;
+            if (wowProcess is not null)
+            {
+                wowProcess.Exited += OnWowProcessExited;
+                wowProcess.EnableRaisingEvents = true;
+            }
 
             logger.LogInformation(
                 "Requesting recording start after {ElapsedMilliseconds:F1} ms: {OutputPath}",
@@ -91,6 +98,24 @@ public sealed class ScreenRecordingService(
         }
 
         await recordingStarted.WaitAsync(cancellationToken);
+    }
+
+    private void LogRecorderPreflight(RecordingContext context)
+    {
+        var appBaseDirectory = AppContext.BaseDirectory;
+        var recorderAssemblyPath = Path.Combine(appBaseDirectory, "ScreenRecorderLib.dll");
+        var recorderAssemblyStatus = GetFileStatus(recorderAssemblyPath);
+        var processPath = Environment.ProcessPath ?? "unknown";
+        var isElevated = IsCurrentProcessElevated();
+
+        logger.LogInformation(
+            "Recorder startup preflight for {RecordingContext}: process {ProcessPath}, base directory {BaseDirectory}, elevated {IsElevated}, ScreenRecorderLib.dll {RecorderAssemblyStatus} at {RecorderAssemblyPath}",
+            context.GetType().Name,
+            processPath,
+            appBaseDirectory,
+            isElevated,
+            recorderAssemblyStatus,
+            recorderAssemblyPath);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -148,7 +173,7 @@ public sealed class ScreenRecordingService(
         }
     }
 
-    private static RecorderOptions CreateOptions(nint windowHandle, PullWatchSettings settings)
+    private static RecorderOptions CreateOptions(RecordingSourceBase recordingSource, PullWatchSettings settings)
     {
         return new RecorderOptions
         {
@@ -156,11 +181,7 @@ public sealed class ScreenRecordingService(
             {
                 RecordingSources =
                 [
-                    new WindowRecordingSource(windowHandle)
-                    {
-                        IsBorderRequired = settings.Video.ShowCaptureBorder,
-                        IsCursorCaptureEnabled = settings.Video.CaptureCursor
-                    }
+                    recordingSource
                 ]
             },
             AudioOptions = new AudioOptions
@@ -180,6 +201,33 @@ public sealed class ScreenRecordingService(
                 IsThrottlingDisabled = false
             }
         };
+    }
+
+    private static (Process? WowProcess, RecordingSourceBase RecordingSource, string Description) CreateRecordingSource(
+        RecordingContext context,
+        PullWatchSettings settings)
+    {
+        if (context is ManualRecordingContext &&
+            settings.Video.CaptureMainDisplayForManualRecordings)
+        {
+            var mainMonitor = DisplayRecordingSource.MainMonitor
+                ?? throw new InvalidOperationException("Could not find a main display to record.");
+
+            mainMonitor.IsBorderRequired = settings.Video.ShowCaptureBorder;
+            mainMonitor.IsCursorCaptureEnabled = settings.Video.CaptureCursor;
+
+            return (null, mainMonitor, "main display");
+        }
+
+        var (wowProcess, windowHandle) = FindWowProcess();
+        return (
+            wowProcess,
+            new WindowRecordingSource(windowHandle)
+            {
+                IsBorderRequired = settings.Video.ShowCaptureBorder,
+                IsCursorCaptureEnabled = settings.Video.CaptureCursor
+            },
+            "World of Warcraft window");
     }
 
     private static (Process Process, nint WindowHandle) FindWowProcess()
@@ -331,6 +379,39 @@ public sealed class ScreenRecordingService(
         return timestamp == 0
             ? TimeSpan.Zero
             : Stopwatch.GetElapsedTime(timestamp);
+    }
+
+    private static string GetFileStatus(string path)
+    {
+        try
+        {
+            var fileInfo = new FileInfo(path);
+            return fileInfo.Exists
+                ? $"exists, {fileInfo.Length} bytes"
+                : "missing";
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return $"unreadable: {exception.Message}";
+        }
+        catch (Exception exception)
+        {
+            return $"unknown: {exception.GetType().Name}: {exception.Message}";
+        }
+    }
+
+    private static bool? IsCurrentProcessElevated()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private static double GetFileSizeMegabytes(string path)

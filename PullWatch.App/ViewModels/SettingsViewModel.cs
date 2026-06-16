@@ -296,7 +296,9 @@ public sealed class SettingsViewModel : ObservableObject
                 Bitrate = (int)(bitrateMegabits * 1_000_000m),
                 FrameRate = frameRate,
                 CaptureCursor = CaptureCursor,
-                ShowCaptureBorder = ShowCaptureBorder
+                ShowCaptureBorder = ShowCaptureBorder,
+                CaptureMainDisplayForManualRecordings =
+                    _savedSettings.Video.CaptureMainDisplayForManualRecordings
             },
             Audio = _savedSettings.Audio with
             {

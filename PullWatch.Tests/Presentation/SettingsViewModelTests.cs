@@ -24,6 +24,33 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Settings saved and active.", viewModel.SaveMessage);
     }
 
+    [Fact]
+    public async Task PreservesHiddenManualDisplayCaptureSetting()
+    {
+        PullWatchSettings? saved = null;
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                new PullWatchSettings
+                {
+                    RecordingsDirectory = Path.Combine(Path.GetTempPath(), "PullWatchViewModelTests"),
+                    Video = new VideoSettings
+                    {
+                        CaptureMainDisplayForManualRecordings = true
+                    }
+                }),
+            settings =>
+            {
+                saved = settings;
+                return Saved(settings);
+            });
+
+        viewModel.BitrateMegabits = "18";
+        await viewModel.SaveChangesAsync();
+
+        Assert.True(saved!.Video.CaptureMainDisplayForManualRecordings);
+    }
+
     [Theory]
     [InlineData(RecordingCoordinatorState.Starting)]
     [InlineData(RecordingCoordinatorState.Recording)]
@@ -102,10 +129,12 @@ public sealed class SettingsViewModelTests
         return Task.FromResult(new SettingsSaveResult(SettingsSaveStatus.Saved, settings, []));
     }
 
-    private static ApplicationStatus Status(RecordingCoordinatorState state)
+    private static ApplicationStatus Status(
+        RecordingCoordinatorState state,
+        PullWatchSettings? settings = null)
     {
         return new ApplicationStatus(
-            new PullWatchSettings
+            settings ?? new PullWatchSettings
             {
                 RecordingsDirectory = Path.Combine(Path.GetTempPath(), "PullWatchViewModelTests")
             },

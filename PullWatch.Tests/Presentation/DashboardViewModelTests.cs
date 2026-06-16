@@ -3,21 +3,23 @@ namespace PullWatch.Tests;
 public sealed class DashboardViewModelTests
 {
     [Theory]
-    [InlineData(RecordingCoordinatorState.Idle, "Ready to record", true, false)]
-    [InlineData(RecordingCoordinatorState.Starting, "Starting recording", false, false)]
-    [InlineData(RecordingCoordinatorState.Recording, "Recording", false, true)]
-    [InlineData(RecordingCoordinatorState.Stopping, "Finalizing recording", false, false)]
+    [InlineData(RecordingCoordinatorState.Idle, "Ready to record", true, false, "Manual start")]
+    [InlineData(RecordingCoordinatorState.Starting, "Starting recording", false, false, "Manual start")]
+    [InlineData(RecordingCoordinatorState.Recording, "Recording", true, true, "Manual stop")]
+    [InlineData(RecordingCoordinatorState.Stopping, "Finalizing recording", false, false, "Manual start")]
     public void AppliesEveryRecordingState(
         RecordingCoordinatorState state,
         string expectedTitle,
-        bool canStart,
-        bool canStop)
+        bool canRunManualCommand,
+        bool isManualStopMode,
+        string expectedManualButtonText)
     {
         var viewModel = CreateViewModel(Status(state));
 
         Assert.Equal(expectedTitle, viewModel.StateTitle);
-        Assert.Equal(canStart, viewModel.StartManualCommand.CanExecute(null));
-        Assert.Equal(canStop, viewModel.StopManualCommand.CanExecute(null));
+        Assert.Equal(canRunManualCommand, viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.Equal(isManualStopMode, viewModel.IsManualStopMode);
+        Assert.Equal(expectedManualButtonText, viewModel.ManualRecordingButtonText);
     }
 
     [Fact]
@@ -51,15 +53,15 @@ public sealed class DashboardViewModelTests
             Status(RecordingCoordinatorState.Idle),
             _ => pendingStart.Task);
 
-        var execution = viewModel.StartManualCommand.ExecuteAsync();
+        var execution = viewModel.ManualRecordingCommand.ExecuteAsync();
 
-        Assert.False(viewModel.StartManualCommand.CanExecute(null));
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
 
         pendingStart.SetResult(RecordingCommandResult.Started);
         await execution;
 
         Assert.Equal("Manual recording started.", viewModel.CommandMessage);
-        Assert.True(viewModel.StartManualCommand.CanExecute(null));
+        Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
     [Theory]
@@ -75,7 +77,7 @@ public sealed class DashboardViewModelTests
             Status(RecordingCoordinatorState.Idle),
             _ => Task.FromResult(result));
 
-        await viewModel.StartManualCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync();
 
         Assert.Equal(expectedMessage, viewModel.CommandMessage);
     }
@@ -88,7 +90,7 @@ public sealed class DashboardViewModelTests
             _ => Task.FromException<RecordingCommandResult>(
                 new InvalidOperationException("controller unavailable")));
 
-        await viewModel.StartManualCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync();
 
         Assert.Equal("Command failed: controller unavailable", viewModel.CommandMessage);
     }
@@ -100,7 +102,7 @@ public sealed class DashboardViewModelTests
             Status(RecordingCoordinatorState.Idle),
             _ => Task.FromResult(RecordingCommandResult.Failed));
 
-        await viewModel.StartManualCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync();
         viewModel.ApplyStatus(Status(
             RecordingCoordinatorState.Idle,
             lastFailure: new InvalidOperationException("encoder failed")));
@@ -156,12 +158,30 @@ public sealed class DashboardViewModelTests
                     "Could not find a running World of Warcraft window.")),
             _ => Task.FromResult(RecordingCommandResult.Failed));
 
-        await viewModel.StartManualCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync();
 
         Assert.Equal("World of Warcraft is not running.", viewModel.CommandMessage);
         Assert.Equal("Idle", viewModel.RecorderHealth);
         Assert.False(viewModel.IsFailureVisible);
         Assert.Null(viewModel.FailureMessage);
+    }
+
+    [Fact]
+    public async Task ManualCommandStopsWhenRecording()
+    {
+        var stopCalls = 0;
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Recording, new ManualRecordingContext(DateTimeOffset.Now)),
+            stopManual: _ =>
+            {
+                stopCalls++;
+                return Task.FromResult(RecordingCommandResult.Stopped);
+            });
+
+        await viewModel.ManualRecordingCommand.ExecuteAsync();
+
+        Assert.Equal(1, stopCalls);
+        Assert.Equal("Recording stopped.", viewModel.CommandMessage);
     }
 
     [Fact]
@@ -198,12 +218,13 @@ public sealed class DashboardViewModelTests
 
     private static DashboardViewModel CreateViewModel(
         ApplicationStatus status,
-        Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null)
+        Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null,
+        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null)
     {
         return new DashboardViewModel(
             status,
             startManual ?? (_ => Task.FromResult(RecordingCommandResult.Started)),
-            _ => Task.FromResult(RecordingCommandResult.Stopped),
+            stopManual ?? (_ => Task.FromResult(RecordingCommandResult.Stopped)),
             () => Task.CompletedTask);
     }
 

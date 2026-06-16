@@ -25,13 +25,9 @@ public sealed class DashboardViewModel : ObservableObject
         _startManual = startManual;
         _stopManual = stopManual;
         _openRecordingsFolder = openRecordingsFolder;
-        StartManualCommand = new AsyncRelayCommand(
-            StartManualAsync,
-            () => CanStartManual,
-            HandleCommandFailure);
-        StopManualCommand = new AsyncRelayCommand(
-            StopManualAsync,
-            () => CanStopManual,
+        ManualRecordingCommand = new AsyncRelayCommand(
+            ToggleManualRecordingAsync,
+            () => CanRunManualCommand,
             HandleCommandFailure);
         OpenRecordingsFolderCommand = new AsyncRelayCommand(
             OpenRecordingsFolderAsync,
@@ -40,9 +36,7 @@ public sealed class DashboardViewModel : ObservableObject
         ApplyStatus(initialStatus);
     }
 
-    public AsyncRelayCommand StartManualCommand { get; }
-
-    public AsyncRelayCommand StopManualCommand { get; }
+    public AsyncRelayCommand ManualRecordingCommand { get; }
 
     public AsyncRelayCommand OpenRecordingsFolderCommand { get; }
 
@@ -109,6 +103,14 @@ public sealed class DashboardViewModel : ObservableObject
 
     public bool CanStopManual => _recording.State == RecordingCoordinatorState.Recording;
 
+    public bool CanRunManualCommand => CanStartManual || CanStopManual;
+
+    public bool IsManualStopMode => _recording.State == RecordingCoordinatorState.Recording;
+
+    public string ManualRecordingButtonText => IsManualStopMode
+        ? "Manual stop"
+        : "Manual start";
+
     public void ApplyStatus(ApplicationStatus status)
     {
         _recording = status.Recording;
@@ -122,8 +124,7 @@ public sealed class DashboardViewModel : ObservableObject
 
         UpdateDuration();
         OnAllPropertiesChanged();
-        StartManualCommand.NotifyCanExecuteChanged();
-        StopManualCommand.NotifyCanExecuteChanged();
+        ManualRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
     }
 
@@ -141,6 +142,13 @@ public sealed class DashboardViewModel : ObservableObject
         return value.TotalHours >= 100
             ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}"
             : $"{(int)value.TotalHours:00}:{value.Minutes:00}:{value.Seconds:00}";
+    }
+
+    private Task ToggleManualRecordingAsync()
+    {
+        return _recording.State == RecordingCoordinatorState.Recording
+            ? StopManualAsync()
+            : StartManualAsync();
     }
 
     private async Task StartManualAsync()

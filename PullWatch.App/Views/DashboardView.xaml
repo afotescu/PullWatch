@@ -123,13 +123,19 @@
                                 Grid.ColumnSpan="2"
                                 Margin="0,28,0,0"
                                 Orientation="Horizontal">
-                        <Button Command="{Binding StartManualCommand}"
-                                Style="{StaticResource AccentButtonStyle}"
-                                Content="Start manual recording" />
-                        <Button Margin="10,0,0,0"
-                                Command="{Binding StopManualCommand}"
-                                Style="{StaticResource StopButtonStyle}"
-                                Content="Stop recording" />
+                        <Button Command="{Binding ManualRecordingCommand}"
+                                Content="{Binding ManualRecordingButtonText}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsManualStopMode}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource FailureBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                         <Button Margin="10,0,0,0"
                                 Command="{Binding OpenRecordingsFolderCommand}"
                                 Content="Open recordings folder" />

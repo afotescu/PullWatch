@@ -30,7 +30,8 @@ public sealed class SettingsStoreTests
                 Bitrate = 20_000_000,
                 FrameRate = 120,
                 CaptureCursor = false,
-                ShowCaptureBorder = true
+                ShowCaptureBorder = true,
+                CaptureMainDisplayForManualRecordings = true
             },
             Audio = new AudioSettings
             {

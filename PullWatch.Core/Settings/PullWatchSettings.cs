@@ -19,6 +19,7 @@ public sealed record VideoSettings
     public int FrameRate { get; init; } = 60;
     public bool CaptureCursor { get; init; } = true;
     public bool ShowCaptureBorder { get; init; }
+    public bool CaptureMainDisplayForManualRecordings { get; init; }
 }
 
 public sealed record AudioSettings
