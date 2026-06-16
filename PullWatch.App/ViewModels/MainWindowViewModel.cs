@@ -13,7 +13,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IUiDispatcher dispatcher,
         ISettingsDialogs settingsDialogs,
         InMemoryLogProvider logs,
-        IDiagnosticsDialogs diagnosticsDialogs)
+        IDiagnosticsDialogs diagnosticsDialogs,
+        bool showSettingsOnStartup = false)
     {
         _controller = controller;
         _dispatcher = dispatcher;
@@ -35,7 +36,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             new NavigationItemViewModel("Settings", "\uE713", Settings),
             new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics)
         ];
-        _selectedNavigationItem = NavigationItems[0];
+        _selectedNavigationItem = showSettingsOnStartup ? NavigationItems[1] : NavigationItems[0];
         _controller.StatusChanged += OnStatusChanged;
         _logs.LogsChanged += OnLogsChanged;
     }

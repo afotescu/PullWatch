@@ -13,7 +13,8 @@ public partial class MainWindow : Window
     public MainWindow(
         ApplicationController controller,
         ApplicationLifetimeCoordinator lifetime,
-        InMemoryLogProvider logs)
+        InMemoryLogProvider logs,
+        bool showSettingsOnStartup)
     {
         InitializeComponent();
         _lifetime = lifetime;
@@ -22,7 +23,8 @@ public partial class MainWindow : Window
             new WpfUiDispatcher(Dispatcher),
             new WpfSettingsDialogs(),
             logs,
-            new WpfDiagnosticsDialogs());
+            new WpfDiagnosticsDialogs(),
+            showSettingsOnStartup);
         DataContext = _viewModel;
         _durationTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, OnTimerTick, Dispatcher);
         Closed += OnClosed;

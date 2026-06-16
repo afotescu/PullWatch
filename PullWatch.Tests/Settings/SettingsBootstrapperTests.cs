@@ -17,10 +17,11 @@ public sealed class SettingsBootstrapperTests
             NullLogger<SettingsBootstrapper>.Instance,
             () => detectedLogsDirectory);
 
-        var effective = await bootstrapper.LoadEffectiveAsync(cancellationToken);
+        var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
         var persisted = await store.LoadAsync(cancellationToken);
 
-        Assert.NotNull(effective);
+        Assert.NotNull(result);
+        Assert.True(result.CreatedSettingsFile);
         Assert.Equal(SettingsLoadStatus.Loaded, persisted.Status);
         Assert.Equal(Path.GetFullPath(detectedLogsDirectory), persisted.Settings!.WowLogsDirectory);
         Assert.Equal(new VideoSettings(), persisted.Settings.Video);
@@ -40,9 +41,10 @@ public sealed class SettingsBootstrapperTests
             NullLogger<SettingsBootstrapper>.Instance,
             () => null);
 
-        var effective = await bootstrapper.LoadEffectiveAsync(cancellationToken);
+        var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
 
-        Assert.NotNull(effective);
+        Assert.NotNull(result);
+        Assert.False(result.CreatedSettingsFile);
         Assert.Equal(invalidJson, await File.ReadAllTextAsync(path, cancellationToken));
     }
 

@@ -72,7 +72,7 @@ $readmePath = Join-Path $publishPath "README.txt"
 @"
 PullWatch portable test build
 
-Run PullWatch.exe.
+Run PullWatch.exe. Keep ScreenRecorderLib.dll in the same folder as PullWatch.exe.
 
 Screen recording requires:
 - Windows 8 or newer

@@ -42,7 +42,11 @@ public partial class App : Application
                 ConfirmExitWhileRecording,
                 _controller.FinalizeRecordingForExitAsync,
                 Shutdown);
-            _mainWindow = new MainWindow(_controller, _lifetime, _logs);
+            _mainWindow = new MainWindow(
+                _controller,
+                _lifetime,
+                _logs,
+                _controller.StartedWithCreatedSettingsFile);
             _trayIcon = new TrayIconManager(
                 _controller,
                 ShowAndActivateMainWindow,

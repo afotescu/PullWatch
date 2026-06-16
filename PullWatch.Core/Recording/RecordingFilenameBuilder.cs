@@ -28,11 +28,11 @@ internal static class RecordingFilenameBuilder
 
         return context switch
         {
-            ManualRecordingContext => $"manual_{timestamp}",
+            ManualRecordingContext => $"{timestamp}_manual",
             ChallengeRecordingContext challenge =>
-                $"mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.Level}_{timestamp}",
+                $"{timestamp}_mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.Level}",
             EncounterRecordingContext encounter =>
-                $"raid_{Sanitize(encounter.EncounterName)}_{GetDifficultyName(encounter.DifficultyId)}_{timestamp}",
+                $"{timestamp}_raid_{Sanitize(encounter.EncounterName)}_{GetDifficultyName(encounter.DifficultyId)}",
             _ => throw new ArgumentOutOfRangeException(nameof(context), context, "Unknown recording context.")
         };
     }

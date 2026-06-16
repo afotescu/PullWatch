@@ -69,6 +69,8 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public ApplicationStatus Status => Volatile.Read(ref _status);
 
+    public bool StartedWithCreatedSettingsFile { get; private set; }
+
     public IOperatingSystemActions? OperatingSystemActions { get; private set; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -84,8 +86,9 @@ public sealed class ApplicationController : IAsyncDisposable
                 return;
             }
 
-            var settings = await _settingsBootstrapper.LoadEffectiveAsync(cancellationToken)
+            var bootstrapResult = await _settingsBootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken)
                 ?? throw new InvalidOperationException("Could not load valid effective settings.");
+            var settings = bootstrapResult.Settings;
             var settingsProvider = new SettingsProvider(settings);
             var settingsService = new ApplicationSettingsService(
                 _settingsBootstrapper.Store,
@@ -98,6 +101,7 @@ public sealed class ApplicationController : IAsyncDisposable
             _recordingCoordinator = recordingCoordinator;
             _settingsProvider = settingsProvider;
             _settingsService = settingsService;
+            StartedWithCreatedSettingsFile = bootstrapResult.CreatedSettingsFile;
             OperatingSystemActions = new OperatingSystemActions(settingsProvider);
             UpdateStatus(_ => new ApplicationStatus(
                 settings,

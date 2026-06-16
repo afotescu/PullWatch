@@ -116,13 +116,13 @@ dotnet test PullWatch.sln
 Create a self-contained Windows x64 release:
 
 ```powershell
-dotnet publish PullWatch.App/PullWatch.App.csproj `
-  -c Release `
-  -r win-x64 `
-  --self-contained true
+./scripts/publish-win-x64.ps1
 ```
 
-Users can run the resulting `PullWatch.App.exe` without installing .NET 10.
+Users can run the resulting `PullWatch.exe` without installing .NET 10. Most
+dependencies are bundled into the executable; `ScreenRecorderLib.dll` is kept
+next to it because the native recorder library does not load reliably when
+embedded into the single-file bundle.
 
 ## Current Recording Configuration
 

@@ -2,6 +2,10 @@ using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
+public sealed record SettingsBootstrapResult(
+    PullWatchSettings Settings,
+    bool CreatedSettingsFile);
+
 public sealed class SettingsBootstrapper
 {
     private readonly SettingsStore _store;
@@ -30,8 +34,15 @@ public sealed class SettingsBootstrapper
     public async Task<PullWatchSettings?> LoadEffectiveAsync(
         CancellationToken cancellationToken)
     {
+        return (await LoadEffectiveWithMetadataAsync(cancellationToken))?.Settings;
+    }
+
+    public async Task<SettingsBootstrapResult?> LoadEffectiveWithMetadataAsync(
+        CancellationToken cancellationToken)
+    {
         var loadResult = await _store.LoadAsync(cancellationToken);
         var shouldCreateSettingsFile = loadResult.Status == SettingsLoadStatus.Missing;
+        var createdSettingsFile = false;
         PullWatchSettings settings;
 
         if (loadResult.Status == SettingsLoadStatus.Loaded)
@@ -92,6 +103,7 @@ public sealed class SettingsBootstrapper
             try
             {
                 await _store.SaveAsync(settings, cancellationToken);
+                createdSettingsFile = true;
                 _logger.LogInformation(
                     "Created settings file with defaults at {SettingsPath}",
                     _store.SettingsPath);
@@ -106,6 +118,6 @@ public sealed class SettingsBootstrapper
             }
         }
 
-        return settings;
+        return new SettingsBootstrapResult(settings, createdSettingsFile);
     }
 }

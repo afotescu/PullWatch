@@ -22,10 +22,32 @@ public sealed class ApplicationControllerTests
             });
 
         Assert.NotNull(controller.Status.EffectiveSettings);
+        Assert.False(controller.StartedWithCreatedSettingsFile);
         Assert.Equal(
             CombatLogReaderState.WaitingForLogsDirectory,
             controller.Status.CombatLog.State);
         Assert.False(monitorCreated);
+    }
+
+    [Fact]
+    public async Task StartupReportsWhenSettingsFileWasCreated()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null);
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance);
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(controller.StartedWithCreatedSettingsFile);
+        Assert.True(File.Exists(store.SettingsPath));
     }
 
     [Fact]
