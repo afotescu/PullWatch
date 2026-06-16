@@ -200,13 +200,6 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     activeOutputPath: _recordingService.ActiveOutputPath);
                 return RecordingCommandResult.Started;
             }
-            catch (RecordingTargetUnavailableException exception)
-            {
-                _expectedCount--;
-                PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
-                _logger.LogInformation(exception, "Could not start {RecordingOwner} recording because the target window is unavailable", owner);
-                return RecordingCommandResult.TargetUnavailable;
-            }
             catch (TimeoutException exception)
             {
                 var failure = new TimeoutException(

@@ -359,22 +359,6 @@ public sealed class RecordingCoordinatorTests
         Assert.Equal(new RecordingStatistics(1, 0), coordinator.Status.Statistics);
     }
 
-    [Fact]
-    public async Task MissingTargetWindowDoesNotSetRecorderFailure()
-    {
-        var recorder = new FakeRecordingService
-        {
-            StartException = new RecordingTargetUnavailableException("Could not find WoW.")
-        };
-        await using var coordinator = CreateCoordinator(recorder);
-
-        var result = await coordinator.StartManualAsync(CancellationToken.None);
-
-        Assert.Equal(RecordingCommandResult.TargetUnavailable, result);
-        Assert.Null(coordinator.Status.LastFailure);
-        Assert.Equal(new RecordingStatistics(0, 0), coordinator.Status.Statistics);
-    }
-
     private static RecordingCoordinator CreateCoordinator(
         FakeRecordingService recorder,
         TimeSpan? startTimeout = null,

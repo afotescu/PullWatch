@@ -122,7 +122,7 @@ dotnet publish PullWatch.App/PullWatch.App.csproj `
   --self-contained true
 ```
 
-Users can run the resulting `PullWatch.exe` without installing .NET 10.
+Users can run the resulting `PullWatch.App.exe` without installing .NET 10.
 
 ## Current Recording Configuration
 

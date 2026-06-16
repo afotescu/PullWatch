@@ -41,7 +41,6 @@ public enum RecordingCommandResult
     NoActiveRecording,
     OwnerMismatch,
     Suppressed,
-    TargetUnavailable,
     Failed,
     TimedOut
 }

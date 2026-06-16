@@ -42,8 +42,6 @@ public sealed class ScreenRecordingService(
                 return;
             }
 
-            RecordingPrerequisiteChecker.Default.EnsureSatisfied();
-
             var wowLookupTimestamp = Stopwatch.GetTimestamp();
             var (wowProcess, windowHandle) = FindWowProcess();
             _wowProcess = wowProcess;
@@ -81,14 +79,6 @@ public sealed class ScreenRecordingService(
                 outputPath);
             recorder.Record(outputPath);
             recordingStarted = _recordingStarted.Task;
-        }
-        catch (Exception exception) when (
-            RecordingPrerequisiteException.TryCreateForRecorderStartup(
-                exception,
-                out var prerequisiteException))
-        {
-            DisposeRecorder();
-            throw prerequisiteException;
         }
         catch
         {
@@ -213,8 +203,7 @@ public sealed class ScreenRecordingService(
             process.Dispose();
         }
 
-        throw new RecordingTargetUnavailableException(
-            "Could not find a running World of Warcraft window.");
+        throw new InvalidOperationException("Could not find a running World of Warcraft window.");
     }
 
     private static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
