@@ -217,6 +217,7 @@ public sealed class DashboardViewModel : ObservableObject
             RecordingCommandResult.NoActiveRecording => "There is no active recording to stop.",
             RecordingCommandResult.Suppressed => "Automatic recording is temporarily suppressed.",
             RecordingCommandResult.OwnerMismatch => "The active recording could not be stopped by this command.",
+            RecordingCommandResult.TargetUnavailable => "World of Warcraft is not running.",
             RecordingCommandResult.TimedOut => "The recorder did not respond in time.",
             RecordingCommandResult.Failed => "The recording command failed.",
             _ => null

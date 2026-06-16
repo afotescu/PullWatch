@@ -64,6 +64,7 @@ public sealed class DashboardViewModelTests
 
     [Theory]
     [InlineData(RecordingCommandResult.AlreadyActive, "A recording is already active.")]
+    [InlineData(RecordingCommandResult.TargetUnavailable, "World of Warcraft is not running.")]
     [InlineData(RecordingCommandResult.Failed, "The recording command failed.")]
     [InlineData(RecordingCommandResult.TimedOut, "The recorder did not respond in time.")]
     public async Task ManualCommandReportsNonSuccessResults(
