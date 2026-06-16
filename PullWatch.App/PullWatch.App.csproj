@@ -9,11 +9,19 @@
         <Nullable>enable</Nullable>
         <Platforms>x64</Platforms>
         <PlatformTarget>x64</PlatformTarget>
+        <PublishSingleFile>true</PublishSingleFile>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
         <ProjectReference Include="..\PullWatch.Core\PullWatch.Core.csproj" />
     </ItemGroup>
+
+    <Target Name="ExcludeDebugSymbolsFromPublish" AfterTargets="ComputeFilesToPublish" Condition="'$(Configuration)' == 'Release'">
+        <ItemGroup>
+            <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+        </ItemGroup>
+    </Target>
 
 </Project>
