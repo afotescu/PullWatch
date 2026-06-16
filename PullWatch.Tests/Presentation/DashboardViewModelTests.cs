@@ -64,6 +64,7 @@ public sealed class DashboardViewModelTests
 
     [Theory]
     [InlineData(RecordingCommandResult.AlreadyActive, "A recording is already active.")]
+    [InlineData(RecordingCommandResult.TargetUnavailable, "World of Warcraft is not running.")]
     [InlineData(RecordingCommandResult.Failed, "The recording command failed.")]
     [InlineData(RecordingCommandResult.TimedOut, "The recorder did not respond in time.")]
     public async Task ManualCommandReportsNonSuccessResults(
@@ -90,6 +91,21 @@ public sealed class DashboardViewModelTests
         await viewModel.StartManualCommand.ExecuteAsync();
 
         Assert.Equal("Command failed: controller unavailable", viewModel.CommandMessage);
+    }
+
+    [Fact]
+    public async Task FailedManualCommandUsesFailureDetailsWhenStatusArrives()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            _ => Task.FromResult(RecordingCommandResult.Failed));
+
+        await viewModel.StartManualCommand.ExecuteAsync();
+        viewModel.ApplyStatus(Status(
+            RecordingCoordinatorState.Idle,
+            lastFailure: new InvalidOperationException("encoder failed")));
+
+        Assert.Equal("The recording command failed: encoder failed", viewModel.CommandMessage);
     }
 
     [Fact]
@@ -128,6 +144,24 @@ public sealed class DashboardViewModelTests
         Assert.Equal(
             "Recording can start when World of Warcraft is running.",
             viewModel.RecorderDetail);
+    }
+
+    [Fact]
+    public async Task WowWindowFailureIsShownAsCommandMessageNotRecorderFailure()
+    {
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException(
+                    "Could not find a running World of Warcraft window.")),
+            _ => Task.FromResult(RecordingCommandResult.Failed));
+
+        await viewModel.StartManualCommand.ExecuteAsync();
+
+        Assert.Equal("World of Warcraft is not running.", viewModel.CommandMessage);
+        Assert.Equal("Idle", viewModel.RecorderHealth);
+        Assert.False(viewModel.IsFailureVisible);
+        Assert.Null(viewModel.FailureMessage);
     }
 
     [Fact]

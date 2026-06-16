@@ -180,17 +180,18 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 return RecordingCommandResult.Suppressed;
             }
 
+            Task? startTask = null;
             _expectedCount++;
-            var startTask = _recordingService.StartAsync(context, CancellationToken.None);
-            PublishStatus(
-                RecordingCoordinatorState.Starting,
-                owner,
-                identity,
-                context,
-                activeOutputPath: _recordingService.ActiveOutputPath);
 
             try
             {
+                startTask = _recordingService.StartAsync(context, CancellationToken.None);
+                PublishStatus(
+                    RecordingCoordinatorState.Starting,
+                    owner,
+                    identity,
+                    context,
+                    activeOutputPath: _recordingService.ActiveOutputPath);
                 await startTask.WaitAsync(_startTimeout);
                 PublishStatus(
                     RecordingCoordinatorState.Recording,
@@ -199,6 +200,21 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     context,
                     activeOutputPath: _recordingService.ActiveOutputPath);
                 return RecordingCommandResult.Started;
+            }
+            catch (Exception exception) when (IsTargetUnavailableException(exception))
+            {
+                _expectedCount--;
+                PublishStatus(
+                    RecordingCoordinatorState.Idle,
+                    null,
+                    null,
+                    null,
+                    clearLastFailure: true);
+                _logger.LogInformation(
+                    exception,
+                    "Could not start {RecordingOwner} recording because the capture target is unavailable",
+                    owner);
+                return RecordingCommandResult.TargetUnavailable;
             }
             catch (TimeoutException exception)
             {
@@ -211,7 +227,11 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     identity,
                     context,
                     failure);
-                _ = ObserveBackgroundTaskAsync(startTask, "Recorder startup failed after timing out");
+                if (startTask is not null)
+                {
+                    _ = ObserveBackgroundTaskAsync(startTask, "Recorder startup failed after timing out");
+                }
+
                 _ = ObserveCleanupAsync(_recordingService.StopAsync(CancellationToken.None));
                 _logger.LogError(exception, "Recording start timed out for {RecordingOwner}", owner);
                 return RecordingCommandResult.TimedOut;
@@ -453,7 +473,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         RecordingContext? context,
         Exception? lastFailure = null,
         RecordingOwner? suppressedUntilOwnerEnd = null,
-        string? activeOutputPath = null)
+        string? activeOutputPath = null,
+        bool clearLastFailure = false)
     {
         var current = Status;
         var snapshot = new RecordingCoordinatorStatus(
@@ -463,7 +484,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             context,
             suppressedUntilOwnerEnd ?? current.SuppressedUntilOwnerEnd,
             current.SuppressedIdentity,
-            lastFailure ?? current.LastFailure,
+            clearLastFailure ? null : lastFailure ?? current.LastFailure,
             state == RecordingCoordinatorState.Idle
                 ? null
                 : activeOutputPath ?? current.ActiveOutputPath)
@@ -512,5 +533,19 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 _logger.LogError(exception, "Recording coordinator status subscriber failed");
             }
         }
+    }
+
+    private static bool IsTargetUnavailableException(Exception exception)
+    {
+        var text = exception.ToString();
+
+        if (text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase) &&
+            text.Contains("window", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return exception.InnerException is not null &&
+               IsTargetUnavailableException(exception.InnerException);
     }
 }

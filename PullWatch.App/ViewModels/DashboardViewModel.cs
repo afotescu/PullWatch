@@ -3,6 +3,7 @@ namespace PullWatch;
 public sealed class DashboardViewModel : ObservableObject
 {
     private const string NoOutputPath = "An output path will appear when recording starts.";
+    private const string TargetUnavailableMessage = "World of Warcraft is not running.";
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;
@@ -78,7 +79,8 @@ public sealed class DashboardViewModel : ObservableObject
         ?? _combatLog.CurrentPath
         ?? "PullWatch will keep checking in the background.";
 
-    public string RecorderHealth => _recording.LastFailure is not null
+    public string RecorderHealth => _recording.LastFailure is not null &&
+                                    !IsTargetUnavailableFailure(_recording.LastFailure)
         ? "Attention needed"
         : _recording.State == RecordingCoordinatorState.Idle
             ? "Idle"
@@ -88,7 +90,9 @@ public sealed class DashboardViewModel : ObservableObject
         ? "Recording can start when World of Warcraft is running."
         : $"Recorder is {_recording.State.ToString().ToLowerInvariant()}.";
 
-    public string? FailureMessage => _recording.LastFailure?.Message;
+    public string? FailureMessage => IsTargetUnavailableFailure(_recording.LastFailure)
+        ? null
+        : _recording.LastFailure?.Message;
 
     public string? CommandMessage
     {
@@ -98,6 +102,7 @@ public sealed class DashboardViewModel : ObservableObject
 
     public bool IsFailureVisible =>
         _recording.LastFailure is not null &&
+        !IsTargetUnavailableFailure(_recording.LastFailure) &&
         !ReferenceEquals(_recording.LastFailure, _dismissedFailure);
 
     public bool CanStartManual => _recording.State == RecordingCoordinatorState.Idle;
@@ -108,6 +113,12 @@ public sealed class DashboardViewModel : ObservableObject
     {
         _recording = status.Recording;
         _combatLog = status.CombatLog;
+
+        if (CommandMessage == "The recording command failed." &&
+            _recording.LastFailure is not null)
+        {
+            CommandMessage = GetFailureCommandMessage(_recording.LastFailure);
+        }
 
         UpdateDuration();
         OnAllPropertiesChanged();
@@ -136,14 +147,16 @@ public sealed class DashboardViewModel : ObservableObject
     {
         CommandMessage = GetCommandMessage(
             await _startManual(CancellationToken.None),
-            "Manual recording started.");
+            "Manual recording started.",
+            _recording.LastFailure);
     }
 
     private async Task StopManualAsync()
     {
         CommandMessage = GetCommandMessage(
             await _stopManual(CancellationToken.None),
-            "Recording stopped.");
+            "Recording stopped.",
+            _recording.LastFailure);
     }
 
     private async Task OpenRecordingsFolderAsync()
@@ -208,8 +221,14 @@ public sealed class DashboardViewModel : ObservableObject
 
     private static string? GetCommandMessage(
         RecordingCommandResult result,
-        string successMessage)
+        string successMessage,
+        Exception? lastFailure = null)
     {
+        if (IsTargetUnavailableFailure(lastFailure))
+        {
+            return TargetUnavailableMessage;
+        }
+
         return result switch
         {
             RecordingCommandResult.Started or RecordingCommandResult.Stopped => successMessage,
@@ -217,9 +236,38 @@ public sealed class DashboardViewModel : ObservableObject
             RecordingCommandResult.NoActiveRecording => "There is no active recording to stop.",
             RecordingCommandResult.Suppressed => "Automatic recording is temporarily suppressed.",
             RecordingCommandResult.OwnerMismatch => "The active recording could not be stopped by this command.",
+            RecordingCommandResult.TargetUnavailable => TargetUnavailableMessage,
             RecordingCommandResult.TimedOut => "The recorder did not respond in time.",
-            RecordingCommandResult.Failed => "The recording command failed.",
+            RecordingCommandResult.Failed => lastFailure is null
+                ? "The recording command failed."
+                : GetFailureCommandMessage(lastFailure),
             _ => null
         };
+    }
+
+    private static string GetFailureCommandMessage(Exception exception)
+    {
+        if (IsTargetUnavailableFailure(exception))
+        {
+            return TargetUnavailableMessage;
+        }
+
+        var message = string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.GetType().Name
+            : exception.Message;
+
+        return $"The recording command failed: {message}";
+    }
+
+    private static bool IsTargetUnavailableFailure(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return false;
+        }
+
+        var text = exception.ToString();
+        return text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase) &&
+               text.Contains("window", StringComparison.OrdinalIgnoreCase);
     }
 }

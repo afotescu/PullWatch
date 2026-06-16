@@ -80,10 +80,10 @@ public sealed class ScreenRecordingService(
             recorder.Record(outputPath);
             recordingStarted = _recordingStarted.Task;
         }
-        catch
+        catch (Exception exception)
         {
             DisposeRecorder();
-            throw;
+            throw RecordingFailureClassifier.Classify(exception);
         }
         finally
         {
@@ -237,7 +237,8 @@ public sealed class ScreenRecordingService(
 
     private void OnRecordingFailed(object? sender, RecordingFailedEventArgs eventArgs)
     {
-        var exception = new InvalidOperationException(eventArgs.Error);
+        var exception = RecordingFailureClassifier.Classify(
+            new InvalidOperationException(eventArgs.Error));
 
         logger.LogError(
             "Recording failed for {OutputPath}: {RecordingError}",
