@@ -39,7 +39,13 @@ jobs:
             throw "Release tags must start with 'v'. Received: $tag"
           }
 
+          $version = $tag.Substring(1)
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+            throw "Release tag must look like v0.1.0 or v0.1.0-beta.1. Received: $tag"
+          }
+
           "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -59,14 +65,14 @@ jobs:
         run: dotnet restore PullWatch.sln -p:Platform=${{ env.PLATFORM }}
 
       - name: Build
-        run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }}
+        run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }} -p:Version=${{ steps.release-tag.outputs.version }} -p:InformationalVersion=${{ steps.release-tag.outputs.version }}
 
       - name: Test
         run: dotnet test PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-build -p:Platform=${{ env.PLATFORM }}
 
       - name: Publish
         shell: pwsh
-        run: ./scripts/publish-win-x64.ps1 -OutputPath ${{ env.PUBLISH_DIR }}
+        run: ./scripts/publish-win-x64.ps1 -OutputPath ${{ env.PUBLISH_DIR }} -Version ${{ steps.release-tag.outputs.version }}
 
       - name: Package
         id: package

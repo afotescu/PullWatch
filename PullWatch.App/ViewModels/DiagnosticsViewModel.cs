@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace PullWatch;
 
 public sealed class DiagnosticsViewModel : ObservableObject
@@ -99,7 +97,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private string BuildReport()
     {
         return DiagnosticsReportBuilder.Build(
-            Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown",
+            ApplicationVersion.Current,
             _status,
             _logs.GetSnapshot());
     }

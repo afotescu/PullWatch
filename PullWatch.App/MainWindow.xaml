@@ -29,6 +29,11 @@
                                Text="Gameplay recorder" />
                 </StackPanel>
 
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,24,0,0"
+                           Style="{StaticResource SecondaryTextStyle}"
+                           Text="{Binding AppVersionLabel}" />
+
                 <ListBox ItemsSource="{Binding NavigationItems}"
                          SelectedItem="{Binding SelectedNavigationItem}"
                          Style="{StaticResource NavigationListStyle}"

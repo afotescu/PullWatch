@@ -1,5 +1,8 @@
 <Project>
     <PropertyGroup>
         <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+        <Version Condition="'$(Version)' == ''">0.1.0</Version>
+        <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
 </Project>

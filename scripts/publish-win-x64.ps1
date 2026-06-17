@@ -1,5 +1,6 @@
 param(
-    [string]$OutputPath = "artifacts/publish/win-x64"
+    [string]$OutputPath = "artifacts/publish/win-x64",
+    [string]$Version
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,9 +38,14 @@ dotnet clean $projectPath `
     -c Release `
     -p:Platform=x64
 
-dotnet publish $projectPath `
-    -p:PublishProfile=win-x64 `
-    -o $publishPath
+$publishProperties = @("-p:PublishProfile=win-x64")
+
+if (![string]::IsNullOrWhiteSpace($Version)) {
+    $publishProperties += "-p:Version=$Version"
+    $publishProperties += "-p:InformationalVersion=$Version"
+}
+
+dotnet publish $projectPath @publishProperties -o $publishPath
 
 $expectedExe = Join-Path $publishPath "PullWatch.exe"
 $oldExe = Join-Path $publishPath "PullWatch.App.exe"

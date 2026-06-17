@@ -14,6 +14,7 @@ public sealed class DiagnosticsViewModelTests
         Assert.Matches(@"PullWatch-diagnostics-\d{8}-\d{6}\.txt", dialogs.SuggestedFileName!);
         Assert.Equal(@"C:\Temp\diagnostics.txt", dialogs.WrittenPath);
         Assert.Contains("PullWatch Diagnostics", dialogs.WrittenText);
+        Assert.Contains($"App version: {ApplicationVersion.Current}", dialogs.WrittenText);
         Assert.Contains("Effective Settings", dialogs.WrittenText);
     }
 

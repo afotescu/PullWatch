@@ -144,6 +144,8 @@ git push origin v0.1.0
 
 The release workflow runs tests, publishes the Windows x64 build, zips the
 publish directory, and uploads it to the GitHub release for that tag.
+The tag version is also embedded into the app assembly version and displayed in
+the app diagnostics.
 
 ## Current Recording Configuration
 

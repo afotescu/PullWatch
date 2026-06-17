@@ -32,6 +32,9 @@ public partial class App : Application
             () => Dispatcher.BeginInvoke(ShowAndActivateMainWindow));
         _logs = new InMemoryLogProvider();
         _loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(_logs));
+        _loggerFactory
+            .CreateLogger<App>()
+            .LogInformation("Starting PullWatch {AppVersion}", ApplicationVersion.Current);
         _controller = new ApplicationController(_loggerFactory);
 
         try

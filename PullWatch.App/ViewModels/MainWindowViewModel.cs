@@ -43,6 +43,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<NavigationItemViewModel> NavigationItems { get; }
 
+    public string AppVersionLabel { get; } = $"Version {ApplicationVersion.Current}";
+
     public DashboardViewModel Dashboard { get; }
 
     public SettingsViewModel Settings { get; }
