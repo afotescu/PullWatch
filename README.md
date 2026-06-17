@@ -1,101 +1,64 @@
 # PullWatch
 
-PullWatch is a lightweight Windows desktop application that automatically records
-World of Warcraft Mythic+ runs and raid encounters using combat-log events.
+A lightweight Windows desktop app that automatically records World of Warcraft
+Mythic+ runs and raid encounters from combat-log events.
 
-The current goal is reliable Mythic+ recording without requiring OBS or another external recording application.
+## Screenshot
 
-## Current Status
+![PullWatch dashboard](.github/assets/pullwatch-dashboard.png)
 
-PullWatch currently:
+## Status
 
-- Reads and tails the latest WoW combat log.
-- Starts recording on `CHALLENGE_MODE_START`.
-- Stops recording on `CHALLENGE_MODE_END`.
-- Starts and stops raid encounter recordings using `ENCOUNTER_START` and
-  `ENCOUNTER_END`.
-- Captures the World of Warcraft window at its current resolution.
-- Supports configurable system-audio and microphone capture.
-- Uses hardware-accelerated H.264 encoding at 60 FPS.
-- Finalizes active recordings when PullWatch exits.
-- Logs recording startup, duration, finalization time, file size, and failures.
-- Provides a WPF dashboard, settings, diagnostics, and system tray controls.
+This project is in early development. Expect issues.
 
-Recordings are saved to:
+Recordings are saved by default to:
 
 ```text
 Videos/PullWatch
 ```
 
-## How It Works
+You can change this at any time in settings.
+
+## Requirements
+
+- Windows x64
+- Windows Media Foundation
+- Microsoft Visual C++ Redistributable 2015-2022 x64
+
+Portable releases are self-contained and do not require a separately installed
+.NET runtime.
+
+If recording cannot start because the Visual C++ Redistributable is missing,
+install the official Microsoft x64 redistributable:
 
 ```text
-WoW Combat Log
-    -> CombatLogReader
-    -> CombatLogEventHandler
-    -> RecordingCoordinator
-    -> ScreenRecordingService
-    -> MP4 recording
+https://aka.ms/vc14/vc_redist.x64.exe
 ```
 
-PullWatch currently handles:
+### Building from Source
+
+- Windows x64
+- .NET 10 SDK
+
+## Key Dependencies
+
+- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
+
+## How It Works
+
+PullWatch currently handles these combat-log events:
 
 - `CHALLENGE_MODE_START`
 - `CHALLENGE_MODE_END`
 - `ENCOUNTER_START`
 - `ENCOUNTER_END`
 
-## Requirements
+PullWatch uses combat-log events to decide when recordings should start and
+stop.
 
-### Building
+## Development
 
-- Windows x64
-- .NET 10 SDK
-
-### Running
-
-A framework-dependent build requires the .NET 10 runtime.
-
-A self-contained release does not require a separately installed .NET runtime. It still requires:
-
-- Windows x64
-- Visual C++ Redistributable 2015-2022 x64
-- Windows Media Foundation
-
-## Dependencies
-
-- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
-- [Microsoft.Extensions.Logging](https://learn.microsoft.com/dotnet/core/extensions/logging)
-
-PullWatch does not require OBS or another external recording application.
-
-## Running Locally
-
-Create `%LocalAppData%\PullWatch\settings.json` to configure PullWatch:
-
-```json
-{
-  "Version": 1,
-  "WowLogsDirectory": "E:\\World of Warcraft\\_retail_\\Logs",
-  "RecordingsDirectory": "D:\\Videos\\PullWatch",
-  "RecordMythicPlus": true,
-  "RecordRaidEncounters": true,
-  "Video": {
-    "Bitrate": 12000000,
-    "FrameRate": 60,
-    "CaptureCursor": true,
-    "ShowCaptureBorder": false
-  },
-  "Audio": {
-    "CaptureSystemAudio": true,
-    "CaptureMicrophone": false
-  }
-}
-```
-
-When no file exists, PullWatch creates it with defaults and attempts to detect
-the WoW retail logs directory. An unreadable or invalid file is rejected as a
-whole and defaults are used without overwriting the file.
+GitHub Actions runs build and tests on pushes and pull requests.
 
 Run a Release build:
 
@@ -103,37 +66,27 @@ Run a Release build:
 dotnet run --project PullWatch.App/PullWatch.App.csproj -c Release -p:Platform=x64
 ```
 
-## Testing
-
-Run the fast automated test suite:
+Run tests:
 
 ```powershell
-dotnet test PullWatch.sln
+dotnet test PullWatch.sln -p:Platform=x64
 ```
 
-## Publishing
-
-Create a self-contained Windows x64 release:
+Create a local self-contained Windows x64 publish:
 
 ```powershell
 ./scripts/publish-win-x64.ps1
 ```
 
-Users can run the resulting `PullWatch.exe` without installing .NET 10. Most
-dependencies are bundled into the executable; `ScreenRecorderLib.dll` is kept
-next to it because the native recorder library does not load reliably when
-embedded into the single-file bundle.
-
-Releases do not include the Visual C++ Redistributable. If recording cannot
-start because it is missing, install the official Microsoft x64 redistributable:
+The publish output is written to:
 
 ```text
-https://aka.ms/vc14/vc_redist.x64.exe
+artifacts/publish/win-x64
 ```
 
-## Release Automation
-
-GitHub Actions builds and tests the solution on pushes and pull requests.
+Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
+kept next to the executable because the native recorder library does not load
+reliably when embedded into the single-file bundle.
 
 Create a GitHub release by pushing a version tag:
 
@@ -142,44 +95,9 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow runs tests, publishes the Windows x64 build, zips the
-publish directory, and uploads it to the GitHub release for that tag.
-The tag version is also embedded into the app assembly version and displayed in
-the app diagnostics.
+Release tags publish a Windows x64 zip and embed the tag version into the app.
 
-## Current Recording Configuration
+## Disclaimer
 
-- World of Warcraft window capture
-- H.264 hardware encoding
-- 60 FPS
-- 12 Mbps target bitrate
-- System audio enabled
-- Microphone disabled
-- Cursor capture enabled
-- Windows capture border disabled
-
-These values are the defaults used when settings are not configured.
-
-## Current Scope
-
-- Mythic+ recording
-- Raid encounter recording
-- Latest combat-log file monitoring
-- Configurable system-output and microphone capture
-- WPF dashboard, settings, diagnostics, and tray controls
-- Single-instance desktop operation
-
-## Roadmap
-
-### Next
-
-- Harden and package the first self-contained desktop release.
-- Improve recovery from malformed combat-log events.
-- Add release automation and continuous integration.
-
-### Later
-
-- Add user-friendly encoder selection.
-- Add launch-with-Windows configuration.
-- Investigate capturing audio from World of Warcraft only.
-- Add recording history and playback management.
+PullWatch is an independent project and is not affiliated with or endorsed by
+Blizzard Entertainment.
