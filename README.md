@@ -59,7 +59,7 @@ A framework-dependent build requires the .NET 10 runtime.
 A self-contained release does not require a separately installed .NET runtime. It still requires:
 
 - Windows x64
-- Visual C++ Redistributable x64
+- Visual C++ Redistributable 2015-2022 x64
 - Windows Media Foundation
 
 ## Dependencies
@@ -123,6 +123,13 @@ Users can run the resulting `PullWatch.exe` without installing .NET 10. Most
 dependencies are bundled into the executable; `ScreenRecorderLib.dll` is kept
 next to it because the native recorder library does not load reliably when
 embedded into the single-file bundle.
+
+Releases do not include the Visual C++ Redistributable. If recording cannot
+start because it is missing, install the official Microsoft x64 redistributable:
+
+```text
+https://aka.ms/vc14/vc_redist.x64.exe
+```
 
 ## Current Recording Configuration
 
