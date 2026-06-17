@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIGURATION: Release
+  PLATFORM: x64
+  PUBLISH_DIR: artifacts/publish/win-x64
+
+jobs:
+  release:
+    name: Build, package, and release
+    runs-on: windows-latest
+
+    steps:
+      - name: Resolve release tag
+        id: release-tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          }
+
+          if (-not $tag.StartsWith("v")) {
+            throw "Release tags must start with 'v'. Received: $tag"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release-tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore PullWatch.sln -p:Platform=${{ env.PLATFORM }}
+
+      - name: Build
+        run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }}
+
+      - name: Test
+        run: dotnet test PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-build -p:Platform=${{ env.PLATFORM }}
+
+      - name: Publish
+        shell: pwsh
+        run: ./scripts/publish-win-x64.ps1 -OutputPath ${{ env.PUBLISH_DIR }}
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.release-tag.outputs.tag }}"
+          $archivePath = "artifacts/PullWatch-$tag-win-x64.zip"
+
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Path "${{ env.PUBLISH_DIR }}/*" -DestinationPath $archivePath -Force
+
+          "archive_path=$archivePath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: PullWatch-${{ steps.release-tag.outputs.tag }}-win-x64
+          path: ${{ steps.package.outputs.archive_path }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.release-tag.outputs.tag }}"
+          $archivePath = "${{ steps.package.outputs.archive_path }}"
+          $title = "PullWatch $tag"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $archivePath --clobber
+          }
+          else {
+            gh release create $tag $archivePath --title $title --generate-notes --verify-tag
+          }

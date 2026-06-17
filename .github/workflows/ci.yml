@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIGURATION: Release
+  PLATFORM: x64
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore PullWatch.sln -p:Platform=${{ env.PLATFORM }}
+
+      - name: Build
+        run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }}
+
+      - name: Test
+        run: dotnet test PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-build -p:Platform=${{ env.PLATFORM }}

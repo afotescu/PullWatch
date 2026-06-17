@@ -131,6 +131,20 @@ start because it is missing, install the official Microsoft x64 redistributable:
 https://aka.ms/vc14/vc_redist.x64.exe
 ```
 
+## Release Automation
+
+GitHub Actions builds and tests the solution on pushes and pull requests.
+
+Create a GitHub release by pushing a version tag:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow runs tests, publishes the Windows x64 build, zips the
+publish directory, and uploads it to the GitHub release for that tag.
+
 ## Current Recording Configuration
 
 - World of Warcraft window capture
