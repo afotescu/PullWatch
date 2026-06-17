@@ -9,6 +9,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="0,0,0,24">
@@ -147,7 +148,175 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="3">
+            <Border Grid.Row="3"
+                    Margin="0,0,0,18"
+                    Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                       Text="Recordings" />
+                            <TextBlock Margin="0,6,12,0"
+                                       Style="{StaticResource SecondaryTextStyle}"
+                                       Text="{Binding RecordingLibraryStatus}" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Margin="12,0,0,0"
+                                Command="{Binding RefreshRecordingsCommand}"
+                                Content="Refresh" />
+                        <Button Grid.Column="2"
+                                Margin="10,0,0,0"
+                                Command="{Binding OpenRecordingsFolderCommand}"
+                                Content="Open folder" />
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <ListBox Grid.Column="0"
+                                 MinHeight="320"
+                                 Margin="0,0,18,0"
+                                 Background="{StaticResource SurfaceRaisedBrush}"
+                                 BorderBrush="{StaticResource BorderBrush}"
+                                 BorderThickness="1"
+                                 Foreground="{StaticResource PrimaryTextBrush}"
+                                 ItemsSource="{Binding Recordings}"
+                                 SelectedItem="{Binding SelectedRecording, Mode=TwoWay}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="4">
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding DisplayName}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding DisplayName}" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   FontSize="12"
+                                                   Style="{StaticResource SecondaryTextStyle}"
+                                                   Text="{Binding Detail}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="8" />
+                                    <Setter Property="Margin" Value="3" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="ItemBorder"
+                                                        Background="Transparent"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ItemBorder"
+                                                                Property="Background"
+                                                                Value="#343B45" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="ItemBorder"
+                                                                Property="Background"
+                                                                Value="#3A3024" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    MinHeight="320"
+                                    Background="#111318"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                <Grid>
+                                    <MediaElement x:Name="RecordingPlayer"
+                                                  LoadedBehavior="Manual"
+                                                  MediaEnded="OnPlayerMediaEnded"
+                                                  MediaFailed="OnPlayerMediaFailed"
+                                                  MediaOpened="OnPlayerMediaOpened"
+                                                  Stretch="Uniform"
+                                                  UnloadedBehavior="Stop" />
+                                    <TextBlock x:Name="PlayerPlaceholder"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               Style="{StaticResource SecondaryTextStyle}"
+                                               Text="{Binding RecordingLibraryStatus}"
+                                               TextAlignment="Center"
+                                               Visibility="{Binding IsPlayerPlaceholderVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </Grid>
+                            </Border>
+
+                            <Grid Grid.Row="1" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Button x:Name="PlayPauseButton"
+                                        Grid.Column="0"
+                                        MinWidth="72"
+                                        Click="OnPlayPauseClicked"
+                                        Content="Play"
+                                        IsEnabled="False" />
+                                <TextBlock x:Name="CurrentTimeText"
+                                           Grid.Column="1"
+                                           Margin="12,0,10,0"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Consolas"
+                                           Style="{StaticResource SecondaryTextStyle}"
+                                           Text="00:00" />
+                                <Slider x:Name="PlaybackSlider"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="False"
+                                        Maximum="0"
+                                        Minimum="0"
+                                        PreviewMouseDown="OnPlaybackSliderPreviewMouseDown"
+                                        PreviewMouseUp="OnPlaybackSliderPreviewMouseUp"
+                                        ValueChanged="OnPlaybackSliderValueChanged" />
+                                <TextBlock x:Name="DurationText"
+                                           Grid.Column="3"
+                                           Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Consolas"
+                                           Style="{StaticResource SecondaryTextStyle}"
+                                           Text="00:00" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />

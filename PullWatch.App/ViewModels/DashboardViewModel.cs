@@ -1,18 +1,28 @@
+using System.Collections.ObjectModel;
+using System.IO;
+
 namespace PullWatch;
 
 public sealed class DashboardViewModel : ObservableObject
 {
     private const string NoOutputPath = "An output path will appear when recording starts.";
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
+    private const string NoRecordingsDirectoryMessage = "Choose a recordings directory in settings to review videos here.";
+    private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
+    private const string ReadyPlayerMessage = "Select a recording to review it without leaving the dashboard.";
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;
     private readonly Func<Task> _openRecordingsFolder;
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
+    private string? _recordingsDirectory;
     private Exception? _dismissedFailure;
     private string _duration = "00:00:00";
+    private string _recordingLibraryStatus = NoRecordingsDirectoryMessage;
     private string? _commandMessage;
+    private RecordingListItem? _selectedRecording;
+    private int _knownSavedCount;
 
     public DashboardViewModel(
         ApplicationStatus initialStatus,
@@ -22,6 +32,8 @@ public sealed class DashboardViewModel : ObservableObject
     {
         _recording = initialStatus.Recording;
         _combatLog = initialStatus.CombatLog;
+        _recordingsDirectory = initialStatus.EffectiveSettings?.RecordingsDirectory;
+        _knownSavedCount = initialStatus.Recording.Statistics.SavedCount;
         _startManual = startManual;
         _stopManual = stopManual;
         _openRecordingsFolder = openRecordingsFolder;
@@ -33,14 +45,20 @@ public sealed class DashboardViewModel : ObservableObject
             OpenRecordingsFolderAsync,
             onException: HandleCommandFailure);
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
+        RefreshRecordingsCommand = new RelayCommand(RefreshRecordings);
         ApplyStatus(initialStatus);
+        RefreshRecordings();
     }
+
+    public ObservableCollection<RecordingListItem> Recordings { get; } = new();
 
     public AsyncRelayCommand ManualRecordingCommand { get; }
 
     public AsyncRelayCommand OpenRecordingsFolderCommand { get; }
 
     public RelayCommand DismissFailureCommand { get; }
+
+    public RelayCommand RefreshRecordingsCommand { get; }
 
     public string StateTitle => GetStateTitle(_recording.State);
 
@@ -55,6 +73,28 @@ public sealed class DashboardViewModel : ObservableObject
     }
 
     public string OutputPath => _recording.ActiveOutputPath ?? NoOutputPath;
+
+    public RecordingListItem? SelectedRecording
+    {
+        get => _selectedRecording;
+        set
+        {
+            if (SetProperty(ref _selectedRecording, value))
+            {
+                OnPropertyChanged(nameof(IsPlayerPlaceholderVisible));
+            }
+        }
+    }
+
+    public string RecordingLibraryStatus
+    {
+        get => _recordingLibraryStatus;
+        private set => SetProperty(ref _recordingLibraryStatus, value);
+    }
+
+    public bool HasRecordings => Recordings.Count > 0;
+
+    public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
 
     public string RecordingStatistics =>
         $"{_recording.Statistics.ExpectedCount} expected · {_recording.Statistics.SavedCount} saved this session";
@@ -113,8 +153,12 @@ public sealed class DashboardViewModel : ObservableObject
 
     public void ApplyStatus(ApplicationStatus status)
     {
+        var previousDirectory = _recordingsDirectory;
+        var previousSavedCount = _knownSavedCount;
         _recording = status.Recording;
         _combatLog = status.CombatLog;
+        _recordingsDirectory = status.EffectiveSettings?.RecordingsDirectory;
+        _knownSavedCount = status.Recording.Statistics.SavedCount;
 
         if (CommandMessage == "The recording command failed." &&
             _recording.LastFailure is not null)
@@ -123,6 +167,12 @@ public sealed class DashboardViewModel : ObservableObject
         }
 
         UpdateDuration();
+        if (!PathsEqual(previousDirectory, _recordingsDirectory) ||
+            previousSavedCount != _knownSavedCount)
+        {
+            RefreshRecordings();
+        }
+
         OnAllPropertiesChanged();
         ManualRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
@@ -142,6 +192,61 @@ public sealed class DashboardViewModel : ObservableObject
         return value.TotalHours >= 100
             ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}"
             : $"{(int)value.TotalHours:00}:{value.Minutes:00}:{value.Seconds:00}";
+    }
+
+    internal void RefreshRecordings()
+    {
+        var selectedPath = SelectedRecording?.Path;
+        Recordings.Clear();
+
+        if (string.IsNullOrWhiteSpace(_recordingsDirectory))
+        {
+            SelectedRecording = null;
+            RecordingLibraryStatus = NoRecordingsDirectoryMessage;
+            OnPropertyChanged(nameof(HasRecordings));
+            return;
+        }
+
+        try
+        {
+            foreach (var recording in DiscoverRecordings(_recordingsDirectory))
+            {
+                Recordings.Add(recording);
+            }
+
+            SelectedRecording =
+                Recordings.FirstOrDefault(recording => PathsEqual(recording.Path, selectedPath)) ??
+                Recordings.FirstOrDefault();
+            RecordingLibraryStatus = Recordings.Count == 0
+                ? NoRecordingsMessage
+                : ReadyPlayerMessage;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            SelectedRecording = null;
+            RecordingLibraryStatus = $"Could not read recordings folder: {exception.Message}";
+        }
+
+        OnPropertyChanged(nameof(HasRecordings));
+    }
+
+    internal static IReadOnlyList<RecordingListItem> DiscoverRecordings(string recordingsDirectory)
+    {
+        if (!Directory.Exists(recordingsDirectory))
+        {
+            return [];
+        }
+
+        return new DirectoryInfo(recordingsDirectory)
+            .EnumerateFiles("*.mp4", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(file => new RecordingListItem(
+                file.FullName,
+                System.IO.Path.GetFileNameWithoutExtension(file.Name),
+                file.LastWriteTime,
+                file.Length))
+            .ToList();
     }
 
     private Task ToggleManualRecordingAsync()
@@ -277,5 +382,10 @@ public sealed class DashboardViewModel : ObservableObject
         var text = exception.ToString();
         return text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase) &&
                text.Contains("window", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        return StringComparer.OrdinalIgnoreCase.Equals(left, right);
     }
 }
