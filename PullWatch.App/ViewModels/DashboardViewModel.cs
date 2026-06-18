@@ -5,11 +5,9 @@ namespace PullWatch;
 
 public sealed class DashboardViewModel : ObservableObject
 {
-    private const string NoOutputPath = "An output path will appear when recording starts.";
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string NoRecordingsDirectoryMessage = "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
-    private const string ReadyPlayerMessage = "";
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;
@@ -45,7 +43,6 @@ public sealed class DashboardViewModel : ObservableObject
             OpenRecordingsFolderAsync,
             onException: HandleCommandFailure);
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
-        RefreshRecordingsCommand = new RelayCommand(RefreshRecordings);
         ApplyStatus(initialStatus);
         RefreshRecordings();
     }
@@ -58,21 +55,13 @@ public sealed class DashboardViewModel : ObservableObject
 
     public RelayCommand DismissFailureCommand { get; }
 
-    public RelayCommand RefreshRecordingsCommand { get; }
-
     public string StateTitle => GetStateTitle(_recording.State);
-
-    public string StateDescription => GetStateDescription(_recording.State);
-
-    public string RecordingDetail => GetRecordingDetail(_recording);
 
     public string Duration
     {
         get => _duration;
         private set => SetProperty(ref _duration, value);
     }
-
-    public string OutputPath => _recording.ActiveOutputPath ?? NoOutputPath;
 
     public RecordingListItem? SelectedRecording
     {
@@ -92,26 +81,7 @@ public sealed class DashboardViewModel : ObservableObject
         private set => SetProperty(ref _recordingLibraryStatus, value);
     }
 
-    public bool HasRecordings => Recordings.Count > 0;
-
     public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
-
-    public string RecordingStatistics =>
-        $"{_recording.Statistics.ExpectedCount} expected · {_recording.Statistics.SavedCount} saved this session";
-
-    public string CombatLogHealth => _combatLog.LastFileSystemError is not null
-        ? "Logs directory error"
-        : _combatLog.State switch
-        {
-            CombatLogReaderState.ReadingCombatLog => "Monitoring",
-            CombatLogReaderState.SwitchingCombatLog => "Switching logs",
-            CombatLogReaderState.WaitingForCombatLog => "Waiting for combat log",
-            _ => "Logs directory unavailable"
-        };
-
-    public string CombatLogDetail => _combatLog.LastFileSystemError?.Message
-        ?? _combatLog.CurrentPath
-        ?? "PullWatch will keep checking in the background.";
 
     public string RecorderHealth => _recording.LastFailure is not null &&
                                     !IsTargetUnavailableFailure(_recording.LastFailure)
@@ -119,10 +89,6 @@ public sealed class DashboardViewModel : ObservableObject
         : _recording.State == RecordingCoordinatorState.Idle
             ? "Idle"
             : "Active";
-
-    public string RecorderDetail => _recording.State == RecordingCoordinatorState.Idle
-        ? "Recording can start when World of Warcraft is running."
-        : $"Recorder is {_recording.State.ToString().ToLowerInvariant()}.";
 
     public string? FailureMessage => IsTargetUnavailableFailure(_recording.LastFailure)
         ? null
@@ -138,12 +104,6 @@ public sealed class DashboardViewModel : ObservableObject
         _recording.LastFailure is not null &&
         !IsTargetUnavailableFailure(_recording.LastFailure) &&
         !ReferenceEquals(_recording.LastFailure, _dismissedFailure);
-
-    public bool CanStartManual => _recording.State == RecordingCoordinatorState.Idle;
-
-    public bool CanStopManual => _recording.State == RecordingCoordinatorState.Recording;
-
-    public bool CanRunManualCommand => CanStartManual || CanStopManual;
 
     public bool IsManualStopMode => _recording.State == RecordingCoordinatorState.Recording;
 
@@ -186,6 +146,9 @@ public sealed class DashboardViewModel : ObservableObject
             : FormatDuration((now ?? DateTimeOffset.Now) - _recording.Context.StartedAt);
     }
 
+    private bool CanRunManualCommand =>
+        _recording.State is RecordingCoordinatorState.Idle or RecordingCoordinatorState.Recording;
+
     internal static string FormatDuration(TimeSpan duration)
     {
         var value = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
@@ -203,7 +166,6 @@ public sealed class DashboardViewModel : ObservableObject
         {
             SelectedRecording = null;
             RecordingLibraryStatus = NoRecordingsDirectoryMessage;
-            OnPropertyChanged(nameof(HasRecordings));
             return;
         }
 
@@ -219,15 +181,13 @@ public sealed class DashboardViewModel : ObservableObject
                 Recordings.FirstOrDefault();
             RecordingLibraryStatus = Recordings.Count == 0
                 ? NoRecordingsMessage
-                : ReadyPlayerMessage;
+                : string.Empty;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             SelectedRecording = null;
             RecordingLibraryStatus = $"Could not read recordings folder: {exception.Message}";
         }
-
-        OnPropertyChanged(nameof(HasRecordings));
     }
 
     internal static IReadOnlyList<RecordingListItem> DiscoverRecordings(string recordingsDirectory)
@@ -305,30 +265,6 @@ public sealed class DashboardViewModel : ObservableObject
             RecordingCoordinatorState.Recording => "Recording",
             RecordingCoordinatorState.Stopping => "Finalizing recording",
             _ => "Ready to record"
-        };
-    }
-
-    private static string GetStateDescription(RecordingCoordinatorState state)
-    {
-        return state switch
-        {
-            RecordingCoordinatorState.Starting => "Preparing the recorder and output file.",
-            RecordingCoordinatorState.Recording => "Your gameplay is being captured.",
-            RecordingCoordinatorState.Stopping => "Saving the recording. Keep PullWatch open.",
-            _ => "Automatic recording is active when combat logs are available."
-        };
-    }
-
-    private static string GetRecordingDetail(RecordingCoordinatorStatus status)
-    {
-        return status.Context switch
-        {
-            ChallengeRecordingContext challenge =>
-                $"{challenge.DungeonName} · Mythic +{challenge.Level}",
-            EncounterRecordingContext encounter =>
-                $"{encounter.EncounterName} · Raid encounter",
-            ManualRecordingContext => "Manual recording",
-            _ => "No active recording"
         };
     }
 

@@ -23,28 +23,6 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void PresentsAutomaticAndManualRecordingDetails()
-    {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Recording,
-            new ChallengeRecordingContext(DateTimeOffset.Now, "The Dawnbreaker", 12)));
-
-        Assert.Equal("The Dawnbreaker · Mythic +12", viewModel.RecordingDetail);
-
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Recording,
-            new EncounterRecordingContext(DateTimeOffset.Now, 123, "Plexus Sentinel", 16)));
-
-        Assert.Equal("Plexus Sentinel · Raid encounter", viewModel.RecordingDetail);
-
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Recording,
-            new ManualRecordingContext(DateTimeOffset.Now)));
-
-        Assert.Equal("Manual recording", viewModel.RecordingDetail);
-    }
-
-    [Fact]
     public async Task ManualCommandDisablesDuringExecutionAndReportsResult()
     {
         var pendingStart = new TaskCompletionSource<RecordingCommandResult>(
@@ -138,14 +116,11 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void IdleRecorderDoesNotClaimWowAvailability()
+    public void IdleRecorderReportsIdleHealth()
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
 
         Assert.Equal("Idle", viewModel.RecorderHealth);
-        Assert.Equal(
-            "Recording can start when World of Warcraft is running.",
-            viewModel.RecorderDetail);
     }
 
     [Fact]
@@ -185,21 +160,6 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void PresentsSessionRecordingStatistics()
-    {
-        var status = Status(RecordingCoordinatorState.Idle);
-        var viewModel = CreateViewModel(status with
-        {
-            Recording = status.Recording with
-            {
-                Statistics = new RecordingStatistics(3, 2)
-            }
-        });
-
-        Assert.Equal("3 expected · 2 saved this session", viewModel.RecordingStatistics);
-    }
-
-    [Fact]
     public void ListsSavedMp4RecordingsFromConfiguredDirectory()
     {
         var directory = CreateTempDirectory();
@@ -227,7 +187,6 @@ public sealed class DashboardViewModelTests
                     Assert.Equal("older", second.DisplayName);
                 });
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
-            Assert.True(viewModel.HasRecordings);
             Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
         }
         finally
@@ -243,14 +202,13 @@ public sealed class DashboardViewModelTests
 
         Assert.Empty(viewModel.Recordings);
         Assert.Null(viewModel.SelectedRecording);
-        Assert.False(viewModel.HasRecordings);
         Assert.Equal(
             "Choose a recordings directory in settings to review videos here.",
             viewModel.RecordingLibraryStatus);
     }
 
     [Fact]
-    public void RefreshRecordingsPreservesExistingSelection()
+    public void SavedCountStatusChangeRefreshesRecordingsAndPreservesExistingSelection()
     {
         var directory = CreateTempDirectory();
 
@@ -264,7 +222,10 @@ public sealed class DashboardViewModelTests
             viewModel.SelectedRecording = viewModel.Recordings.Single(recording => recording.Path == older);
 
             WriteRecording(directory, "newest.mp4", "newest", new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc));
-            viewModel.RefreshRecordingsCommand.Execute(null);
+            viewModel.ApplyStatus(Status(
+                RecordingCoordinatorState.Idle,
+                recordingsDirectory: directory,
+                savedCount: 1));
 
             Assert.Equal(older, viewModel.SelectedRecording?.Path);
             Assert.Equal("newest", viewModel.Recordings[0].DisplayName);
