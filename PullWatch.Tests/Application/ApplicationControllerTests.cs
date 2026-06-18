@@ -207,6 +207,50 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task SavesUiSettingsWhileRecording()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings")
+            },
+            TestContext.Current.CancellationToken);
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null);
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance);
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+        await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
+        var ui = new UiSettings
+        {
+            WindowPlacement = new WindowPlacementSettings
+            {
+                Left = 25,
+                Top = 50,
+                Width = 1200,
+                Height = 800,
+                IsMaximized = true
+            }
+        };
+
+        var result = await controller.SaveUiSettingsAsync(
+            ui,
+            TestContext.Current.CancellationToken);
+        var persisted = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(SettingsSaveStatus.Saved, result.Status);
+        Assert.Equal(ui, controller.Status.EffectiveSettings!.Ui);
+        Assert.Equal(ui, persisted.Settings!.Ui);
+    }
+
+    [Fact]
     public async Task StatusNotificationsDoNotUsePublishersSynchronizationContext()
     {
         using var directory = new TemporaryDirectory();

@@ -23,28 +23,6 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void PresentsAutomaticAndManualRecordingDetails()
-    {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Recording,
-            new ChallengeRecordingContext(DateTimeOffset.Now, "The Dawnbreaker", 12)));
-
-        Assert.Equal("The Dawnbreaker · Mythic +12", viewModel.RecordingDetail);
-
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Recording,
-            new EncounterRecordingContext(DateTimeOffset.Now, 123, "Plexus Sentinel", 16)));
-
-        Assert.Equal("Plexus Sentinel · Raid encounter", viewModel.RecordingDetail);
-
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Recording,
-            new ManualRecordingContext(DateTimeOffset.Now)));
-
-        Assert.Equal("Manual recording", viewModel.RecordingDetail);
-    }
-
-    [Fact]
     public async Task ManualCommandDisablesDuringExecutionAndReportsResult()
     {
         var pendingStart = new TaskCompletionSource<RecordingCommandResult>(
@@ -138,14 +116,11 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void IdleRecorderDoesNotClaimWowAvailability()
+    public void IdleRecorderReportsIdleHealth()
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
 
         Assert.Equal("Idle", viewModel.RecorderHealth);
-        Assert.Equal(
-            "Recording can start when World of Warcraft is running.",
-            viewModel.RecorderDetail);
     }
 
     [Fact]
@@ -185,18 +160,80 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public void PresentsSessionRecordingStatistics()
+    public void ListsSavedMp4RecordingsFromConfiguredDirectory()
     {
-        var status = Status(RecordingCoordinatorState.Idle);
-        var viewModel = CreateViewModel(status with
-        {
-            Recording = status.Recording with
-            {
-                Statistics = new RecordingStatistics(3, 2)
-            }
-        });
+        var directory = CreateTempDirectory();
 
-        Assert.Equal("3 expected · 2 saved this session", viewModel.RecordingStatistics);
+        try
+        {
+            var older = WriteRecording(directory, "older.mp4", "older", new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
+            var newer = WriteRecording(directory, "newer.mp4", "newer", new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc));
+            File.WriteAllText(Path.Combine(directory, "notes.txt"), "ignored");
+
+            var viewModel = CreateViewModel(Status(
+                RecordingCoordinatorState.Idle,
+                recordingsDirectory: directory));
+
+            Assert.Collection(
+                viewModel.Recordings,
+                first =>
+                {
+                    Assert.Equal(newer, first.Path);
+                    Assert.Equal("newer", first.DisplayName);
+                },
+                second =>
+                {
+                    Assert.Equal(older, second.Path);
+                    Assert.Equal("older", second.DisplayName);
+                });
+            Assert.Equal(newer, viewModel.SelectedRecording?.Path);
+            Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ReportsMissingRecordingsDirectory()
+    {
+        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
+
+        Assert.Empty(viewModel.Recordings);
+        Assert.Null(viewModel.SelectedRecording);
+        Assert.Equal(
+            "Choose a recordings directory in settings to review videos here.",
+            viewModel.RecordingLibraryStatus);
+    }
+
+    [Fact]
+    public void SavedCountStatusChangeRefreshesRecordingsAndPreservesExistingSelection()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var older = WriteRecording(directory, "older.mp4", "older", new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
+            WriteRecording(directory, "newer.mp4", "newer", new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc));
+            var viewModel = CreateViewModel(Status(
+                RecordingCoordinatorState.Idle,
+                recordingsDirectory: directory));
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording => recording.Path == older);
+
+            WriteRecording(directory, "newest.mp4", "newest", new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc));
+            viewModel.ApplyStatus(Status(
+                RecordingCoordinatorState.Idle,
+                recordingsDirectory: directory,
+                savedCount: 1));
+
+            Assert.Equal(older, viewModel.SelectedRecording?.Path);
+            Assert.Equal("newest", viewModel.Recordings[0].DisplayName);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
     }
 
     [Theory]
@@ -231,7 +268,9 @@ public sealed class DashboardViewModelTests
     private static ApplicationStatus Status(
         RecordingCoordinatorState state,
         RecordingContext? context = null,
-        Exception? lastFailure = null)
+        Exception? lastFailure = null,
+        string? recordingsDirectory = null,
+        int savedCount = 0)
     {
         RecordingOwner? owner = context switch
         {
@@ -242,7 +281,10 @@ public sealed class DashboardViewModelTests
         };
 
         return new ApplicationStatus(
-            new PullWatchSettings(),
+            new PullWatchSettings
+            {
+                RecordingsDirectory = recordingsDirectory
+            },
             new RecordingCoordinatorStatus(
                 state,
                 owner,
@@ -251,11 +293,33 @@ public sealed class DashboardViewModelTests
                 null,
                 null,
                 lastFailure,
-                state == RecordingCoordinatorState.Idle ? null : @"C:\Recordings\active.mp4"),
+                state == RecordingCoordinatorState.Idle ? null : @"C:\Recordings\active.mp4")
+            {
+                Statistics = new RecordingStatistics(0, savedCount)
+            },
             new CombatLogReaderStatus(
                 CombatLogReaderState.WaitingForCombatLog,
                 null,
                 null,
                 null));
+    }
+
+    private static string CreateTempDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PullWatch.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static string WriteRecording(
+        string directory,
+        string fileName,
+        string content,
+        DateTime lastWriteTimeUtc)
+    {
+        var path = Path.Combine(directory, fileName);
+        File.WriteAllText(path, content);
+        File.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
+        return path;
     }
 }
