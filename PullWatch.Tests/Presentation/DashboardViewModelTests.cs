@@ -228,7 +228,7 @@ public sealed class DashboardViewModelTests
                 });
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
             Assert.True(viewModel.HasRecordings);
-            Assert.Equal("Select a recording to review it without leaving the dashboard.", viewModel.RecordingLibraryStatus);
+            Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
         }
         finally
         {

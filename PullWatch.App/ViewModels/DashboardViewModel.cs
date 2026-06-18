@@ -9,7 +9,7 @@ public sealed class DashboardViewModel : ObservableObject
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string NoRecordingsDirectoryMessage = "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
-    private const string ReadyPlayerMessage = "Select a recording to review it without leaving the dashboard.";
+    private const string ReadyPlayerMessage = "";
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;

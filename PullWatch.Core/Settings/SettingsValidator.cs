@@ -50,6 +50,15 @@ public static class SettingsValidator
             errors.Add("Audio settings are required.");
         }
 
+        if (settings.Ui is null)
+        {
+            errors.Add("UI settings are required.");
+        }
+        else if (settings.Ui.WindowPlacement is null)
+        {
+            errors.Add("Window placement settings are required.");
+        }
+
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",

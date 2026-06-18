@@ -24,9 +24,72 @@
                     <TextBlock FontSize="26"
                                FontWeight="SemiBold"
                                Text="PullWatch" />
-                    <TextBlock Margin="0,4,0,28"
+                    <TextBlock Margin="0,4,0,20"
                                Style="{StaticResource SecondaryTextStyle}"
                                Text="Gameplay recorder" />
+
+                    <Border Margin="0,0,0,22"
+                            Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Ellipse Grid.Column="0"
+                                         Width="9"
+                                         Height="9"
+                                         Margin="0,5,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Dashboard.RecorderHealth}" Value="Active">
+                                                    <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Dashboard.RecorderHealth}" Value="Attention needed">
+                                                    <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Dashboard.StateTitle}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="22"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Dashboard.Duration}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Button Margin="0,16,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding Dashboard.ManualRecordingCommand}"
+                                    Content="{Binding Dashboard.ManualRecordingButtonText}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                                        <Setter Property="Padding" Value="10,8" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Dashboard.IsManualStopMode}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource FailureBrush}" />
+                                                <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <TextBlock DockPanel.Dock="Bottom"

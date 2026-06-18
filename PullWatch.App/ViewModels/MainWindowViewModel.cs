@@ -32,7 +32,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
         [
-            new NavigationItemViewModel("Dashboard", "\uE80F", Dashboard),
+            new NavigationItemViewModel("Recordings", "\uE80F", Dashboard),
             new NavigationItemViewModel("Settings", "\uE713", Settings),
             new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics)
         ];

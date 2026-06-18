@@ -13,10 +13,6 @@
 
             <StackPanel Grid.Row="0" Margin="0,0,0,24">
                 <TextBlock FontSize="30" FontWeight="SemiBold" Text="Diagnostics" />
-                <TextBlock Margin="0,6,0,0"
-                           FontSize="14"
-                           Style="{StaticResource SecondaryTextStyle}"
-                           Text="Detailed application state and recent logs" />
             </StackPanel>
 
             <Grid Grid.Row="1" Margin="0,0,0,18">

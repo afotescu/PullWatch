@@ -38,6 +38,7 @@ public partial class DashboardView : UserControl
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
         AttachViewModel(DataContext as DashboardViewModel);
+        LoadSelectedRecording();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs eventArgs)
@@ -91,8 +92,7 @@ public partial class DashboardView : UserControl
         PlaybackSlider.IsEnabled = false;
         PlaybackSlider.Maximum = 0;
         PlaybackSlider.Value = 0;
-        CurrentTimeText.Text = "00:00";
-        DurationText.Text = "00:00";
+        UpdatePlaybackTimeText(TimeSpan.Zero, TimeSpan.Zero);
 
         var selectedRecording = _viewModel?.SelectedRecording;
         RecordingPlayer.Source = selectedRecording?.Source;
@@ -133,9 +133,10 @@ public partial class DashboardView : UserControl
             var duration = RecordingPlayer.NaturalDuration.TimeSpan;
             PlaybackSlider.Maximum = duration.TotalSeconds;
             PlaybackSlider.IsEnabled = duration > TimeSpan.Zero;
-            DurationText.Text = FormatTime(duration);
         }
 
+        RecordingPlayer.Pause();
+        RecordingPlayer.Position = TimeSpan.Zero;
         UpdatePositionFromPlayer();
     }
 
@@ -145,7 +146,7 @@ public partial class DashboardView : UserControl
         _isPlaying = false;
         PlayPauseButton.Content = "Play";
         PlaybackSlider.Value = PlaybackSlider.Maximum;
-        CurrentTimeText.Text = DurationText.Text;
+        UpdatePlaybackTimeText(GetDuration(), GetDuration());
     }
 
     private void OnPlayerMediaFailed(object sender, ExceptionRoutedEventArgs eventArgs)
@@ -203,7 +204,7 @@ public partial class DashboardView : UserControl
     {
         if (_isSeeking)
         {
-            CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(PlaybackSlider.Value));
+            UpdatePlaybackTimeText(TimeSpan.FromSeconds(PlaybackSlider.Value), GetDuration());
         }
     }
 
@@ -216,7 +217,7 @@ public partial class DashboardView : UserControl
 
         var position = TimeSpan.FromSeconds(PlaybackSlider.Value);
         RecordingPlayer.Position = position;
-        CurrentTimeText.Text = FormatTime(position);
+        UpdatePlaybackTimeText(position, GetDuration());
     }
 
     private void SeekToPoint(System.Windows.Point point)
@@ -251,7 +252,7 @@ public partial class DashboardView : UserControl
     {
         var position = RecordingPlayer.Position;
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
-        CurrentTimeText.Text = FormatTime(position);
+        UpdatePlaybackTimeText(position, GetDuration());
     }
 
     private void StopPlayback()
@@ -269,5 +270,17 @@ public partial class DashboardView : UserControl
         return value.TotalHours >= 1
             ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}"
             : $"{value.Minutes:00}:{value.Seconds:00}";
+    }
+
+    private void UpdatePlaybackTimeText(TimeSpan position, TimeSpan duration)
+    {
+        PlaybackTimeText.Text = $"{FormatTime(position)} / {FormatTime(duration)}";
+    }
+
+    private TimeSpan GetDuration()
+    {
+        return RecordingPlayer.NaturalDuration.HasTimeSpan
+            ? RecordingPlayer.NaturalDuration.TimeSpan
+            : TimeSpan.Zero;
     }
 }

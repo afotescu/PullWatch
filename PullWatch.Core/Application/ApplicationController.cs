@@ -204,6 +204,37 @@ public sealed class ApplicationController : IAsyncDisposable
         }
     }
 
+    public async Task<SettingsSaveResult> SaveUiSettingsAsync(
+        UiSettings uiSettings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uiSettings);
+
+        await _lifetimeLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var settingsService = _settingsService
+                ?? throw new InvalidOperationException("The application controller has not been started.");
+            var result = await settingsService.SaveAsync(
+                settingsService.Current with { Ui = uiSettings },
+                cancellationToken);
+
+            if (result.IsSaved)
+            {
+                UpdateStatus(status => status with { EffectiveSettings = result.Settings });
+            }
+
+            return result;
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
         await _lifetimeLock.WaitAsync(cancellationToken);
