@@ -8,16 +8,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                <TextBlock FontSize="30"
-                           FontWeight="SemiBold"
-                           Text="Settings" />
-            </StackPanel>
-
-            <StackPanel Grid.Row="1" IsEnabled="{Binding IsEditingEnabled}">
+            <StackPanel Grid.Row="0" IsEnabled="{Binding IsEditingEnabled}">
                 <Border Margin="0,0,0,18" Style="{StaticResource CardStyle}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleStyle}"
@@ -99,7 +92,7 @@
                 </Border>
             </StackPanel>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal">
+            <StackPanel Grid.Row="1" Orientation="Horizontal">
                 <Button Command="{Binding SaveCommand}"
                         Style="{StaticResource AccentButtonStyle}"
                         Content="Save settings" />

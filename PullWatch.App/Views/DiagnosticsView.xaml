@@ -8,14 +8,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                <TextBlock FontSize="30" FontWeight="SemiBold" Text="Diagnostics" />
-            </StackPanel>
-
-            <Grid Grid.Row="1" Margin="0,0,0,18">
+            <Grid Grid.Row="0" Margin="0,0,0,18">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -48,7 +43,7 @@
                 </Border>
             </Grid>
 
-            <Border Grid.Row="2" Margin="0,0,0,18" Style="{StaticResource CardStyle}">
+            <Border Grid.Row="1" Margin="0,0,0,18" Style="{StaticResource CardStyle}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recent application logs" />
                     <TextBox Margin="0,15,0,0"
@@ -62,7 +57,7 @@
                 </StackPanel>
             </Border>
 
-            <StackPanel Grid.Row="3" Orientation="Horizontal">
+            <StackPanel Grid.Row="2" Orientation="Horizontal">
                 <Button Command="{Binding CopyDiagnosticsCommand}"
                         Style="{StaticResource AccentButtonStyle}"
                         Content="Copy diagnostics" />
