@@ -20,23 +20,37 @@ public static class DiagnosticsReportBuilder
         report.AppendLine();
         report.AppendLine("Combat Log");
         report.AppendLine($"State: {status.CombatLog.State}");
-        report.AppendLine($"Active path: {Value(status.CombatLog.CurrentPath)}");
         report.AppendLine(
-            $"Last successful read: {Value(status.CombatLog.LastSuccessfulReadTime)}"
+            $"Active path: {DiagnosticsValueFormatter.Format(status.CombatLog.CurrentPath)}"
         );
-        report.AppendLine($"Last filesystem error: {Value(status.CombatLog.LastFileSystemError)}");
+        report.AppendLine(
+            $"Last successful read: {DiagnosticsValueFormatter.Format(status.CombatLog.LastSuccessfulReadTime)}"
+        );
+        report.AppendLine(
+            $"Last filesystem error: {DiagnosticsValueFormatter.Format(status.CombatLog.LastFileSystemError)}"
+        );
         report.AppendLine();
         report.AppendLine("World of Warcraft");
         report.AppendLine($"State: {status.WowProcess.State}");
-        report.AppendLine($"Process id: {Value(status.WowProcess.ProcessId)}");
-        report.AppendLine($"Window title: {Value(status.WowProcess.MainWindowTitle)}");
-        report.AppendLine($"Last process error: {Value(status.WowProcess.LastError)}");
+        report.AppendLine(
+            $"Process id: {DiagnosticsValueFormatter.Format(status.WowProcess.ProcessId)}"
+        );
+        report.AppendLine(
+            $"Window title: {DiagnosticsValueFormatter.Format(status.WowProcess.MainWindowTitle)}"
+        );
+        report.AppendLine(
+            $"Last process error: {DiagnosticsValueFormatter.Format(status.WowProcess.LastError)}"
+        );
         report.AppendLine();
         report.AppendLine("Recorder");
         report.AppendLine($"State: {status.Recording.State}");
-        report.AppendLine($"Owner: {Value(status.Recording.Owner)}");
-        report.AppendLine($"Active output path: {Value(status.Recording.ActiveOutputPath)}");
-        report.AppendLine($"Last failure: {Value(status.Recording.LastFailure)}");
+        report.AppendLine($"Owner: {DiagnosticsValueFormatter.Format(status.Recording.Owner)}");
+        report.AppendLine(
+            $"Active output path: {DiagnosticsValueFormatter.Format(status.Recording.ActiveOutputPath)}"
+        );
+        report.AppendLine(
+            $"Last failure: {DiagnosticsValueFormatter.Format(status.Recording.LastFailure)}"
+        );
         report.AppendLine();
         report.AppendLine("Effective Settings");
         report.AppendLine(
@@ -58,10 +72,5 @@ public static class DiagnosticsReportBuilder
         }
 
         return report.ToString();
-    }
-
-    private static string Value(object? value)
-    {
-        return value?.ToString() ?? "(none)";
     }
 }

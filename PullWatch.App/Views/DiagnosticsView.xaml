@@ -11,64 +11,35 @@
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
-      <Grid Grid.Row="0" Margin="0,0,0,18">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Margin="0,0,9,0" Style="{StaticResource CardStyle}">
-          <StackPanel>
-            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Combat log reader" />
-            <TextBlock
-              Margin="0,15,0,4"
-              Style="{StaticResource DiagnosticLabelStyle}"
-              Text="State"
-            />
-            <TextBlock Text="{Binding CombatLogState}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Active path" />
-            <TextBlock Text="{Binding CombatLogPath}" TextWrapping="Wrap" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last successful read" />
-            <TextBlock Text="{Binding LastSuccessfulRead}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last filesystem error" />
-            <TextBlock Text="{Binding LastFileSystemError}" TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-        <Border Grid.Column="1" Margin="9,0,9,0" Style="{StaticResource CardStyle}">
-          <StackPanel>
-            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="World of Warcraft" />
-            <TextBlock
-              Margin="0,15,0,4"
-              Style="{StaticResource DiagnosticLabelStyle}"
-              Text="State"
-            />
-            <TextBlock Text="{Binding WowProcessState}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Process id" />
-            <TextBlock Text="{Binding WowProcessId}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Window title" />
-            <TextBlock Text="{Binding WowWindowTitle}" TextWrapping="Wrap" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last process error" />
-            <TextBlock Text="{Binding WowProcessError}" TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-        <Border Grid.Column="2" Margin="9,0,0,0" Style="{StaticResource CardStyle}">
-          <StackPanel>
-            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recorder" />
-            <TextBlock
-              Margin="0,15,0,4"
-              Style="{StaticResource DiagnosticLabelStyle}"
-              Text="State"
-            />
-            <TextBlock Text="{Binding RecordingState}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Owner" />
-            <TextBlock Text="{Binding RecordingOwner}" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Active output path" />
-            <TextBlock Text="{Binding ActiveOutputPath}" TextWrapping="Wrap" />
-            <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last failure" />
-            <TextBlock Text="{Binding LastRecorderFailure}" TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-      </Grid>
+      <ItemsControl Grid.Row="0" Margin="-9,0,-9,18" ItemsSource="{Binding Sections}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="3" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Margin="9,0" Style="{StaticResource CardStyle}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding Title}" />
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel>
+                        <TextBlock
+                          Style="{StaticResource DiagnosticLabelStyle}"
+                          Text="{Binding Label}"
+                        />
+                        <TextBlock Text="{Binding Value}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
 
       <Border Grid.Row="1" Margin="0,0,0,18" Style="{StaticResource CardStyle}">
         <StackPanel>

@@ -7,10 +7,6 @@
     <local:RecordingsView />
   </DataTemplate>
 
-  <DataTemplate DataType="{x:Type local:PlaceholderViewModel}">
-    <local:PlaceholderView />
-  </DataTemplate>
-
   <DataTemplate DataType="{x:Type local:SettingsViewModel}">
     <local:SettingsView />
   </DataTemplate>

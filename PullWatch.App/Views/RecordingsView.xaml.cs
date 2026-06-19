@@ -273,16 +273,10 @@ public partial class RecordingsView : UserControl
         }
     }
 
-    private static string FormatTime(TimeSpan value)
-    {
-        return value.TotalHours >= 1
-            ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}"
-            : $"{value.Minutes:00}:{value.Seconds:00}";
-    }
-
     private void UpdatePlaybackTimeText(TimeSpan position, TimeSpan duration)
     {
-        PlaybackTimeText.Text = $"{FormatTime(position)} / {FormatTime(duration)}";
+        PlaybackTimeText.Text =
+            $"{RecordingTimeFormatter.FormatPlaybackTime(position)} / {RecordingTimeFormatter.FormatPlaybackTime(duration)}";
     }
 
     private TimeSpan GetDuration()

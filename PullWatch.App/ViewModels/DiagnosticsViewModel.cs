@@ -27,29 +27,60 @@ public sealed class DiagnosticsViewModel : ObservableObject
 
     public AsyncRelayCommand ExportDiagnosticsCommand { get; }
 
-    public string CombatLogState => _status.CombatLog.State.ToString();
-
-    public string CombatLogPath => Value(_status.CombatLog.CurrentPath);
-
-    public string LastSuccessfulRead => Value(_status.CombatLog.LastSuccessfulReadTime);
-
-    public string LastFileSystemError => Value(_status.CombatLog.LastFileSystemError);
-
-    public string WowProcessState => _status.WowProcess.State.ToString();
-
-    public string WowProcessId => Value(_status.WowProcess.ProcessId);
-
-    public string WowWindowTitle => Value(_status.WowProcess.MainWindowTitle);
-
-    public string WowProcessError => Value(_status.WowProcess.LastError);
-
-    public string RecordingState => _status.Recording.State.ToString();
-
-    public string RecordingOwner => Value(_status.Recording.Owner);
-
-    public string ActiveOutputPath => Value(_status.Recording.ActiveOutputPath);
-
-    public string LastRecorderFailure => Value(_status.Recording.LastFailure);
+    public IReadOnlyList<DiagnosticsSectionViewModel> Sections =>
+        [
+            new(
+                "Combat log reader",
+                [
+                    new("State", _status.CombatLog.State.ToString()),
+                    new(
+                        "Active path",
+                        DiagnosticsValueFormatter.Format(_status.CombatLog.CurrentPath)
+                    ),
+                    new(
+                        "Last successful read",
+                        DiagnosticsValueFormatter.Format(_status.CombatLog.LastSuccessfulReadTime)
+                    ),
+                    new(
+                        "Last filesystem error",
+                        DiagnosticsValueFormatter.Format(_status.CombatLog.LastFileSystemError)
+                    ),
+                ]
+            ),
+            new(
+                "World of Warcraft",
+                [
+                    new("State", _status.WowProcess.State.ToString()),
+                    new(
+                        "Process id",
+                        DiagnosticsValueFormatter.Format(_status.WowProcess.ProcessId)
+                    ),
+                    new(
+                        "Window title",
+                        DiagnosticsValueFormatter.Format(_status.WowProcess.MainWindowTitle)
+                    ),
+                    new(
+                        "Last process error",
+                        DiagnosticsValueFormatter.Format(_status.WowProcess.LastError)
+                    ),
+                ]
+            ),
+            new(
+                "Recorder",
+                [
+                    new("State", _status.Recording.State.ToString()),
+                    new("Owner", DiagnosticsValueFormatter.Format(_status.Recording.Owner)),
+                    new(
+                        "Active output path",
+                        DiagnosticsValueFormatter.Format(_status.Recording.ActiveOutputPath)
+                    ),
+                    new(
+                        "Last failure",
+                        DiagnosticsValueFormatter.Format(_status.Recording.LastFailure)
+                    ),
+                ]
+            ),
+        ];
 
     public string RecentLogs => FormatLogs(_logs.GetSnapshot());
 
@@ -129,9 +160,11 @@ public sealed class DiagnosticsViewModel : ObservableObject
                 )
             );
     }
-
-    private static string Value(object? value)
-    {
-        return value?.ToString() ?? "(none)";
-    }
 }
+
+public sealed record DiagnosticsSectionViewModel(
+    string Title,
+    IReadOnlyList<DiagnosticRowViewModel> Rows
+);
+
+public sealed record DiagnosticRowViewModel(string Label, string Value);
