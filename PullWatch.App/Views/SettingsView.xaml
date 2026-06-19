@@ -8,7 +8,6 @@
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
-        <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
       <StackPanel Grid.Row="0" IsEnabled="{Binding IsEditingEnabled}">
@@ -22,12 +21,18 @@
             <TextBlock Style="{StaticResource InputLabelStyle}" Text="WoW logs directory" />
             <DockPanel>
               <Button
+                x:Name="WowLogsDirectoryBrowseButton"
                 DockPanel.Dock="Right"
                 Margin="10,0,0,0"
                 Command="{Binding PickWowLogsDirectoryCommand}"
                 Content="Browse"
               />
-              <TextBox Text="{Binding WowLogsDirectory, UpdateSourceTrigger=PropertyChanged}" />
+              <TextBox
+                x:Name="WowLogsDirectoryTextBox"
+                KeyDown="OnWowLogsDirectoryKeyDown"
+                LostFocus="OnWowLogsDirectoryLostFocus"
+                Text="{Binding WowLogsDirectory, UpdateSourceTrigger=PropertyChanged}"
+              />
             </DockPanel>
             <TextBlock
               Style="{StaticResource ValidationTextStyle}"
@@ -42,12 +47,18 @@
             <TextBlock Style="{StaticResource InputLabelStyle}" Text="Recordings directory" />
             <DockPanel>
               <Button
+                x:Name="RecordingsDirectoryBrowseButton"
                 DockPanel.Dock="Right"
                 Margin="10,0,0,0"
                 Command="{Binding PickRecordingsDirectoryCommand}"
                 Content="Browse"
               />
-              <TextBox Text="{Binding RecordingsDirectory, UpdateSourceTrigger=PropertyChanged}" />
+              <TextBox
+                x:Name="RecordingsDirectoryTextBox"
+                KeyDown="OnRecordingsDirectoryKeyDown"
+                LostFocus="OnRecordingsDirectoryLostFocus"
+                Text="{Binding RecordingsDirectory, UpdateSourceTrigger=PropertyChanged}"
+              />
             </DockPanel>
             <TextBlock
               Style="{StaticResource ValidationTextStyle}"
@@ -125,24 +136,17 @@
         </Border>
       </StackPanel>
 
-      <StackPanel Grid.Row="1" Orientation="Horizontal">
-        <Button
-          Command="{Binding SaveCommand}"
-          Style="{StaticResource AccentButtonStyle}"
-          Content="Save settings"
-        />
-        <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SaveMessage}">
-          <TextBlock.Style>
-            <Style TargetType="TextBlock" BasedOn="{StaticResource SecondaryTextStyle}">
-              <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSaveError}" Value="True">
-                  <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
-                </DataTrigger>
-              </Style.Triggers>
-            </Style>
-          </TextBlock.Style>
-        </TextBlock>
-      </StackPanel>
+      <TextBlock Grid.Row="1" Margin="0,0,0,0" Text="{Binding SaveMessage}">
+        <TextBlock.Style>
+          <Style TargetType="TextBlock" BasedOn="{StaticResource SecondaryTextStyle}">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsSaveError}" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
     </Grid>
   </ScrollViewer>
 </UserControl>

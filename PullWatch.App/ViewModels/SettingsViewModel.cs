@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.CompilerServices;
 using Forms = System.Windows.Forms;
 
@@ -5,6 +6,10 @@ namespace PullWatch;
 
 public sealed class SettingsViewModel : ObservableObject
 {
+    private const string SettingsSavedMessage = "Settings saved.";
+    private const string FixHighlightedSettingsMessage = "Fix the highlighted settings.";
+    private const string SettingsLockedMessage = "Settings are locked while recording.";
+
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(5);
 
@@ -15,7 +20,14 @@ public sealed class SettingsViewModel : ObservableObject
     > _saveSettings;
     private readonly ISettingsDialogs _dialogs;
     private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
+    private readonly object _autosaveSync = new();
     private PullWatchSettings _savedSettings;
+    private Task? _autosaveTask;
+    private bool _hasQueuedAutosave;
+    private bool _queuedSaveIncludesWowLogsDirectory;
+    private bool _queuedSaveIncludesRecordingsDirectory;
+    private bool _retryWowLogsDirectoryOnNextAutosave;
+    private bool _retryRecordingsDirectoryOnNextAutosave;
     private bool _isLoading;
 
     public SettingsViewModel(
@@ -29,24 +41,37 @@ public sealed class SettingsViewModel : ObservableObject
         _dialogs = dialogs;
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
-        SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave, HandleCommandFailure);
-        PickWowLogsDirectoryCommand = new RelayCommand(
-            PickWowLogsDirectory,
-            () => IsEditingEnabled
+        CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
+            CommitWowLogsDirectoryAsync,
+            () => IsEditingEnabled,
+            HandleCommandFailure
         );
-        PickRecordingsDirectoryCommand = new RelayCommand(
-            PickRecordingsDirectory,
-            () => IsEditingEnabled
+        CommitRecordingsDirectoryCommand = new AsyncRelayCommand(
+            CommitRecordingsDirectoryAsync,
+            () => IsEditingEnabled,
+            HandleCommandFailure
+        );
+        PickWowLogsDirectoryCommand = new AsyncRelayCommand(
+            PickWowLogsDirectoryAsync,
+            () => IsEditingEnabled,
+            HandleCommandFailure
+        );
+        PickRecordingsDirectoryCommand = new AsyncRelayCommand(
+            PickRecordingsDirectoryAsync,
+            () => IsEditingEnabled,
+            HandleCommandFailure
         );
         LoadSettings(_savedSettings);
         ApplyStatus(initialStatus);
     }
 
-    public AsyncRelayCommand SaveCommand { get; }
+    public AsyncRelayCommand CommitWowLogsDirectoryCommand { get; }
 
-    public RelayCommand PickWowLogsDirectoryCommand { get; }
+    public AsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
 
-    public RelayCommand PickRecordingsDirectoryCommand { get; }
+    public AsyncRelayCommand PickWowLogsDirectoryCommand { get; }
+
+    public AsyncRelayCommand PickRecordingsDirectoryCommand { get; }
 
     public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
     [
@@ -127,33 +152,27 @@ public sealed class SettingsViewModel : ObservableObject
         {
             if (SetProperty(ref field, value))
             {
-                OnPropertyChanged(nameof(CanSave));
-                SaveCommand.NotifyCanExecuteChanged();
-                PickWowLogsDirectoryCommand.NotifyCanExecuteChanged();
-                PickRecordingsDirectoryCommand.NotifyCanExecuteChanged();
+                NotifyCommandStatesChanged();
             }
         }
     }
-
-    public bool IsDirty
-    {
-        get;
-        private set
-        {
-            if (SetProperty(ref field, value))
-            {
-                OnPropertyChanged(nameof(CanSave));
-                SaveCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public bool CanSave => IsEditingEnabled && IsDirty;
 
     public string EditingStatus =>
         IsEditingEnabled
             ? "Settings are available while PullWatch is idle."
             : "Settings are locked until the active recording finishes.";
+
+    public bool IsWowLogsDirectoryPending
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    }
+
+    public bool IsRecordingsDirectoryPending
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    }
 
     public string? WowLogsDirectoryError
     {
@@ -214,10 +233,22 @@ public sealed class SettingsViewModel : ObservableObject
         IsEditingEnabled = status.Recording.State == RecordingCoordinatorState.Idle;
         OnPropertyChanged(nameof(EditingStatus));
 
+        if (!IsEditingEnabled)
+        {
+            SaveMessage = SettingsLockedMessage;
+            IsSaveError = false;
+            return;
+        }
+
+        if (SaveMessage == SettingsLockedMessage)
+        {
+            RestoreUnlockedStatus();
+        }
+
         if (
-            !IsDirty
-            && status.EffectiveSettings is not null
+            status.EffectiveSettings is not null
             && status.EffectiveSettings != _savedSettings
+            && !HasPendingLocalChanges()
         )
         {
             _savedSettings = status.EffectiveSettings;
@@ -225,55 +256,29 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    public async Task<bool> SaveChangesAsync()
+    public Task<bool> CommitWowLogsDirectoryAsync()
     {
-        if (!CanSave)
-        {
-            return !IsDirty;
-        }
+        return CommitPathAsync(includeWowLogsDirectory: true, includeRecordingsDirectory: false);
+    }
 
-        ClearErrors();
-        var settings = BuildSettings();
-
-        if (settings is null)
-        {
-            return false;
-        }
-
-        var result = await _saveSettings(settings, CancellationToken.None);
-
-        if (!result.IsSaved)
-        {
-            ApplySaveFailure(result);
-            return false;
-        }
-
-        _savedSettings = result.Settings!;
-        LoadSettings(_savedSettings);
-        IsDirty = false;
-        IsSaveError = result.Status == SettingsSaveStatus.ApplicationFailed;
-        SaveMessage =
-            result.Status == SettingsSaveStatus.ApplicationFailed
-                ? $"Settings were saved, but combat-log monitoring could not restart: {result.Error?.Message}"
-                : "Settings saved and active.";
-        return true;
+    public Task<bool> CommitRecordingsDirectoryAsync()
+    {
+        return CommitPathAsync(includeWowLogsDirectory: false, includeRecordingsDirectory: true);
     }
 
     public void DiscardChanges()
     {
+        IsWowLogsDirectoryPending = false;
+        IsRecordingsDirectoryPending = false;
+        _retryWowLogsDirectoryOnNextAutosave = false;
+        _retryRecordingsDirectoryOnNextAutosave = false;
         LoadSettings(_savedSettings);
         ClearErrors();
         SaveMessage = null;
         IsSaveError = false;
-        IsDirty = false;
     }
 
-    private Task SaveAsync()
-    {
-        return SaveChangesAsync();
-    }
-
-    private void PickWowLogsDirectory()
+    private async Task PickWowLogsDirectoryAsync()
     {
         var selected = _dialogs.PickFolder(
             "Select the World of Warcraft logs directory",
@@ -283,25 +288,58 @@ public sealed class SettingsViewModel : ObservableObject
         if (selected is not null)
         {
             WowLogsDirectory = selected;
+            await CommitWowLogsDirectoryAsync();
         }
     }
 
-    private void PickRecordingsDirectory()
+    private async Task PickRecordingsDirectoryAsync()
     {
         var selected = _dialogs.PickFolder("Select the recordings directory", RecordingsDirectory);
 
         if (selected is not null)
         {
             RecordingsDirectory = selected;
+            await CommitRecordingsDirectoryAsync();
         }
     }
 
-    private PullWatchSettings? BuildSettings()
+    private async Task<bool> CommitPathAsync(
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory
+    )
+    {
+        if (!IsEditingEnabled)
+        {
+            ApplyLockedStatus();
+            return false;
+        }
+
+        var hasPendingIncludedPath =
+            (includeWowLogsDirectory && IsWowLogsDirectoryPending)
+            || (includeRecordingsDirectory && IsRecordingsDirectoryPending);
+
+        if (!hasPendingIncludedPath)
+        {
+            return true;
+        }
+
+        await QueueAutosaveAsync(includeWowLogsDirectory, includeRecordingsDirectory);
+        return !IsSaveError;
+    }
+
+    private PullWatchSettings BuildSettings(
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory
+    )
     {
         return _savedSettings with
         {
-            WowLogsDirectory = NormalizeEmpty(WowLogsDirectory),
-            RecordingsDirectory = NormalizeEmpty(RecordingsDirectory),
+            WowLogsDirectory = includeWowLogsDirectory
+                ? NormalizeEmpty(WowLogsDirectory)
+                : _savedSettings.WowLogsDirectory,
+            RecordingsDirectory = includeRecordingsDirectory
+                ? NormalizeEmpty(RecordingsDirectory)
+                : _savedSettings.RecordingsDirectory,
             RecordMythicPlus = RecordMythicPlus,
             RecordRaidEncounters = RecordRaidEncounters,
             Video = _savedSettings.Video with
@@ -319,23 +357,174 @@ public sealed class SettingsViewModel : ObservableObject
         };
     }
 
-    private void ApplySaveFailure(SettingsSaveResult result)
+    private Task QueueAutosaveAsync(bool includeWowLogsDirectory, bool includeRecordingsDirectory)
     {
-        IsSaveError = true;
-
-        if (result.Status == SettingsSaveStatus.RecordingActive)
+        lock (_autosaveSync)
         {
-            SaveMessage = "Settings cannot be saved while a recording is active.";
+            _hasQueuedAutosave = true;
+            _queuedSaveIncludesWowLogsDirectory |=
+                includeWowLogsDirectory || _retryWowLogsDirectoryOnNextAutosave;
+            _queuedSaveIncludesRecordingsDirectory |=
+                includeRecordingsDirectory || _retryRecordingsDirectoryOnNextAutosave;
+            _autosaveTask ??= ProcessAutosavesAsync();
+
+            if (_autosaveTask.IsCompleted)
+            {
+                _autosaveTask = ProcessAutosavesAsync();
+            }
+
+            return _autosaveTask;
+        }
+    }
+
+    private async Task ProcessAutosavesAsync()
+    {
+        await Task.Yield();
+
+        while (true)
+        {
+            bool includeWowLogsDirectory;
+            bool includeRecordingsDirectory;
+
+            lock (_autosaveSync)
+            {
+                if (!_hasQueuedAutosave)
+                {
+                    _autosaveTask = null;
+                    return;
+                }
+
+                _hasQueuedAutosave = false;
+                includeWowLogsDirectory = _queuedSaveIncludesWowLogsDirectory;
+                includeRecordingsDirectory = _queuedSaveIncludesRecordingsDirectory;
+                _queuedSaveIncludesWowLogsDirectory = false;
+                _queuedSaveIncludesRecordingsDirectory = false;
+            }
+
+            await RunAutosaveAsync(includeWowLogsDirectory, includeRecordingsDirectory);
+        }
+    }
+
+    private async Task RunAutosaveAsync(
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory
+    )
+    {
+        if (!IsEditingEnabled)
+        {
+            ApplyLockedStatus();
             return;
         }
 
+        var settings = BuildSettings(includeWowLogsDirectory, includeRecordingsDirectory);
+
+        try
+        {
+            var result = await _saveSettings(settings, CancellationToken.None);
+
+            if (!result.IsSaved)
+            {
+                ApplySaveFailure(
+                    result,
+                    includeWowLogsDirectory,
+                    includeRecordingsDirectory,
+                    settings
+                );
+                return;
+            }
+
+            ApplySaveSuccess(result, includeWowLogsDirectory, includeRecordingsDirectory);
+        }
+        catch (Exception exception)
+        {
+            HandleAutosaveException(
+                exception,
+                includeWowLogsDirectory,
+                includeRecordingsDirectory,
+                settings
+            );
+        }
+    }
+
+    private void ApplySaveSuccess(
+        SettingsSaveResult result,
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory
+    )
+    {
+        var savedSettings = result.Settings!;
+        _savedSettings = savedSettings;
+
+        if (
+            includeWowLogsDirectory
+            && PathsMatchSaved(WowLogsDirectory, savedSettings.WowLogsDirectory)
+        )
+        {
+            IsWowLogsDirectoryPending = false;
+            _retryWowLogsDirectoryOnNextAutosave = false;
+            SetLoadedValue(() => WowLogsDirectory = savedSettings.WowLogsDirectory);
+            WowLogsDirectoryError = null;
+        }
+
+        if (
+            includeRecordingsDirectory
+            && PathsMatchSaved(RecordingsDirectory, savedSettings.RecordingsDirectory)
+        )
+        {
+            IsRecordingsDirectoryPending = false;
+            _retryRecordingsDirectoryOnNextAutosave = false;
+            SetLoadedValue(() => RecordingsDirectory = savedSettings.RecordingsDirectory);
+            RecordingsDirectoryError = null;
+        }
+
+        if (HasPathErrors())
+        {
+            SaveMessage = FixHighlightedSettingsMessage;
+            IsSaveError = true;
+            return;
+        }
+
+        IsSaveError = result.Status == SettingsSaveStatus.ApplicationFailed;
+
+        if (result.Status == SettingsSaveStatus.ApplicationFailed)
+        {
+            SaveMessage =
+                $"Settings saved, but combat-log monitoring could not restart: {result.Error?.Message}";
+            return;
+        }
+
+        SaveMessage =
+            IsWowLogsDirectoryPending || IsRecordingsDirectoryPending ? null : SettingsSavedMessage;
+    }
+
+    private void ApplySaveFailure(
+        SettingsSaveResult result,
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory,
+        PullWatchSettings attemptedSettings
+    )
+    {
+        if (result.Status == SettingsSaveStatus.RecordingActive)
+        {
+            ApplyLockedStatus();
+            return;
+        }
+
+        IsSaveError = true;
+
         if (result.Status == SettingsSaveStatus.PersistenceFailed)
         {
+            MarkIncludedPathsForRetry(
+                includeWowLogsDirectory,
+                includeRecordingsDirectory,
+                attemptedSettings
+            );
             SaveMessage = $"Could not save settings: {result.Error?.Message}";
             return;
         }
 
-        SaveMessage = "Fix the highlighted settings before saving.";
+        ClearIncludedPathRetries(includeWowLogsDirectory, includeRecordingsDirectory);
+        SaveMessage = FixHighlightedSettingsMessage;
 
         foreach (var error in result.ValidationErrors)
         {
@@ -352,15 +541,33 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void HandleCommandFailure(Exception exception)
     {
+        HandleAutosaveException(
+            exception,
+            includeWowLogsDirectory: false,
+            includeRecordingsDirectory: false,
+            attemptedSettings: null
+        );
+    }
+
+    private void HandleAutosaveException(
+        Exception exception,
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory,
+        PullWatchSettings? attemptedSettings
+    )
+    {
         IsSaveError = true;
+        MarkIncludedPathsForRetry(
+            includeWowLogsDirectory,
+            includeRecordingsDirectory,
+            attemptedSettings
+        );
         SaveMessage = $"Could not save settings: {exception.Message}";
     }
 
     private void LoadSettings(PullWatchSettings settings)
     {
-        _isLoading = true;
-
-        try
+        SetLoadedValue(() =>
         {
             WowLogsDirectory = settings.WowLogsDirectory;
             RecordingsDirectory = settings.RecordingsDirectory;
@@ -372,11 +579,7 @@ public sealed class SettingsViewModel : ObservableObject
             CaptureMicrophone = settings.Audio.CaptureMicrophone;
             CaptureCursor = settings.Video.CaptureCursor;
             ShowCaptureBorder = settings.Video.ShowCaptureBorder;
-        }
-        finally
-        {
-            _isLoading = false;
-        }
+        });
 
         OnPropertyChanged(nameof(EstimatedRecordingSize));
     }
@@ -385,8 +588,6 @@ public sealed class SettingsViewModel : ObservableObject
     {
         WowLogsDirectoryError = null;
         RecordingsDirectoryError = null;
-        SaveMessage = null;
-        IsSaveError = false;
     }
 
     private void SetEditableProperty<T>(
@@ -402,8 +603,23 @@ public sealed class SettingsViewModel : ObservableObject
 
         if (!_isLoading)
         {
-            IsDirty = true;
-            SaveMessage = null;
+            ClearTransientSuccessStatus();
+
+            if (!IsEditingEnabled)
+            {
+                ApplyLockedStatus();
+            }
+            else if (MarkPendingPath(propertyName))
+            {
+                // Path text boxes save only after an explicit commit.
+            }
+            else
+            {
+                _ = QueueAutosaveAsync(
+                    includeWowLogsDirectory: false,
+                    includeRecordingsDirectory: false
+                );
+            }
         }
 
         if (ShouldRefreshEstimate(propertyName))
@@ -412,9 +628,161 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    private bool MarkPendingPath(string? propertyName)
+    {
+        if (propertyName == nameof(WowLogsDirectory))
+        {
+            IsWowLogsDirectoryPending = true;
+            _retryWowLogsDirectoryOnNextAutosave = false;
+            return true;
+        }
+
+        if (propertyName == nameof(RecordingsDirectory))
+        {
+            IsRecordingsDirectoryPending = true;
+            _retryRecordingsDirectoryOnNextAutosave = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void SetLoadedValue(Action update)
+    {
+        _isLoading = true;
+
+        try
+        {
+            update();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ClearTransientSuccessStatus()
+    {
+        if (!IsSaveError && SaveMessage == SettingsSavedMessage)
+        {
+            SaveMessage = null;
+        }
+    }
+
+    private void ApplyLockedStatus()
+    {
+        SaveMessage = SettingsLockedMessage;
+        IsSaveError = false;
+    }
+
+    private void RestoreUnlockedStatus()
+    {
+        if (HasPathErrors())
+        {
+            SaveMessage = FixHighlightedSettingsMessage;
+            IsSaveError = true;
+            return;
+        }
+
+        SaveMessage = null;
+        IsSaveError = false;
+    }
+
+    private bool HasPendingLocalChanges()
+    {
+        lock (_autosaveSync)
+        {
+            return IsWowLogsDirectoryPending
+                || IsRecordingsDirectoryPending
+                || _hasQueuedAutosave
+                || _autosaveTask is { IsCompleted: false };
+        }
+    }
+
+    private void NotifyCommandStatesChanged()
+    {
+        CommitWowLogsDirectoryCommand.NotifyCanExecuteChanged();
+        CommitRecordingsDirectoryCommand.NotifyCanExecuteChanged();
+        PickWowLogsDirectoryCommand.NotifyCanExecuteChanged();
+        PickRecordingsDirectoryCommand.NotifyCanExecuteChanged();
+    }
+
+    private void MarkIncludedPathsForRetry(
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory,
+        PullWatchSettings? attemptedSettings
+    )
+    {
+        if (
+            includeWowLogsDirectory
+            && IsWowLogsDirectoryPending
+            && attemptedSettings is not null
+            && PathsMatchSaved(WowLogsDirectory, attemptedSettings.WowLogsDirectory)
+        )
+        {
+            _retryWowLogsDirectoryOnNextAutosave = true;
+        }
+
+        if (
+            includeRecordingsDirectory
+            && IsRecordingsDirectoryPending
+            && attemptedSettings is not null
+            && PathsMatchSaved(RecordingsDirectory, attemptedSettings.RecordingsDirectory)
+        )
+        {
+            _retryRecordingsDirectoryOnNextAutosave = true;
+        }
+    }
+
+    private void ClearIncludedPathRetries(
+        bool includeWowLogsDirectory,
+        bool includeRecordingsDirectory
+    )
+    {
+        if (includeWowLogsDirectory)
+        {
+            _retryWowLogsDirectoryOnNextAutosave = false;
+        }
+
+        if (includeRecordingsDirectory)
+        {
+            _retryRecordingsDirectoryOnNextAutosave = false;
+        }
+    }
+
     private static string? NormalizeEmpty(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private bool HasPathErrors()
+    {
+        return WowLogsDirectoryError is not null || RecordingsDirectoryError is not null;
+    }
+
+    private static bool PathsMatchSaved(string? currentValue, string? savedValue)
+    {
+        return StringComparer.OrdinalIgnoreCase.Equals(TryNormalizePath(currentValue), savedValue);
+    }
+
+    private static string? TryNormalizePath(string? value)
+    {
+        var normalized = NormalizeEmpty(value);
+
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Path.GetFullPath(Environment.ExpandEnvironmentVariables(normalized));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return normalized;
+        }
     }
 
     private static bool ShouldRefreshEstimate(string? propertyName)

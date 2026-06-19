@@ -4,7 +4,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
-    private readonly ISettingsDialogs _settingsDialogs;
     private readonly InMemoryLogProvider _logs;
     private NavigationItemViewModel _selectedNavigationItem;
 
@@ -19,7 +18,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         _controller = controller;
         _dispatcher = dispatcher;
-        _settingsDialogs = settingsDialogs;
         _logs = logs;
         Recordings = new RecordingsViewModel(
             controller.Status,
@@ -64,18 +62,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            if (ReferenceEquals(_selectedNavigationItem.Content, Settings) && Settings.IsDirty)
-            {
-                if (_settingsDialogs.SaveBeforeLeavingSettings())
-                {
-                    _ = SaveAndSelectAsync(value);
-                    OnPropertyChanged();
-                    return;
-                }
-
-                Settings.DiscardChanges();
-            }
-
             SetProperty(ref _selectedNavigationItem, value);
         }
     }
@@ -105,13 +91,5 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OnLogsChanged()
     {
         _dispatcher.Post(Diagnostics.RefreshLogs);
-    }
-
-    private async Task SaveAndSelectAsync(NavigationItemViewModel navigationItem)
-    {
-        if (await Settings.SaveChangesAsync())
-        {
-            SelectedNavigationItem = navigationItem;
-        }
     }
 }
