@@ -342,7 +342,7 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
-    public void SavedCountStatusChangeRefreshesRecordingsAndPreservesExistingSelection()
+    public void SavedCountStatusChangeSelectsCompletedRecording()
     {
         var directory = CreateTempDirectory();
 
@@ -360,18 +360,27 @@ public sealed class RecordingsViewModelTests
                 "newer",
                 new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)
             );
+            var completedPath = Path.Combine(directory, "completed.mp4");
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory)
             );
             viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
                 recording.Path == older
             );
+            viewModel.ApplyStatus(
+                Status(
+                    RecordingCoordinatorState.Recording,
+                    new ManualRecordingContext(DateTimeOffset.Now),
+                    recordingsDirectory: directory,
+                    activeOutputPath: completedPath
+                )
+            );
 
             WriteRecording(
                 directory,
-                "newest.mp4",
-                "newest",
-                new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc)
+                "completed.mp4",
+                "completed",
+                new DateTime(2026, 6, 15, 10, 30, 0, DateTimeKind.Utc)
             );
             viewModel.ApplyStatus(
                 Status(
@@ -381,8 +390,8 @@ public sealed class RecordingsViewModelTests
                 )
             );
 
-            Assert.Equal(older, viewModel.SelectedRecording?.Path);
-            Assert.Equal("newest", viewModel.Recordings[0].DisplayName);
+            Assert.Equal(completedPath, viewModel.SelectedRecording?.Path);
+            Assert.Equal("newer", viewModel.Recordings[0].DisplayName);
         }
         finally
         {
@@ -432,7 +441,8 @@ public sealed class RecordingsViewModelTests
         Exception? combatLogError = null,
         WowProcessState wowProcessState = WowProcessState.WindowAvailable,
         int? wowProcessId = 10,
-        string? wowWindowTitle = "World of Warcraft"
+        string? wowWindowTitle = "World of Warcraft",
+        string? activeOutputPath = null
     )
     {
         RecordingOwner? owner = context switch
@@ -453,7 +463,9 @@ public sealed class RecordingsViewModelTests
                 null,
                 null,
                 lastFailure,
-                state == RecordingCoordinatorState.Idle ? null : @"C:\Recordings\active.mp4"
+                state == RecordingCoordinatorState.Idle
+                    ? null
+                    : activeOutputPath ?? @"C:\Recordings\active.mp4"
             )
             {
                 Statistics = new RecordingStatistics(0, savedCount),

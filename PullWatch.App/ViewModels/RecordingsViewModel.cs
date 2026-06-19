@@ -122,6 +122,7 @@ public sealed class RecordingsViewModel : ObservableObject
     {
         var previousDirectory = _recordingsDirectory;
         var previousSavedCount = _knownSavedCount;
+        var previousActiveOutputPath = _recording.ActiveOutputPath;
         _recording = status.Recording;
         _combatLog = status.CombatLog;
         _wowProcess = status.WowProcess;
@@ -139,7 +140,11 @@ public sealed class RecordingsViewModel : ObservableObject
             || previousSavedCount != _knownSavedCount
         )
         {
-            RefreshRecordings();
+            var savedRecordingCompleted = _knownSavedCount > previousSavedCount;
+            RefreshRecordings(
+                savedRecordingCompleted ? previousActiveOutputPath : null,
+                savedRecordingCompleted
+            );
         }
 
         OnAllPropertiesChanged();
@@ -161,9 +166,12 @@ public sealed class RecordingsViewModel : ObservableObject
         _recording.State == RecordingCoordinatorState.Recording
         || (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
 
-    internal void RefreshRecordings()
+    internal void RefreshRecordings(
+        string? preferredSelectionPath = null,
+        bool preferMostRecent = false
+    )
     {
-        var selectedPath = SelectedRecording?.Path;
+        var existingSelectionPath = SelectedRecording?.Path;
         Recordings.Clear();
 
         if (string.IsNullOrWhiteSpace(_recordingsDirectory))
@@ -180,9 +188,18 @@ public sealed class RecordingsViewModel : ObservableObject
                 Recordings.Add(recording);
             }
 
+            var preferredRecording = string.IsNullOrWhiteSpace(preferredSelectionPath)
+                ? null
+                : Recordings.FirstOrDefault(recording =>
+                    PathsEqual(recording.Path, preferredSelectionPath)
+                );
+            var existingSelection = preferMostRecent
+                ? null
+                : Recordings.FirstOrDefault(recording =>
+                    PathsEqual(recording.Path, existingSelectionPath)
+                );
             SelectedRecording =
-                Recordings.FirstOrDefault(recording => PathsEqual(recording.Path, selectedPath))
-                ?? Recordings.FirstOrDefault();
+                preferredRecording ?? existingSelection ?? Recordings.FirstOrDefault();
             RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
