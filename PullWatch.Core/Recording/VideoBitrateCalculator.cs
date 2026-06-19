@@ -80,7 +80,7 @@ public static class VideoBitrateCalculator
         {
             < 10 => (int)Math.Round(megabits, MidpointRounding.AwayFromZero),
             < 30 => (int)(Math.Round(megabits / 2d, MidpointRounding.AwayFromZero) * 2),
-            _ => (int)(Math.Round(megabits / 5d, MidpointRounding.AwayFromZero) * 5)
+            _ => (int)(Math.Round(megabits / 5d, MidpointRounding.AwayFromZero) * 5),
         };
     }
 }
