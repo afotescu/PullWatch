@@ -27,6 +27,11 @@ public sealed class DiagnosticsReportBuilderTests
                 CombatLogReaderState.ReadingCombatLog,
                 @"C:\World of Warcraft\_retail_\Logs\WoWCombatLog.txt",
                 DateTimeOffset.UtcNow,
+                null),
+            new WowProcessStatus(
+                WowProcessState.WindowAvailable,
+                1234,
+                "World of Warcraft",
                 null));
 
         var report = DiagnosticsReportBuilder.Build(
@@ -42,6 +47,8 @@ public sealed class DiagnosticsReportBuilderTests
 
         Assert.Contains("App version: 1.2.3", report);
         Assert.Contains(status.CombatLog.CurrentPath!, report);
+        Assert.Contains("WindowAvailable", report);
+        Assert.Contains("1234", report);
         Assert.Contains(status.Recording.ActiveOutputPath!, report);
         Assert.Contains("recorder failed", report);
         Assert.Contains("\"RecordingsDirectory\": \"D:\\\\Recordings\"", report);

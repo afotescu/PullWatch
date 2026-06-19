@@ -3,10 +3,10 @@ namespace PullWatch.Tests;
 public sealed class RecordingsViewModelTests
 {
     [Theory]
-    [InlineData(RecordingCoordinatorState.Idle, "Ready to record", true, false, "Manual start")]
-    [InlineData(RecordingCoordinatorState.Starting, "Starting recording", false, false, "Manual start")]
+    [InlineData(RecordingCoordinatorState.Idle, "Ready", true, false, "Manual start")]
+    [InlineData(RecordingCoordinatorState.Starting, "Processing", false, false, "Manual start")]
     [InlineData(RecordingCoordinatorState.Recording, "Recording", true, true, "Manual stop")]
-    [InlineData(RecordingCoordinatorState.Stopping, "Finalizing recording", false, false, "Manual start")]
+    [InlineData(RecordingCoordinatorState.Stopping, "Processing", false, false, "Manual start")]
     public void AppliesEveryRecordingState(
         RecordingCoordinatorState state,
         string expectedTitle,
@@ -20,6 +20,74 @@ public sealed class RecordingsViewModelTests
         Assert.Equal(canRunManualCommand, viewModel.ManualRecordingCommand.CanExecute(null));
         Assert.Equal(isManualStopMode, viewModel.IsManualStopMode);
         Assert.Equal(expectedManualButtonText, viewModel.ManualRecordingButtonText);
+    }
+
+    [Fact]
+    public void ReadingCombatLogReportsAutomaticReadiness()
+    {
+        var viewModel = CreateViewModel(Status(
+            RecordingCoordinatorState.Idle,
+            combatLogState: CombatLogReaderState.ReadingCombatLog,
+            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt"));
+
+        Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.Equal("Ready", viewModel.StatusHealth);
+        Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(CombatLogReaderState.WaitingForLogsDirectory)]
+    [InlineData(CombatLogReaderState.WaitingForCombatLog)]
+    public void MissingCombatLogPrerequisitesReportManualOnly(
+        CombatLogReaderState combatLogState)
+    {
+        var viewModel = CreateViewModel(Status(
+            RecordingCoordinatorState.Idle,
+            combatLogState: combatLogState));
+
+        Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.Equal("Manual only", viewModel.StatusHealth);
+        Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CombatLogErrorReportsAttentionWithoutDisablingManualRecording()
+    {
+        var viewModel = CreateViewModel(Status(
+            RecordingCoordinatorState.Idle,
+            combatLogState: CombatLogReaderState.ReadingCombatLog,
+            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
+            combatLogError: new IOException("Access denied.")));
+
+        Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.Equal("Attention needed", viewModel.StatusHealth);
+        Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void MissingWowWindowDisablesManualRecordingAndAutomaticReadiness()
+    {
+        var viewModel = CreateViewModel(Status(
+            RecordingCoordinatorState.Idle,
+            combatLogState: CombatLogReaderState.ReadingCombatLog,
+            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
+            wowProcessState: WowProcessState.WaitingForProcess));
+
+        Assert.Equal("Waiting", viewModel.StateTitle);
+        Assert.Equal("Waiting", viewModel.StatusHealth);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void WowProcessWithoutWindowDisablesManualRecording()
+    {
+        var viewModel = CreateViewModel(Status(
+            RecordingCoordinatorState.Idle,
+            wowProcessState: WowProcessState.WaitingForWindow,
+            wowProcessId: 42));
+
+        Assert.Equal("Waiting", viewModel.StateTitle);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
     [Fact]
@@ -112,7 +180,7 @@ public sealed class RecordingsViewModelTests
 
         Assert.True(viewModel.IsFailureVisible);
         Assert.Equal("finalization failed", viewModel.FailureMessage);
-        Assert.Equal("Ready to record", viewModel.StateTitle);
+        Assert.Equal("Ready", viewModel.StateTitle);
     }
 
     [Fact]
@@ -270,7 +338,13 @@ public sealed class RecordingsViewModelTests
         RecordingContext? context = null,
         Exception? lastFailure = null,
         string? recordingsDirectory = null,
-        int savedCount = 0)
+        int savedCount = 0,
+        CombatLogReaderState combatLogState = CombatLogReaderState.WaitingForCombatLog,
+        string? combatLogPath = null,
+        Exception? combatLogError = null,
+        WowProcessState wowProcessState = WowProcessState.WindowAvailable,
+        int? wowProcessId = 10,
+        string? wowWindowTitle = "World of Warcraft")
     {
         RecordingOwner? owner = context switch
         {
@@ -298,9 +372,14 @@ public sealed class RecordingsViewModelTests
                 Statistics = new RecordingStatistics(0, savedCount)
             },
             new CombatLogReaderStatus(
-                CombatLogReaderState.WaitingForCombatLog,
+                combatLogState,
+                combatLogPath,
                 null,
-                null,
+                combatLogError),
+            new WowProcessStatus(
+                wowProcessState,
+                wowProcessId,
+                wowWindowTitle,
                 null));
     }
 

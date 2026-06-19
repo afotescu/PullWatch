@@ -35,6 +35,11 @@ public sealed class DiagnosticsViewModelTests
                 CombatLogReaderState.WaitingForCombatLog,
                 null,
                 null,
+                null),
+            new WowProcessStatus(
+                WowProcessState.WaitingForProcess,
+                null,
+                null,
                 null));
     }
 

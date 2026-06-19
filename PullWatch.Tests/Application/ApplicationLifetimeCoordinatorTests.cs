@@ -112,6 +112,11 @@ public sealed class ApplicationLifetimeCoordinatorTests
                 CombatLogReaderState.WaitingForCombatLog,
                 null,
                 null,
+                null),
+            new WowProcessStatus(
+                WowProcessState.WaitingForProcess,
+                null,
+                null,
                 null));
     }
 }

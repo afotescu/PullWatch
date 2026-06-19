@@ -77,6 +77,30 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task StartupStartsWowProcessMonitoringAndAggregatesStatus()
+    {
+        using var directory = new TemporaryDirectory();
+        var wowMonitor = new FakeWowProcessMonitor();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            () => wowMonitor);
+        var status = new WowProcessStatus(
+            WowProcessState.WindowAvailable,
+            1234,
+            "World of Warcraft",
+            null);
+
+        await WaitForAsync(() => wowMonitor.Started);
+        wowMonitor.Publish(status);
+        await WaitForAsync(() => controller.Status.WowProcess == status);
+
+        Assert.Equal(status, controller.Status.WowProcess);
+    }
+
+    [Fact]
     public async Task ManualCommandsExposeActivePathAndClearItWhenStopped()
     {
         using var directory = new TemporaryDirectory();
@@ -291,7 +315,8 @@ public sealed class ApplicationControllerTests
         string rootDirectory,
         string? logsDirectory,
         FakeRecordingService recorder,
-        Func<string, ICombatLogMonitor> createMonitor)
+        Func<string, ICombatLogMonitor> createMonitor,
+        Func<IWowProcessMonitor>? createWowProcessMonitor = null)
     {
         var store = new SettingsStore(Path.Combine(rootDirectory, "settings.json"));
         await store.SaveAsync(
@@ -309,7 +334,8 @@ public sealed class ApplicationControllerTests
             bootstrapper,
             _ => recorder,
             createMonitor,
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            createWowProcessMonitor);
         await controller.StartAsync(TestContext.Current.CancellationToken);
         return controller;
     }

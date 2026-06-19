@@ -26,6 +26,12 @@ public static class DiagnosticsReportBuilder
         report.AppendLine($"Last successful read: {Value(status.CombatLog.LastSuccessfulReadTime)}");
         report.AppendLine($"Last filesystem error: {Value(status.CombatLog.LastFileSystemError)}");
         report.AppendLine();
+        report.AppendLine("World of Warcraft");
+        report.AppendLine($"State: {status.WowProcess.State}");
+        report.AppendLine($"Process id: {Value(status.WowProcess.ProcessId)}");
+        report.AppendLine($"Window title: {Value(status.WowProcess.MainWindowTitle)}");
+        report.AppendLine($"Last process error: {Value(status.WowProcess.LastError)}");
+        report.AppendLine();
         report.AppendLine("Recorder");
         report.AppendLine($"State: {status.Recording.State}");
         report.AppendLine($"Owner: {Value(status.Recording.Owner)}");

@@ -33,6 +33,14 @@ public sealed class DiagnosticsViewModel : ObservableObject
 
     public string LastFileSystemError => Value(_status.CombatLog.LastFileSystemError);
 
+    public string WowProcessState => _status.WowProcess.State.ToString();
+
+    public string WowProcessId => Value(_status.WowProcess.ProcessId);
+
+    public string WowWindowTitle => Value(_status.WowProcess.MainWindowTitle);
+
+    public string WowProcessError => Value(_status.WowProcess.LastError);
+
     public string RecordingState => _status.Recording.State.ToString();
 
     public string RecordingOwner => Value(_status.Recording.Owner);

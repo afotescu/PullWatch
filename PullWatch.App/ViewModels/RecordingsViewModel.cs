@@ -14,6 +14,7 @@ public sealed class RecordingsViewModel : ObservableObject
     private readonly Func<Task> _openRecordingsFolder;
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
+    private WowProcessStatus _wowProcess;
     private string? _recordingsDirectory;
     private Exception? _dismissedFailure;
     private string _duration = "00:00:00";
@@ -30,6 +31,7 @@ public sealed class RecordingsViewModel : ObservableObject
     {
         _recording = initialStatus.Recording;
         _combatLog = initialStatus.CombatLog;
+        _wowProcess = initialStatus.WowProcess;
         _recordingsDirectory = initialStatus.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = initialStatus.Recording.Statistics.SavedCount;
         _startManual = startManual;
@@ -55,7 +57,11 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public RelayCommand DismissFailureCommand { get; }
 
-    public string StateTitle => GetStateTitle(_recording.State);
+    public string StateTitle => GetStateTitle(_recording, _wowProcess);
+
+    public string ReadinessDetail => GetReadinessDetail(_recording, _combatLog, _wowProcess);
+
+    public string StatusHealth => GetStatusHealth(_recording, _combatLog, _wowProcess);
 
     public string Duration
     {
@@ -117,6 +123,7 @@ public sealed class RecordingsViewModel : ObservableObject
         var previousSavedCount = _knownSavedCount;
         _recording = status.Recording;
         _combatLog = status.CombatLog;
+        _wowProcess = status.WowProcess;
         _recordingsDirectory = status.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = status.Recording.Statistics.SavedCount;
 
@@ -147,7 +154,8 @@ public sealed class RecordingsViewModel : ObservableObject
     }
 
     private bool CanRunManualCommand =>
-        _recording.State is RecordingCoordinatorState.Idle or RecordingCoordinatorState.Recording;
+        _recording.State == RecordingCoordinatorState.Recording ||
+        (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
 
     internal static string FormatDuration(TimeSpan duration)
     {
@@ -257,15 +265,106 @@ public sealed class RecordingsViewModel : ObservableObject
         CommandMessage = $"Command failed: {exception.Message}";
     }
 
-    private static string GetStateTitle(RecordingCoordinatorState state)
+    private static string GetStateTitle(
+        RecordingCoordinatorStatus recording,
+        WowProcessStatus wowProcess)
     {
-        return state switch
+        return recording.State switch
         {
-            RecordingCoordinatorState.Starting => "Starting recording",
+            RecordingCoordinatorState.Starting => "Processing",
             RecordingCoordinatorState.Recording => "Recording",
-            RecordingCoordinatorState.Stopping => "Finalizing recording",
-            _ => "Ready to record"
+            RecordingCoordinatorState.Stopping => "Processing",
+            _ when !wowProcess.IsWindowAvailable => "Waiting",
+            _ => "Ready"
         };
+    }
+
+    private static string GetReadinessDetail(
+        RecordingCoordinatorStatus recording,
+        CombatLogReaderStatus combatLog,
+        WowProcessStatus wowProcess)
+    {
+        if (recording.State == RecordingCoordinatorState.Starting)
+        {
+            return "Opening the WoW window capture.";
+        }
+
+        if (recording.State == RecordingCoordinatorState.Recording)
+        {
+            return recording.Owner == RecordingOwner.Manual
+                ? "Manual recording is active."
+                : "Automatic recording is active.";
+        }
+
+        if (recording.State == RecordingCoordinatorState.Stopping)
+        {
+            return "Saving the recording.";
+        }
+
+        if (!wowProcess.IsWindowAvailable)
+        {
+            return wowProcess.State == WowProcessState.WaitingForWindow
+                ? "World of Warcraft is running, but no game window is available yet."
+                : "Start World of Warcraft to enable manual and automatic recording.";
+        }
+
+        if (combatLog.LastFileSystemError is not null)
+        {
+            var message = string.IsNullOrWhiteSpace(combatLog.LastFileSystemError.Message)
+                ? combatLog.LastFileSystemError.GetType().Name
+                : combatLog.LastFileSystemError.Message.TrimEnd('.', ' ', '\t', '\r', '\n');
+            return $"Automatic recording cannot read combat logs: {message}. Manual recording is ready.";
+        }
+
+        return combatLog.State switch
+        {
+            CombatLogReaderState.WaitingForLogsDirectory =>
+                "Manual recording is ready. Automatic recording is waiting for the WoW logs folder.",
+            CombatLogReaderState.WaitingForCombatLog =>
+                "Manual recording is ready. Enable combat logging in WoW for automatic recording.",
+            CombatLogReaderState.SwitchingCombatLog =>
+                "Automatic recording is switching combat logs. Manual recording is ready.",
+            CombatLogReaderState.ReadingCombatLog =>
+                "Automatic recording is watching combat logs. Manual recording is ready.",
+            _ => "Manual recording is ready."
+        };
+    }
+
+    private static string GetStatusHealth(
+        RecordingCoordinatorStatus recording,
+        CombatLogReaderStatus combatLog,
+        WowProcessStatus wowProcess)
+    {
+        if (recording.LastFailure is not null &&
+            !IsTargetUnavailableFailure(recording.LastFailure))
+        {
+            return "Attention needed";
+        }
+
+        if (recording.State != RecordingCoordinatorState.Idle)
+        {
+            return "Active";
+        }
+
+        if (!wowProcess.IsWindowAvailable)
+        {
+            return "Waiting";
+        }
+
+        if (combatLog.LastFileSystemError is not null)
+        {
+            return "Attention needed";
+        }
+
+        return IsAutomaticRecordingReady(combatLog)
+            ? "Ready"
+            : "Manual only";
+    }
+
+    private static bool IsAutomaticRecordingReady(CombatLogReaderStatus combatLog)
+    {
+        return combatLog.State == CombatLogReaderState.ReadingCombatLog &&
+               combatLog.LastFileSystemError is null;
     }
 
     private static string? GetCommandMessage(

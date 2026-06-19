@@ -49,10 +49,13 @@
                                         <Style TargetType="Ellipse">
                                             <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Recordings.RecorderHealth}" Value="Active">
+                                                <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Active">
                                                     <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding Recordings.RecorderHealth}" Value="Attention needed">
+                                                <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Ready">
+                                                    <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Attention needed">
                                                     <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
                                                 </DataTrigger>
                                             </Style.Triggers>

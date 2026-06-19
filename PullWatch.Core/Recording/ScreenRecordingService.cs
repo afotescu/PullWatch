@@ -47,7 +47,7 @@ public sealed class ScreenRecordingService(
             LogRecorderPreflight(context);
 
             var sourceLookupTimestamp = Stopwatch.GetTimestamp();
-            var (wowProcess, recordingSource, sourceDescription) = CreateRecordingSource(context, settings);
+            var (wowProcess, recordingSource, sourceDescription) = CreateRecordingSource(settings);
             _wowProcess = wowProcess;
             logger.LogInformation(
                 "Located recording source {RecordingSource} in {ElapsedMilliseconds:F1} ms",
@@ -204,21 +204,8 @@ public sealed class ScreenRecordingService(
     }
 
     private static (Process? WowProcess, RecordingSourceBase RecordingSource, string Description) CreateRecordingSource(
-        RecordingContext context,
         PullWatchSettings settings)
     {
-        if (context is ManualRecordingContext &&
-            settings.Video.CaptureMainDisplayForManualRecordings)
-        {
-            var mainMonitor = DisplayRecordingSource.MainMonitor
-                ?? throw new InvalidOperationException("Could not find a main display to record.");
-
-            mainMonitor.IsBorderRequired = settings.Video.ShowCaptureBorder;
-            mainMonitor.IsCursorCaptureEnabled = settings.Video.CaptureCursor;
-
-            return (null, mainMonitor, "main display");
-        }
-
         var (wowProcess, windowHandle) = FindWowProcess();
         return (
             wowProcess,
