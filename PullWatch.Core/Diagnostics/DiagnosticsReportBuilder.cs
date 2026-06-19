@@ -5,15 +5,13 @@ namespace PullWatch;
 
 public static class DiagnosticsReportBuilder
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static string Build(
         string appVersion,
         ApplicationStatus status,
-        IReadOnlyList<ApplicationLogEntry> logs)
+        IReadOnlyList<ApplicationLogEntry> logs
+    )
     {
         var report = new StringBuilder();
         report.AppendLine("PullWatch Diagnostics");
@@ -23,7 +21,9 @@ public static class DiagnosticsReportBuilder
         report.AppendLine("Combat Log");
         report.AppendLine($"State: {status.CombatLog.State}");
         report.AppendLine($"Active path: {Value(status.CombatLog.CurrentPath)}");
-        report.AppendLine($"Last successful read: {Value(status.CombatLog.LastSuccessfulReadTime)}");
+        report.AppendLine(
+            $"Last successful read: {Value(status.CombatLog.LastSuccessfulReadTime)}"
+        );
         report.AppendLine($"Last filesystem error: {Value(status.CombatLog.LastFileSystemError)}");
         report.AppendLine();
         report.AppendLine("World of Warcraft");
@@ -39,16 +39,17 @@ public static class DiagnosticsReportBuilder
         report.AppendLine($"Last failure: {Value(status.Recording.LastFailure)}");
         report.AppendLine();
         report.AppendLine("Effective Settings");
-        report.AppendLine(status.EffectiveSettings is null
-            ? "(not loaded)"
-            : JsonSerializer.Serialize(status.EffectiveSettings, JsonOptions));
+        report.AppendLine(
+            status.EffectiveSettings is null
+                ? "(not loaded)"
+                : JsonSerializer.Serialize(status.EffectiveSettings, JsonOptions)
+        );
         report.AppendLine();
         report.AppendLine("Recent Application Logs");
 
         foreach (var log in logs)
         {
-            report.AppendLine(
-                $"{log.Timestamp:O} [{log.Level}] {log.Category}: {log.Message}");
+            report.AppendLine($"{log.Timestamp:O} [{log.Level}] {log.Category}: {log.Message}");
 
             if (log.Exception is not null)
             {

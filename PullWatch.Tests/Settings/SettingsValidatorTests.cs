@@ -11,8 +11,10 @@ public sealed class SettingsValidatorTests
         Assert.Equal(
             Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-                "PullWatch"),
-            result.Settings!.RecordingsDirectory);
+                "PullWatch"
+            ),
+            result.Settings!.RecordingsDirectory
+        );
     }
 
     [Theory]
@@ -22,14 +24,12 @@ public sealed class SettingsValidatorTests
     [InlineData(60, 200_000_001)]
     public void RejectsEntireSettingsObjectWhenAnyValueIsInvalid(int frameRate, int bitrate)
     {
-        var result = SettingsValidator.Validate(new PullWatchSettings
-        {
-            Video = new VideoSettings
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
             {
-                FrameRate = frameRate,
-                Bitrate = bitrate
+                Video = new VideoSettings { FrameRate = frameRate, Bitrate = bitrate },
             }
-        });
+        );
 
         Assert.False(result.IsValid);
         Assert.Null(result.Settings);
@@ -41,12 +41,12 @@ public sealed class SettingsValidatorTests
     {
         var unavailablePath = Path.Combine(
             Path.GetTempPath(),
-            $"PullWatch-Missing-{Guid.NewGuid():N}");
+            $"PullWatch-Missing-{Guid.NewGuid():N}"
+        );
 
-        var result = SettingsValidator.Validate(new PullWatchSettings
-        {
-            WowLogsDirectory = unavailablePath
-        });
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { WowLogsDirectory = unavailablePath }
+        );
 
         Assert.True(result.IsValid);
         Assert.Equal(Path.GetFullPath(unavailablePath), result.Settings!.WowLogsDirectory);
@@ -59,10 +59,12 @@ public sealed class SettingsValidatorTests
         var original = SettingsValidator.Validate(new PullWatchSettings()).Settings!;
         var provider = new SettingsProvider(original);
 
-        var result = provider.TryUpdate(original with
-        {
-            Video = original.Video with { FrameRate = 0 }
-        });
+        var result = provider.TryUpdate(
+            original with
+            {
+                Video = original.Video with { FrameRate = 0 },
+            }
+        );
 
         Assert.False(result.IsValid);
         Assert.Same(original, provider.Current);

@@ -2,7 +2,8 @@ namespace PullWatch;
 
 public sealed record SettingsValidationResult(
     PullWatchSettings? Settings,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<string> Errors
+)
 {
     public bool IsValid => Settings is not null;
 }
@@ -23,7 +24,8 @@ public static class SettingsValidator
         if (settings.Version != PullWatchSettings.CurrentVersion)
         {
             errors.Add(
-                $"Settings version must be {PullWatchSettings.CurrentVersion}, but was {settings.Version}.");
+                $"Settings version must be {PullWatchSettings.CurrentVersion}, but was {settings.Version}."
+            );
         }
 
         if (settings.Video is null)
@@ -35,13 +37,15 @@ public static class SettingsValidator
             if (settings.Video.FrameRate is < MinimumFrameRate or > MaximumFrameRate)
             {
                 errors.Add(
-                    $"Video frame rate must be between {MinimumFrameRate} and {MaximumFrameRate}.");
+                    $"Video frame rate must be between {MinimumFrameRate} and {MaximumFrameRate}."
+                );
             }
 
             if (settings.Video.Bitrate is < MinimumBitrate or > MaximumBitrate)
             {
                 errors.Add(
-                    $"Video bitrate must be between {MinimumBitrate} and {MaximumBitrate} bits per second.");
+                    $"Video bitrate must be between {MinimumBitrate} and {MaximumBitrate} bits per second."
+                );
             }
         }
 
@@ -62,11 +66,10 @@ public static class SettingsValidator
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",
-            errors);
-        var recordingsDirectory = NormalizeOptionalPath(
-                settings.RecordingsDirectory,
-                "Recordings directory",
-                errors)
+            errors
+        );
+        var recordingsDirectory =
+            NormalizeOptionalPath(settings.RecordingsDirectory, "Recordings directory", errors)
             ?? GetDefaultRecordingsDirectory();
 
         ValidateRecordingsDirectory(recordingsDirectory, errors);
@@ -76,9 +79,10 @@ public static class SettingsValidator
                 settings with
                 {
                     WowLogsDirectory = wowLogsDirectory,
-                    RecordingsDirectory = recordingsDirectory
+                    RecordingsDirectory = recordingsDirectory,
                 },
-                errors)
+                errors
+            )
             : new SettingsValidationResult(null, errors);
     }
 
@@ -86,13 +90,15 @@ public static class SettingsValidator
     {
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-            "PullWatch");
+            "PullWatch"
+        );
     }
 
     private static string? NormalizeOptionalPath(
         string? path,
         string description,
-        ICollection<string> errors)
+        ICollection<string> errors
+    )
     {
         if (path is null)
         {
@@ -109,8 +115,8 @@ public static class SettingsValidator
         {
             return Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
             errors.Add($"{description} is invalid: {exception.Message}");
             return null;
@@ -124,9 +130,7 @@ public static class SettingsValidator
         try
         {
             Directory.CreateDirectory(path);
-            using (File.Create(probePath))
-            {
-            }
+            using (File.Create(probePath)) { }
 
             File.Delete(probePath);
         }

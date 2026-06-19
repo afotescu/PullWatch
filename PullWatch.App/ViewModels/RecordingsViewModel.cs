@@ -6,7 +6,8 @@ namespace PullWatch;
 public sealed class RecordingsViewModel : ObservableObject
 {
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
-    private const string NoRecordingsDirectoryMessage = "Choose a recordings directory in settings to review videos here.";
+    private const string NoRecordingsDirectoryMessage =
+        "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
@@ -27,7 +28,8 @@ public sealed class RecordingsViewModel : ObservableObject
         ApplicationStatus initialStatus,
         Func<CancellationToken, Task<RecordingCommandResult>> startManual,
         Func<CancellationToken, Task<RecordingCommandResult>> stopManual,
-        Func<Task> openRecordingsFolder)
+        Func<Task> openRecordingsFolder
+    )
     {
         _recording = initialStatus.Recording;
         _combatLog = initialStatus.CombatLog;
@@ -40,10 +42,12 @@ public sealed class RecordingsViewModel : ObservableObject
         ManualRecordingCommand = new AsyncRelayCommand(
             ToggleManualRecordingAsync,
             () => CanRunManualCommand,
-            HandleCommandFailure);
+            HandleCommandFailure
+        );
         OpenRecordingsFolderCommand = new AsyncRelayCommand(
             OpenRecordingsFolderAsync,
-            onException: HandleCommandFailure);
+            onException: HandleCommandFailure
+        );
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
         RefreshRecordings();
@@ -61,7 +65,8 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public string ReadinessDetail => GetReadinessDetail(_recording, _combatLog, _wowProcess);
 
-    public RecordingStatusHealth StatusHealth => GetStatusHealth(_recording, _combatLog, _wowProcess);
+    public RecordingStatusHealth StatusHealth =>
+        GetStatusHealth(_recording, _combatLog, _wowProcess);
 
     public string Duration
     {
@@ -89,16 +94,14 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
 
-    public RecordingStatusHealth RecorderHealth => _recording.LastFailure is not null &&
-                                    !IsTargetUnavailableFailure(_recording.LastFailure)
-        ? RecordingStatusHealth.AttentionNeeded
-        : _recording.State == RecordingCoordinatorState.Idle
-            ? RecordingStatusHealth.Idle
-            : RecordingStatusHealth.Active;
+    public RecordingStatusHealth RecorderHealth =>
+        _recording.LastFailure is not null && !IsTargetUnavailableFailure(_recording.LastFailure)
+            ? RecordingStatusHealth.AttentionNeeded
+        : _recording.State == RecordingCoordinatorState.Idle ? RecordingStatusHealth.Idle
+        : RecordingStatusHealth.Active;
 
-    public string? FailureMessage => IsTargetUnavailableFailure(_recording.LastFailure)
-        ? null
-        : _recording.LastFailure?.Message;
+    public string? FailureMessage =>
+        IsTargetUnavailableFailure(_recording.LastFailure) ? null : _recording.LastFailure?.Message;
 
     public string? CommandMessage
     {
@@ -107,15 +110,13 @@ public sealed class RecordingsViewModel : ObservableObject
     }
 
     public bool IsFailureVisible =>
-        _recording.LastFailure is not null &&
-        !IsTargetUnavailableFailure(_recording.LastFailure) &&
-        !ReferenceEquals(_recording.LastFailure, _dismissedFailure);
+        _recording.LastFailure is not null
+        && !IsTargetUnavailableFailure(_recording.LastFailure)
+        && !ReferenceEquals(_recording.LastFailure, _dismissedFailure);
 
     public bool IsManualStopMode => _recording.State == RecordingCoordinatorState.Recording;
 
-    public string ManualRecordingButtonText => IsManualStopMode
-        ? "Manual stop"
-        : "Manual start";
+    public string ManualRecordingButtonText => IsManualStopMode ? "Manual stop" : "Manual start";
 
     public void ApplyStatus(ApplicationStatus status)
     {
@@ -127,15 +128,16 @@ public sealed class RecordingsViewModel : ObservableObject
         _recordingsDirectory = status.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = status.Recording.Statistics.SavedCount;
 
-        if (CommandMessage == "The recording command failed." &&
-            _recording.LastFailure is not null)
+        if (CommandMessage == "The recording command failed." && _recording.LastFailure is not null)
         {
             CommandMessage = GetFailureCommandMessage(_recording.LastFailure);
         }
 
         UpdateDuration();
-        if (!PathsEqual(previousDirectory, _recordingsDirectory) ||
-            previousSavedCount != _knownSavedCount)
+        if (
+            !PathsEqual(previousDirectory, _recordingsDirectory)
+            || previousSavedCount != _knownSavedCount
+        )
         {
             RefreshRecordings();
         }
@@ -147,15 +149,15 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public void UpdateDuration(DateTimeOffset? now = null)
     {
-        Duration = _recording.Context is null ||
-                   _recording.State == RecordingCoordinatorState.Idle
-            ? "00:00:00"
-            : FormatDuration((now ?? DateTimeOffset.Now) - _recording.Context.StartedAt);
+        Duration =
+            _recording.Context is null || _recording.State == RecordingCoordinatorState.Idle
+                ? "00:00:00"
+                : FormatDuration((now ?? DateTimeOffset.Now) - _recording.Context.StartedAt);
     }
 
     private bool CanRunManualCommand =>
-        _recording.State == RecordingCoordinatorState.Recording ||
-        (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
+        _recording.State == RecordingCoordinatorState.Recording
+        || (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
 
     internal static string FormatDuration(TimeSpan duration)
     {
@@ -185,11 +187,9 @@ public sealed class RecordingsViewModel : ObservableObject
             }
 
             SelectedRecording =
-                Recordings.FirstOrDefault(recording => PathsEqual(recording.Path, selectedPath)) ??
-                Recordings.FirstOrDefault();
-            RecordingLibraryStatus = Recordings.Count == 0
-                ? NoRecordingsMessage
-                : string.Empty;
+                Recordings.FirstOrDefault(recording => PathsEqual(recording.Path, selectedPath))
+                ?? Recordings.FirstOrDefault();
+            RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -213,7 +213,8 @@ public sealed class RecordingsViewModel : ObservableObject
                 file.FullName,
                 System.IO.Path.GetFileNameWithoutExtension(file.Name),
                 file.LastWriteTime,
-                file.Length))
+                file.Length
+            ))
             .ToList();
     }
 
@@ -229,7 +230,8 @@ public sealed class RecordingsViewModel : ObservableObject
         CommandMessage = GetCommandMessage(
             await _startManual(CancellationToken.None),
             "Manual recording started.",
-            _recording.LastFailure);
+            _recording.LastFailure
+        );
     }
 
     private async Task StopManualAsync()
@@ -237,7 +239,8 @@ public sealed class RecordingsViewModel : ObservableObject
         CommandMessage = GetCommandMessage(
             await _stopManual(CancellationToken.None),
             "Recording stopped.",
-            _recording.LastFailure);
+            _recording.LastFailure
+        );
     }
 
     private async Task OpenRecordingsFolderAsync()
@@ -267,7 +270,8 @@ public sealed class RecordingsViewModel : ObservableObject
 
     private static string GetStateTitle(
         RecordingCoordinatorStatus recording,
-        WowProcessStatus wowProcess)
+        WowProcessStatus wowProcess
+    )
     {
         return recording.State switch
         {
@@ -275,31 +279,26 @@ public sealed class RecordingsViewModel : ObservableObject
             RecordingCoordinatorState.Recording => "Recording",
             RecordingCoordinatorState.Stopping => "Processing",
             _ when !wowProcess.IsWindowAvailable => "Waiting",
-            _ => "Ready"
+            _ => "Ready",
         };
     }
 
     private static string GetReadinessDetail(
         RecordingCoordinatorStatus recording,
         CombatLogReaderStatus combatLog,
-        WowProcessStatus wowProcess)
+        WowProcessStatus wowProcess
+    )
     {
         if (recording.State == RecordingCoordinatorState.Starting)
         {
-            return JoinSentences(
-                "WoW is running.",
-                "Starting recording.");
+            return JoinSentences("WoW is running.", "Starting recording.");
         }
 
         if (recording.State == RecordingCoordinatorState.Recording)
         {
             return recording.Owner == RecordingOwner.Manual
-                ? JoinSentences(
-                    "WoW is running.",
-                    "Manual recording is active.")
-                : JoinSentences(
-                    "WoW is running.",
-                    "Automatic recording is active.");
+                ? JoinSentences("WoW is running.", "Manual recording is active.")
+                : JoinSentences("WoW is running.", "Automatic recording is active.");
         }
 
         if (recording.State == RecordingCoordinatorState.Stopping)
@@ -310,9 +309,7 @@ public sealed class RecordingsViewModel : ObservableObject
         if (!wowProcess.IsWindowAvailable)
         {
             return wowProcess.State == WowProcessState.WaitingForWindow
-                ? JoinSentences(
-                    "World of Warcraft is running.",
-                    "No game window is available yet.")
+                ? JoinSentences("World of Warcraft is running.", "No game window is available yet.")
                 : "Start World of Warcraft to enable manual and automatic recording.";
         }
 
@@ -323,45 +320,44 @@ public sealed class RecordingsViewModel : ObservableObject
                 : combatLog.LastFileSystemError.Message.TrimEnd('.', ' ', '\t', '\r', '\n');
             return JoinSentences(
                 "WoW is running.",
-                $"Manual recording is ready, but automatic recording cannot read combat logs: {message}.");
+                $"Manual recording is ready, but automatic recording cannot read combat logs: {message}."
+            );
         }
 
         return combatLog.State switch
         {
             CombatLogReaderState.WaitingForWow =>
                 "Start World of Warcraft to enable manual and automatic recording.",
-            CombatLogReaderState.WaitingForLogsDirectory =>
-                JoinSentences(
-                    "WoW is running.",
-                    "Manual recording is ready.",
-                    "Automatic recording is waiting for the WoW logs folder."),
-            CombatLogReaderState.WaitingForCombatLog =>
-                JoinSentences(
-                    "WoW is running.",
-                    "Manual recording is ready.",
-                    "Enable combat logging in WoW for automatic recording."),
-            CombatLogReaderState.SwitchingCombatLog =>
-                JoinSentences(
-                    "WoW is running.",
-                    "Automatic recording is switching combat logs.",
-                    "Manual recording is ready."),
-            CombatLogReaderState.ReadingCombatLog =>
-                JoinSentences(
-                    "WoW is running.",
-                    "Manual and automatic recording are ready."),
-            _ => JoinSentences(
+            CombatLogReaderState.WaitingForLogsDirectory => JoinSentences(
                 "WoW is running.",
-                "Manual recording is ready.")
+                "Manual recording is ready.",
+                "Automatic recording is waiting for the WoW logs folder."
+            ),
+            CombatLogReaderState.WaitingForCombatLog => JoinSentences(
+                "WoW is running.",
+                "Manual recording is ready.",
+                "Enable combat logging in WoW for automatic recording."
+            ),
+            CombatLogReaderState.SwitchingCombatLog => JoinSentences(
+                "WoW is running.",
+                "Automatic recording is switching combat logs.",
+                "Manual recording is ready."
+            ),
+            CombatLogReaderState.ReadingCombatLog => JoinSentences(
+                "WoW is running.",
+                "Manual and automatic recording are ready."
+            ),
+            _ => JoinSentences("WoW is running.", "Manual recording is ready."),
         };
     }
 
     private static RecordingStatusHealth GetStatusHealth(
         RecordingCoordinatorStatus recording,
         CombatLogReaderStatus combatLog,
-        WowProcessStatus wowProcess)
+        WowProcessStatus wowProcess
+    )
     {
-        if (recording.LastFailure is not null &&
-            !IsTargetUnavailableFailure(recording.LastFailure))
+        if (recording.LastFailure is not null && !IsTargetUnavailableFailure(recording.LastFailure))
         {
             return RecordingStatusHealth.AttentionNeeded;
         }
@@ -388,8 +384,8 @@ public sealed class RecordingsViewModel : ObservableObject
 
     private static bool IsAutomaticRecordingReady(CombatLogReaderStatus combatLog)
     {
-        return combatLog.State == CombatLogReaderState.ReadingCombatLog &&
-               combatLog.LastFileSystemError is null;
+        return combatLog.State == CombatLogReaderState.ReadingCombatLog
+            && combatLog.LastFileSystemError is null;
     }
 
     private static string JoinSentences(params string[] sentences)
@@ -400,7 +396,8 @@ public sealed class RecordingsViewModel : ObservableObject
     private static string? GetCommandMessage(
         RecordingCommandResult result,
         string successMessage,
-        Exception? lastFailure = null)
+        Exception? lastFailure = null
+    )
     {
         if (IsTargetUnavailableFailure(lastFailure))
         {
@@ -413,13 +410,14 @@ public sealed class RecordingsViewModel : ObservableObject
             RecordingCommandResult.AlreadyActive => "A recording is already active.",
             RecordingCommandResult.NoActiveRecording => "There is no active recording to stop.",
             RecordingCommandResult.Suppressed => "Automatic recording is temporarily suppressed.",
-            RecordingCommandResult.OwnerMismatch => "The active recording could not be stopped by this command.",
+            RecordingCommandResult.OwnerMismatch =>
+                "The active recording could not be stopped by this command.",
             RecordingCommandResult.TargetUnavailable => TargetUnavailableMessage,
             RecordingCommandResult.TimedOut => "The recorder did not respond in time.",
             RecordingCommandResult.Failed => lastFailure is null
                 ? "The recording command failed."
                 : GetFailureCommandMessage(lastFailure),
-            _ => null
+            _ => null,
         };
     }
 
@@ -445,8 +443,8 @@ public sealed class RecordingsViewModel : ObservableObject
         }
 
         var text = exception.ToString();
-        return text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase) &&
-               text.Contains("window", StringComparison.OrdinalIgnoreCase);
+        return text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase)
+            && text.Contains("window", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool PathsEqual(string? left, string? right)

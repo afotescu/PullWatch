@@ -6,28 +6,27 @@ public enum SettingsLoadStatus
 {
     Loaded,
     Missing,
-    Invalid
+    Invalid,
 }
 
 public sealed record SettingsLoadResult(
     SettingsLoadStatus Status,
     PullWatchSettings? Settings,
-    Exception? Error = null);
+    Exception? Error = null
+);
 
 public sealed class SettingsStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = true
+        WriteIndented = true,
     };
 
     private readonly Action<string, string> _replaceFile;
 
     public SettingsStore(string? settingsPath = null)
-        : this(settingsPath ?? GetDefaultSettingsPath(), ReplaceFile)
-    {
-    }
+        : this(settingsPath ?? GetDefaultSettingsPath(), ReplaceFile) { }
 
     internal SettingsStore(string settingsPath, Action<string, string> replaceFile)
     {
@@ -50,21 +49,24 @@ public sealed class SettingsStore
                 SettingsPath,
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.Read);
+                FileShare.Read
+            );
             var settings = await JsonSerializer.DeserializeAsync<PullWatchSettings>(
                 stream,
                 SerializerOptions,
-                cancellationToken);
+                cancellationToken
+            );
 
             return settings is null
                 ? new SettingsLoadResult(
                     SettingsLoadStatus.Invalid,
                     null,
-                    new JsonException("The settings file contained no settings object."))
+                    new JsonException("The settings file contained no settings object.")
+                )
                 : new SettingsLoadResult(SettingsLoadStatus.Loaded, settings);
         }
-        catch (Exception exception) when (
-            exception is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception exception)
+            when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
             return new SettingsLoadResult(SettingsLoadStatus.Invalid, null, exception);
         }
@@ -74,29 +76,35 @@ public sealed class SettingsStore
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var directory = Path.GetDirectoryName(SettingsPath)
+        var directory =
+            Path.GetDirectoryName(SettingsPath)
             ?? throw new InvalidOperationException("Settings path must have a parent directory.");
         Directory.CreateDirectory(directory);
 
         var temporaryPath = Path.Combine(
             directory,
-            $".{Path.GetFileName(SettingsPath)}.{Guid.NewGuid():N}.tmp");
+            $".{Path.GetFileName(SettingsPath)}.{Guid.NewGuid():N}.tmp"
+        );
 
         try
         {
-            await using (var stream = new FileStream(
-                             temporaryPath,
-                             FileMode.CreateNew,
-                             FileAccess.Write,
-                             FileShare.None,
-                             4096,
-                             FileOptions.WriteThrough))
+            await using (
+                var stream = new FileStream(
+                    temporaryPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    4096,
+                    FileOptions.WriteThrough
+                )
+            )
             {
                 await JsonSerializer.SerializeAsync(
                     stream,
                     settings,
                     SerializerOptions,
-                    cancellationToken);
+                    cancellationToken
+                );
                 await stream.FlushAsync(cancellationToken);
             }
 
@@ -120,7 +128,8 @@ public sealed class SettingsStore
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "PullWatch",
-            "settings.json");
+            "settings.json"
+        );
     }
 
     private static void ReplaceFile(string sourcePath, string destinationPath)

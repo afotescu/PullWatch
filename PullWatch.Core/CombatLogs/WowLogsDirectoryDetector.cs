@@ -7,20 +7,19 @@ public static class WowLogsDirectoryDetector
         @"World of Warcraft\_retail_\Logs",
         @"Games\World of Warcraft\_retail_\Logs",
         @"Program Files\World of Warcraft\_retail_\Logs",
-        @"Program Files (x86)\World of Warcraft\_retail_\Logs"
+        @"Program Files (x86)\World of Warcraft\_retail_\Logs",
     ];
 
     public static string? Detect()
     {
         var drives = GetDrives();
-        return drives is null
-            ? null
-            : Detect(CreateCandidateFactories(drives), Directory.Exists);
+        return drives is null ? null : Detect(CreateCandidateFactories(drives), Directory.Exists);
     }
 
     internal static string? Detect(
         IEnumerable<Func<WowLogsDriveCandidate?>> driveCandidates,
-        Func<string, bool> directoryExists)
+        Func<string, bool> directoryExists
+    )
     {
         foreach (var getDriveCandidate in driveCandidates)
         {
@@ -67,7 +66,8 @@ public static class WowLogsDirectoryDetector
     }
 
     private static IEnumerable<Func<WowLogsDriveCandidate?>> CreateCandidateFactories(
-        IEnumerable<DriveInfo> drives)
+        IEnumerable<DriveInfo> drives
+    )
     {
         foreach (var drive in drives)
         {

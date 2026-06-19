@@ -18,7 +18,9 @@ public sealed class CombatLogReaderTests
         var path = Path.Combine(directory.Path, "WoWCombatLog-old.txt");
         await File.WriteAllTextAsync(path, FirstLine + Environment.NewLine, cancellationToken);
         var events = new ConcurrentQueue<CombatLogEvent>();
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(directory.Path);
 
         var readTask = reader.ReadAsync(
@@ -27,7 +29,8 @@ public sealed class CombatLogReaderTests
                 events.Enqueue(combatLogEvent);
                 return Task.CompletedTask;
             },
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
         await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
         await File.AppendAllTextAsync(path, SecondLine + Environment.NewLine, cancellationToken);
         await WaitForCountAsync(events, 1);
@@ -45,7 +48,9 @@ public sealed class CombatLogReaderTests
         using var parent = new TemporaryDirectory();
         var logsDirectory = Path.Combine(parent.Path, "Logs");
         var events = new ConcurrentQueue<CombatLogEvent>();
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(logsDirectory);
 
         var readTask = reader.ReadAsync(
@@ -54,14 +59,16 @@ public sealed class CombatLogReaderTests
                 events.Enqueue(combatLogEvent);
                 return Task.CompletedTask;
             },
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
         await WaitForStateAsync(reader, CombatLogReaderState.WaitingForLogsDirectory);
         Directory.CreateDirectory(logsDirectory);
         await WaitForStateAsync(reader, CombatLogReaderState.WaitingForCombatLog);
         await File.WriteAllTextAsync(
             Path.Combine(logsDirectory, "WoWCombatLog-new.txt"),
             FirstLine + Environment.NewLine,
-            cancellationToken);
+            cancellationToken
+        );
         await WaitForCountAsync(events, 1);
 
         readerCancellation.Cancel();
@@ -79,7 +86,9 @@ public sealed class CombatLogReaderTests
         File.SetLastWriteTimeUtc(oldPath, DateTime.UtcNow.AddMinutes(-2));
         var events = new ConcurrentQueue<CombatLogEvent>();
         var switchingCount = 0;
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(directory.Path);
         reader.StatusChanged += status =>
         {
@@ -95,7 +104,8 @@ public sealed class CombatLogReaderTests
                 events.Enqueue(combatLogEvent);
                 return Task.CompletedTask;
             },
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
         await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
         var newPath = Path.Combine(directory.Path, "WoWCombatLog-new.txt");
         await File.WriteAllTextAsync(newPath, SecondLine + Environment.NewLine, cancellationToken);
@@ -116,7 +126,9 @@ public sealed class CombatLogReaderTests
         var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
         await File.WriteAllTextAsync(path, "", cancellationToken);
         var events = new ConcurrentQueue<CombatLogEvent>();
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(directory.Path);
 
         var readTask = reader.ReadAsync(
@@ -125,14 +137,19 @@ public sealed class CombatLogReaderTests
                 events.Enqueue(combatLogEvent);
                 return Task.CompletedTask;
             },
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
         await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
         var split = FirstLine.Length / 2;
         await File.AppendAllTextAsync(path, FirstLine[..split], cancellationToken);
         await Task.Delay(100, cancellationToken);
         Assert.Empty(events);
 
-        await File.AppendAllTextAsync(path, FirstLine[split..] + Environment.NewLine, cancellationToken);
+        await File.AppendAllTextAsync(
+            path,
+            FirstLine[split..] + Environment.NewLine,
+            cancellationToken
+        );
         await WaitForCountAsync(events, 1);
 
         readerCancellation.Cancel();
@@ -148,11 +165,14 @@ public sealed class CombatLogReaderTests
         var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
         await File.WriteAllTextAsync(path, "", cancellationToken);
         var reader = CreateReader(directory.Path);
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
 
         var readTask = reader.ReadAsync(
             (_, _) => throw new IOException("Handler failed."),
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
         await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
         await File.AppendAllTextAsync(path, FirstLine + Environment.NewLine, cancellationToken);
 
@@ -171,9 +191,12 @@ public sealed class CombatLogReaderTests
             path,
             FileMode.Open,
             FileAccess.ReadWrite,
-            FileShare.None);
+            FileShare.None
+        );
         var events = new ConcurrentQueue<CombatLogEvent>();
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(directory.Path);
         var readTask = reader.ReadAsync(
             (combatLogEvent, _) =>
@@ -181,7 +204,8 @@ public sealed class CombatLogReaderTests
                 events.Enqueue(combatLogEvent);
                 return Task.CompletedTask;
             },
-            readerCancellation.Token);
+            readerCancellation.Token
+        );
 
         await WaitForAsync(() => reader.Status.LastFileSystemError is not null);
         await exclusiveLock.DisposeAsync();
@@ -205,18 +229,20 @@ public sealed class CombatLogReaderTests
             path,
             FileMode.Open,
             FileAccess.ReadWrite,
-            FileShare.None);
-        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            FileShare.None
+        );
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
         var reader = CreateReader(directory.Path);
-        var readTask = reader.ReadAsync(
-            (_, _) => Task.CompletedTask,
-            readerCancellation.Token);
+        var readTask = reader.ReadAsync((_, _) => Task.CompletedTask, readerCancellation.Token);
 
         await WaitForAsync(() => reader.Status.LastFileSystemError is not null);
         await exclusiveLock.DisposeAsync();
         await WaitForAsync(() =>
-            reader.Status.State == CombatLogReaderState.ReadingCombatLog &&
-            reader.Status.LastFileSystemError is null);
+            reader.Status.State == CombatLogReaderState.ReadingCombatLog
+            && reader.Status.LastFileSystemError is null
+        );
 
         readerCancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
@@ -228,12 +254,14 @@ public sealed class CombatLogReaderTests
             logsDirectory,
             NullLogger<CombatLogReader>.Instance,
             TimeSpan.FromMilliseconds(10),
-            TimeSpan.FromMilliseconds(40));
+            TimeSpan.FromMilliseconds(40)
+        );
     }
 
     private static async Task WaitForStateAsync(
         CombatLogReader reader,
-        CombatLogReaderState expectedState)
+        CombatLogReaderState expectedState
+    )
     {
         var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
 
@@ -246,7 +274,8 @@ public sealed class CombatLogReaderTests
 
     private static async Task WaitForCountAsync(
         ConcurrentQueue<CombatLogEvent> events,
-        int expectedCount)
+        int expectedCount
+    )
     {
         var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
 

@@ -9,7 +9,8 @@ public sealed class AsyncRelayCommandTests
         Exception? reportedFailure = null;
         var command = new AsyncRelayCommand(
             () => Task.FromException(failure),
-            onException: exception => reportedFailure = exception);
+            onException: exception => reportedFailure = exception
+        );
 
         await command.ExecuteAsync();
 
@@ -44,7 +45,8 @@ public sealed class AsyncRelayCommandTests
     {
         var command = new AsyncRelayCommand(
             () => throw new InvalidOperationException("command failed"),
-            onException: _ => throw new InvalidOperationException("reporting failed"));
+            onException: _ => throw new InvalidOperationException("reporting failed")
+        );
 
         await command.ExecuteAsync();
 

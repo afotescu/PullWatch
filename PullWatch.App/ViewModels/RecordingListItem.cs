@@ -4,7 +4,8 @@ public sealed record RecordingListItem(
     string Path,
     string DisplayName,
     DateTimeOffset ModifiedAt,
-    long SizeBytes)
+    long SizeBytes
+)
 {
     public Uri Source { get; } = new(Path, UriKind.Absolute);
 

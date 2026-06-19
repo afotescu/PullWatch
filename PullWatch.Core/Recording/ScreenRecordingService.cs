@@ -7,7 +7,8 @@ namespace PullWatch;
 
 public sealed class ScreenRecordingService(
     SettingsProvider settingsProvider,
-    ILogger<ScreenRecordingService> logger) : IRecordingService
+    ILogger<ScreenRecordingService> logger
+) : IRecordingService
 {
     private const string WowProcessName = "Wow";
 
@@ -52,7 +53,8 @@ public sealed class ScreenRecordingService(
             logger.LogInformation(
                 "Located recording source {RecordingSource} in {ElapsedMilliseconds:F1} ms",
                 sourceDescription,
-                Stopwatch.GetElapsedTime(sourceLookupTimestamp).TotalMilliseconds);
+                Stopwatch.GetElapsedTime(sourceLookupTimestamp).TotalMilliseconds
+            );
 
             var outputPath = CreateOutputPath(context, settings);
 
@@ -60,7 +62,8 @@ public sealed class ScreenRecordingService(
             var recorder = Recorder.CreateRecorder(CreateOptions(recordingSource, settings));
             logger.LogInformation(
                 "Created screen recorder in {ElapsedMilliseconds:F1} ms",
-                Stopwatch.GetElapsedTime(recorderCreationTimestamp).TotalMilliseconds);
+                Stopwatch.GetElapsedTime(recorderCreationTimestamp).TotalMilliseconds
+            );
 
             _recordingStarted = CreateCompletionSource();
             _recordingFinished = CreateCompletionSource();
@@ -83,7 +86,8 @@ public sealed class ScreenRecordingService(
             logger.LogInformation(
                 "Requesting recording start after {ElapsedMilliseconds:F1} ms: {OutputPath}",
                 Stopwatch.GetElapsedTime(startRequestTimestamp).TotalMilliseconds,
-                outputPath);
+                outputPath
+            );
             recorder.Record(outputPath);
             recordingStarted = _recordingStarted.Task;
         }
@@ -115,7 +119,8 @@ public sealed class ScreenRecordingService(
             appBaseDirectory,
             isElevated,
             recorderAssemblyStatus,
-            recorderAssemblyPath);
+            recorderAssemblyPath
+        );
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -141,7 +146,8 @@ public sealed class ScreenRecordingService(
                 logger.LogInformation(
                     "Requesting recording stop after {RecordingDuration}: {OutputPath}",
                     GetRecordingDuration(),
-                    _outputPath);
+                    _outputPath
+                );
                 _recorder.Stop();
             }
         }
@@ -173,24 +179,20 @@ public sealed class ScreenRecordingService(
         }
     }
 
-    private static RecorderOptions CreateOptions(RecordingSourceBase recordingSource, PullWatchSettings settings)
+    private static RecorderOptions CreateOptions(
+        RecordingSourceBase recordingSource,
+        PullWatchSettings settings
+    )
     {
         return new RecorderOptions
         {
-            SourceOptions = new SourceOptions
-            {
-                RecordingSources =
-                [
-                    recordingSource
-                ]
-            },
+            SourceOptions = new SourceOptions { RecordingSources = [recordingSource] },
             AudioOptions = new AudioOptions
             {
                 IsAudioEnabled =
-                    settings.Audio.CaptureSystemAudio ||
-                    settings.Audio.CaptureMicrophone,
+                    settings.Audio.CaptureSystemAudio || settings.Audio.CaptureMicrophone,
                 IsOutputDeviceEnabled = settings.Audio.CaptureSystemAudio,
-                IsInputDeviceEnabled = settings.Audio.CaptureMicrophone
+                IsInputDeviceEnabled = settings.Audio.CaptureMicrophone,
             },
             VideoEncoderOptions = new VideoEncoderOptions
             {
@@ -198,13 +200,16 @@ public sealed class ScreenRecordingService(
                 Bitrate = settings.Video.Bitrate,
                 Framerate = settings.Video.FrameRate,
                 IsHardwareEncodingEnabled = true,
-                IsThrottlingDisabled = false
-            }
+                IsThrottlingDisabled = false,
+            },
         };
     }
 
-    private static (Process? WowProcess, RecordingSourceBase RecordingSource, string Description) CreateRecordingSource(
-        PullWatchSettings settings)
+    private static (
+        Process? WowProcess,
+        RecordingSourceBase RecordingSource,
+        string Description
+    ) CreateRecordingSource(PullWatchSettings settings)
     {
         var (wowProcess, windowHandle) = FindWowProcess();
         return (
@@ -212,9 +217,10 @@ public sealed class ScreenRecordingService(
             new WindowRecordingSource(windowHandle)
             {
                 IsBorderRequired = settings.Video.ShowCaptureBorder,
-                IsCursorCaptureEnabled = settings.Video.CaptureCursor
+                IsCursorCaptureEnabled = settings.Video.CaptureCursor,
             },
-            "World of Warcraft window");
+            "World of Warcraft window"
+        );
     }
 
     private static (Process Process, nint WindowHandle) FindWowProcess()
@@ -243,7 +249,8 @@ public sealed class ScreenRecordingService(
 
     private static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
     {
-        var recordingsDirectory = settings.RecordingsDirectory
+        var recordingsDirectory =
+            settings.RecordingsDirectory
             ?? throw new InvalidOperationException("Recordings directory was not configured.");
 
         Directory.CreateDirectory(recordingsDirectory);
@@ -258,10 +265,14 @@ public sealed class ScreenRecordingService(
             GetRecordingDuration(),
             GetElapsedTime(_stopRequestedTimestamp),
             GetFileSizeMegabytes(eventArgs.FilePath),
-            eventArgs.FilePath);
+            eventArgs.FilePath
+        );
 
         _recordingStarted.TrySetException(
-            new InvalidOperationException("Recording completed before the recorder confirmed startup."));
+            new InvalidOperationException(
+                "Recording completed before the recorder confirmed startup."
+            )
+        );
         CompleteRecording();
 
         if (!Volatile.Read(ref _isStopping))
@@ -273,12 +284,14 @@ public sealed class ScreenRecordingService(
     private void OnRecordingFailed(object? sender, RecordingFailedEventArgs eventArgs)
     {
         var exception = RecordingFailureClassifier.Classify(
-            new InvalidOperationException(eventArgs.Error));
+            new InvalidOperationException(eventArgs.Error)
+        );
 
         logger.LogError(
             "Recording failed for {OutputPath}: {RecordingError}",
             eventArgs.FilePath,
-            eventArgs.Error);
+            eventArgs.Error
+        );
 
         _recordingStarted.TrySetException(exception);
         _recordingFinished.TrySetException(exception);
@@ -301,14 +314,16 @@ public sealed class ScreenRecordingService(
             logger.LogInformation(
                 "Recorder status changed to {RecorderStatus} after {StartupDuration}",
                 eventArgs.Status,
-                GetElapsedTime(_recordingRequestedTimestamp));
+                GetElapsedTime(_recordingRequestedTimestamp)
+            );
             return;
         }
 
         logger.LogInformation(
             "Recorder status changed to {RecorderStatus}; recording duration {RecordingDuration}",
             eventArgs.Status,
-            GetRecordingDuration());
+            GetRecordingDuration()
+        );
     }
 
     private void CompleteRecording()
@@ -326,7 +341,11 @@ public sealed class ScreenRecordingService(
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "{RecorderCleanupReason}; recorder cleanup failed", reason);
+                logger.LogError(
+                    exception,
+                    "{RecorderCleanupReason}; recorder cleanup failed",
+                    reason
+                );
             }
         });
     }
@@ -358,14 +377,13 @@ public sealed class ScreenRecordingService(
         return GetElapsedTime(
             _recordingStartedTimestamp != 0
                 ? _recordingStartedTimestamp
-                : _recordingRequestedTimestamp);
+                : _recordingRequestedTimestamp
+        );
     }
 
     private static TimeSpan GetElapsedTime(long timestamp)
     {
-        return timestamp == 0
-            ? TimeSpan.Zero
-            : Stopwatch.GetElapsedTime(timestamp);
+        return timestamp == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(timestamp);
     }
 
     private static string GetFileStatus(string path)
@@ -373,9 +391,7 @@ public sealed class ScreenRecordingService(
         try
         {
             var fileInfo = new FileInfo(path);
-            return fileInfo.Exists
-                ? $"exists, {fileInfo.Length} bytes"
-                : "missing";
+            return fileInfo.Exists ? $"exists, {fileInfo.Length} bytes" : "missing";
         }
         catch (UnauthorizedAccessException exception)
         {

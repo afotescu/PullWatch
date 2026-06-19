@@ -9,7 +9,8 @@ public sealed class OperatingSystemActions(SettingsProvider settingsProvider)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var path = settingsProvider.Current.RecordingsDirectory
+        var path =
+            settingsProvider.Current.RecordingsDirectory
             ?? throw new InvalidOperationException("Recordings directory was not configured.");
         Directory.CreateDirectory(path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });

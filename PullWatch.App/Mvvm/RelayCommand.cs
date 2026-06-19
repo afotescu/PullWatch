@@ -2,9 +2,7 @@ using System.Windows.Input;
 
 namespace PullWatch;
 
-public sealed class RelayCommand(
-    Action execute,
-    Func<bool>? canExecute = null) : ICommand
+public sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) : ICommand
 {
     public event EventHandler? CanExecuteChanged;
 

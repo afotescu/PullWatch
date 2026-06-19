@@ -30,17 +30,11 @@ public sealed class DiagnosticsViewModelTests
                 null,
                 null,
                 null,
-                null),
-            new CombatLogReaderStatus(
-                CombatLogReaderState.WaitingForCombatLog,
-                null,
-                null,
-                null),
-            new WowProcessStatus(
-                WowProcessState.WaitingForProcess,
-                null,
-                null,
-                null));
+                null
+            ),
+            new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+        );
     }
 
     private sealed class FakeDiagnosticsDialogs : IDiagnosticsDialogs
@@ -51,9 +45,7 @@ public sealed class DiagnosticsViewModelTests
 
         public string? WrittenText { get; private set; }
 
-        public void CopyText(string text)
-        {
-        }
+        public void CopyText(string text) { }
 
         public Task<string?> PickDiagnosticsExportPathAsync(string suggestedFileName)
         {

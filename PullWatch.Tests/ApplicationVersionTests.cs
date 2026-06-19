@@ -6,11 +6,12 @@ public sealed class ApplicationVersionTests
     public void CurrentUsesAssemblyInformationalVersion()
     {
         Assert.Equal(
-            typeof(ApplicationVersion).Assembly
-                .GetCustomAttributes(false)
+            typeof(ApplicationVersion)
+                .Assembly.GetCustomAttributes(false)
                 .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
                 .Single()
                 .InformationalVersion,
-            ApplicationVersion.Current);
+            ApplicationVersion.Current
+        );
     }
 }

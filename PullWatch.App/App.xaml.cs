@@ -28,8 +28,9 @@ public partial class App : Application
             return;
         }
 
-        _singleInstance.StartActivationListener(
-            () => Dispatcher.BeginInvoke(ShowAndActivateMainWindow));
+        _singleInstance.StartActivationListener(() =>
+            Dispatcher.BeginInvoke(ShowAndActivateMainWindow)
+        );
         _logs = new InMemoryLogProvider();
         _loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(_logs));
         _loggerFactory
@@ -44,17 +45,20 @@ public partial class App : Application
                 () => _controller.Status,
                 ConfirmExitWhileRecording,
                 _controller.FinalizeRecordingForExitAsync,
-                Shutdown);
+                Shutdown
+            );
             _mainWindow = new MainWindow(
                 _controller,
                 _lifetime,
                 _logs,
-                _controller.StartedWithCreatedSettingsFile);
+                _controller.StartedWithCreatedSettingsFile
+            );
             _trayIcon = new TrayIconManager(
                 _controller,
                 ShowAndActivateMainWindow,
                 RequestExplicitExitAsync,
-                _loggerFactory.CreateLogger<TrayIconManager>());
+                _loggerFactory.CreateLogger<TrayIconManager>()
+            );
             _mainWindow.Show();
         }
         catch (Exception exception)
@@ -63,7 +67,8 @@ public partial class App : Application
                 exception.Message,
                 "PullWatch could not start",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                MessageBoxImage.Error
+            );
             Shutdown(1);
         }
     }
@@ -111,10 +116,11 @@ public partial class App : Application
     private bool ConfirmExitWhileRecording()
     {
         return MessageBox.Show(
-                   "A recording is active. Finalize it and exit PullWatch?",
-                   "Exit PullWatch",
-                   MessageBoxButton.YesNo,
-                   MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                "A recording is active. Finalize it and exit PullWatch?",
+                "Exit PullWatch",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning
+            ) == MessageBoxResult.Yes;
     }
 
     private async Task RequestExplicitExitAsync()
@@ -126,15 +132,19 @@ public partial class App : Application
 
         var exited = await _lifetime.RequestExplicitExitAsync(CancellationToken.None);
 
-        if (!exited &&
-            _lifetime.LastFinalizationResult is RecordingCommandResult.Failed or
-                RecordingCommandResult.TimedOut)
+        if (
+            !exited
+            && _lifetime.LastFinalizationResult
+                is RecordingCommandResult.Failed
+                    or RecordingCommandResult.TimedOut
+        )
         {
             MessageBox.Show(
                 "PullWatch could not finish the active recording. The app will remain running.",
                 "Could not exit PullWatch",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                MessageBoxImage.Error
+            );
         }
     }
 

@@ -2,9 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
-public sealed record SettingsBootstrapResult(
-    PullWatchSettings Settings,
-    bool CreatedSettingsFile);
+public sealed record SettingsBootstrapResult(PullWatchSettings Settings, bool CreatedSettingsFile);
 
 public sealed class SettingsBootstrapper
 {
@@ -12,17 +10,14 @@ public sealed class SettingsBootstrapper
     private readonly ILogger<SettingsBootstrapper> _logger;
     private readonly Func<string?> _detectWowLogsDirectory;
 
-    public SettingsBootstrapper(
-        SettingsStore store,
-        ILogger<SettingsBootstrapper> logger)
-        : this(store, logger, WowLogsDirectoryDetector.Detect)
-    {
-    }
+    public SettingsBootstrapper(SettingsStore store, ILogger<SettingsBootstrapper> logger)
+        : this(store, logger, WowLogsDirectoryDetector.Detect) { }
 
     internal SettingsBootstrapper(
         SettingsStore store,
         ILogger<SettingsBootstrapper> logger,
-        Func<string?> detectWowLogsDirectory)
+        Func<string?> detectWowLogsDirectory
+    )
     {
         _store = store;
         _logger = logger;
@@ -31,14 +26,14 @@ public sealed class SettingsBootstrapper
 
     internal SettingsStore Store => _store;
 
-    public async Task<PullWatchSettings?> LoadEffectiveAsync(
-        CancellationToken cancellationToken)
+    public async Task<PullWatchSettings?> LoadEffectiveAsync(CancellationToken cancellationToken)
     {
         return (await LoadEffectiveWithMetadataAsync(cancellationToken))?.Settings;
     }
 
     public async Task<SettingsBootstrapResult?> LoadEffectiveWithMetadataAsync(
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var loadResult = await _store.LoadAsync(cancellationToken);
         var shouldCreateSettingsFile = loadResult.Status == SettingsLoadStatus.Missing;
@@ -54,7 +49,8 @@ public sealed class SettingsBootstrapper
                 _logger.LogError(
                     "Rejecting invalid settings file {SettingsPath}: {ValidationErrors}",
                     _store.SettingsPath,
-                    string.Join(" ", persistedValidation.Errors));
+                    string.Join(" ", persistedValidation.Errors)
+                );
                 settings = new PullWatchSettings();
             }
             else
@@ -69,13 +65,15 @@ public sealed class SettingsBootstrapper
                 _logger.LogError(
                     loadResult.Error,
                     "Rejecting unreadable settings file {SettingsPath}; using defaults",
-                    _store.SettingsPath);
+                    _store.SettingsPath
+                );
             }
             else
             {
                 _logger.LogInformation(
                     "Settings file does not exist at {SettingsPath}; creating it with defaults",
-                    _store.SettingsPath);
+                    _store.SettingsPath
+                );
             }
 
             settings = new PullWatchSettings();
@@ -92,7 +90,8 @@ public sealed class SettingsBootstrapper
         {
             _logger.LogError(
                 "Base settings are invalid: {ValidationErrors}",
-                string.Join(" ", baseValidation.Errors));
+                string.Join(" ", baseValidation.Errors)
+            );
             return null;
         }
 
@@ -106,15 +105,17 @@ public sealed class SettingsBootstrapper
                 createdSettingsFile = true;
                 _logger.LogInformation(
                     "Created settings file with defaults at {SettingsPath}",
-                    _store.SettingsPath);
+                    _store.SettingsPath
+                );
             }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
             {
                 _logger.LogError(
                     exception,
                     "Could not create settings file at {SettingsPath}; continuing with in-memory defaults",
-                    _store.SettingsPath);
+                    _store.SettingsPath
+                );
             }
         }
 

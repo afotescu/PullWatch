@@ -12,19 +12,22 @@ public sealed class ApplicationController : IAsyncDisposable
         null,
         null,
         null,
-        null);
+        null
+    );
 
     private static readonly CombatLogReaderStatus InitialCombatLogStatus = new(
         CombatLogReaderState.WaitingForWow,
         null,
         null,
-        null);
+        null
+    );
 
     private static readonly WowProcessStatus InitialWowProcessStatus = new(
         WowProcessState.WaitingForProcess,
         null,
         null,
-        null);
+        null
+    );
 
     private readonly SettingsBootstrapper _settingsBootstrapper;
     private readonly Func<SettingsProvider, IRecordingService> _createRecordingService;
@@ -35,7 +38,12 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly SemaphoreSlim _lifetimeLock = new(1, 1);
     private readonly object _notificationLock = new();
     private Task _notificationQueue = Task.CompletedTask;
-    private ApplicationStatus _status = new(null, InitialRecordingStatus, InitialCombatLogStatus, InitialWowProcessStatus);
+    private ApplicationStatus _status = new(
+        null,
+        InitialRecordingStatus,
+        InitialCombatLogStatus,
+        InitialWowProcessStatus
+    );
     private RecordingCoordinator? _recordingCoordinator;
     private ApplicationSettingsService? _settingsService;
     private SettingsProvider? _settingsProvider;
@@ -51,25 +59,24 @@ public sealed class ApplicationController : IAsyncDisposable
         : this(
             new SettingsBootstrapper(
                 new SettingsStore(),
-                loggerFactory.CreateLogger<SettingsBootstrapper>()),
+                loggerFactory.CreateLogger<SettingsBootstrapper>()
+            ),
             settings => new ScreenRecordingService(
                 settings,
-                loggerFactory.CreateLogger<ScreenRecordingService>()),
-            path => new CombatLogReader(
-                path,
-                loggerFactory.CreateLogger<CombatLogReader>()),
+                loggerFactory.CreateLogger<ScreenRecordingService>()
+            ),
+            path => new CombatLogReader(path, loggerFactory.CreateLogger<CombatLogReader>()),
             loggerFactory,
-            () => new WowProcessMonitor(
-                loggerFactory.CreateLogger<WowProcessMonitor>()))
-    {
-    }
+            () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>())
+        ) { }
 
     internal ApplicationController(
         SettingsBootstrapper settingsBootstrapper,
         Func<SettingsProvider, IRecordingService> createRecordingService,
         Func<string, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
-        Func<IWowProcessMonitor>? createWowProcessMonitor = null)
+        Func<IWowProcessMonitor>? createWowProcessMonitor = null
+    )
     {
         _settingsBootstrapper = settingsBootstrapper;
         _createRecordingService = createRecordingService;
@@ -100,16 +107,19 @@ public sealed class ApplicationController : IAsyncDisposable
                 return;
             }
 
-            var bootstrapResult = await _settingsBootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken)
+            var bootstrapResult =
+                await _settingsBootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken)
                 ?? throw new InvalidOperationException("Could not load valid effective settings.");
             var settings = bootstrapResult.Settings;
             var settingsProvider = new SettingsProvider(settings);
             var settingsService = new ApplicationSettingsService(
                 _settingsBootstrapper.Store,
-                settingsProvider);
+                settingsProvider
+            );
             var recordingCoordinator = new RecordingCoordinator(
                 _createRecordingService(settingsProvider),
-                _loggerFactory.CreateLogger<RecordingCoordinator>());
+                _loggerFactory.CreateLogger<RecordingCoordinator>()
+            );
             recordingCoordinator.StatusChanged += OnRecordingStatusChanged;
 
             _recordingCoordinator = recordingCoordinator;
@@ -121,7 +131,8 @@ public sealed class ApplicationController : IAsyncDisposable
                 settings,
                 recordingCoordinator.Status,
                 GetInactiveCombatLogStatus(settings, status.WowProcess),
-                status.WowProcess));
+                status.WowProcess
+            ));
             StartWowProcessMonitoring();
             await ApplyCombatLogMonitoringForCurrentStateAsync();
         }
@@ -131,24 +142,31 @@ public sealed class ApplicationController : IAsyncDisposable
         }
     }
 
-    public Task<RecordingCommandResult> StartManualRecordingAsync(CancellationToken cancellationToken)
+    public Task<RecordingCommandResult> StartManualRecordingAsync(
+        CancellationToken cancellationToken
+    )
     {
         return GetRecordingCoordinator().StartManualAsync(cancellationToken);
     }
 
-    public Task<RecordingCommandResult> StopManualRecordingAsync(CancellationToken cancellationToken)
+    public Task<RecordingCommandResult> StopManualRecordingAsync(
+        CancellationToken cancellationToken
+    )
     {
         return GetRecordingCoordinator().StopManualAsync(cancellationToken);
     }
 
-    public Task<RecordingCommandResult> FinalizeRecordingForExitAsync(CancellationToken cancellationToken)
+    public Task<RecordingCommandResult> FinalizeRecordingForExitAsync(
+        CancellationToken cancellationToken
+    )
     {
         return GetRecordingCoordinator().ShutdownAsync(cancellationToken);
     }
 
     public async Task<SettingsSaveResult> SaveSettingsAsync(
         PullWatchSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await _lifetimeLock.WaitAsync(cancellationToken);
 
@@ -157,15 +175,15 @@ public sealed class ApplicationController : IAsyncDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             var coordinator = GetRecordingCoordinator();
-            var settingsService = _settingsService
-                ?? throw new InvalidOperationException("The application controller has not been started.");
+            var settingsService =
+                _settingsService
+                ?? throw new InvalidOperationException(
+                    "The application controller has not been started."
+                );
 
             if (coordinator.Status.State != RecordingCoordinatorState.Idle)
             {
-                return new SettingsSaveResult(
-                    SettingsSaveStatus.RecordingActive,
-                    null,
-                    []);
+                return new SettingsSaveResult(SettingsSaveStatus.RecordingActive, null, []);
             }
 
             var previousSettings = settingsService.Current;
@@ -187,10 +205,12 @@ public sealed class ApplicationController : IAsyncDisposable
             try
             {
                 await StopCombatLogMonitoringAsync();
-                UpdateStatus(status => status with
-                {
-                    CombatLog = GetInactiveCombatLogStatus(savedSettings, status.WowProcess)
-                });
+                UpdateStatus(status =>
+                    status with
+                    {
+                        CombatLog = GetInactiveCombatLogStatus(savedSettings, status.WowProcess),
+                    }
+                );
                 await ApplyCombatLogMonitoringForCurrentStateAsync();
 
                 return result;
@@ -198,14 +218,16 @@ public sealed class ApplicationController : IAsyncDisposable
             catch (Exception exception)
             {
                 _logger.LogError(exception, "Could not apply the new combat-log directory");
-                UpdateStatus(status => status with
-                {
-                    CombatLog = InitialCombatLogStatus with { LastFileSystemError = exception }
-                });
+                UpdateStatus(status =>
+                    status with
+                    {
+                        CombatLog = InitialCombatLogStatus with { LastFileSystemError = exception },
+                    }
+                );
                 return result with
                 {
                     Status = SettingsSaveStatus.ApplicationFailed,
-                    Error = exception
+                    Error = exception,
                 };
             }
         }
@@ -217,7 +239,8 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public async Task<SettingsSaveResult> SaveUiSettingsAsync(
         UiSettings uiSettings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(uiSettings);
 
@@ -227,11 +250,18 @@ public sealed class ApplicationController : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            var settingsService = _settingsService
-                ?? throw new InvalidOperationException("The application controller has not been started.");
+            var settingsService =
+                _settingsService
+                ?? throw new InvalidOperationException(
+                    "The application controller has not been started."
+                );
             var result = await settingsService.SaveAsync(
-                settingsService.Current with { Ui = uiSettings },
-                cancellationToken);
+                settingsService.Current with
+                {
+                    Ui = uiSettings,
+                },
+                cancellationToken
+            );
 
             if (result.IsSaved)
             {
@@ -299,7 +329,8 @@ public sealed class ApplicationController : IAsyncDisposable
         var eventHandler = new CombatLogEventHandler(
             GetRecordingCoordinator(),
             settingsProvider,
-            _loggerFactory.CreateLogger<CombatLogEventHandler>());
+            _loggerFactory.CreateLogger<CombatLogEventHandler>()
+        );
         var cancellation = new CancellationTokenSource();
 
         monitor.StatusChanged += OnCombatLogStatusChanged;
@@ -308,7 +339,8 @@ public sealed class ApplicationController : IAsyncDisposable
         UpdateStatus(status => status with { CombatLog = monitor.Status });
         _monitorTask = Task.Run(
             () => MonitorCombatLogsAsync(monitor, eventHandler, cancellation.Token),
-            CancellationToken.None);
+            CancellationToken.None
+        );
     }
 
     private void StartWowProcessMonitoring()
@@ -327,20 +359,20 @@ public sealed class ApplicationController : IAsyncDisposable
         UpdateStatus(status => status with { WowProcess = monitor.Status });
         _wowProcessTask = Task.Run(
             () => MonitorWowProcessAsync(monitor, cancellation.Token),
-            CancellationToken.None);
+            CancellationToken.None
+        );
     }
 
     private async Task MonitorWowProcessAsync(
         IWowProcessMonitor monitor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
             await monitor.WatchAsync(cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
             _logger.LogError(exception, "WoW process monitoring stopped unexpectedly");
@@ -350,15 +382,14 @@ public sealed class ApplicationController : IAsyncDisposable
     private async Task MonitorCombatLogsAsync(
         ICombatLogMonitor monitor,
         CombatLogEventHandler eventHandler,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
             await monitor.ReadAsync(eventHandler.HandleAsync, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Combat-log monitoring stopped unexpectedly");
@@ -441,13 +472,17 @@ public sealed class ApplicationController : IAsyncDisposable
     private RecordingCoordinator GetRecordingCoordinator()
     {
         return _recordingCoordinator
-            ?? throw new InvalidOperationException("The application controller has not been started.");
+            ?? throw new InvalidOperationException(
+                "The application controller has not been started."
+            );
     }
 
     private SettingsProvider GetSettingsProvider()
     {
         return _settingsProvider
-            ?? throw new InvalidOperationException("The application controller has not been started.");
+            ?? throw new InvalidOperationException(
+                "The application controller has not been started."
+            );
     }
 
     private static bool PathsEqual(string? left, string? right)
@@ -487,15 +522,18 @@ public sealed class ApplicationController : IAsyncDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Could not apply WoW-gated combat-log monitoring state");
-            UpdateStatus(status => status with
-            {
-                CombatLog = GetInactiveCombatLogStatus(
-                    status.EffectiveSettings,
-                    status.WowProcess) with
+            UpdateStatus(status =>
+                status with
                 {
-                    LastFileSystemError = exception
+                    CombatLog = GetInactiveCombatLogStatus(
+                        status.EffectiveSettings,
+                        status.WowProcess
+                    ) with
+                    {
+                        LastFileSystemError = exception,
+                    },
                 }
-            });
+            );
         }
         finally
         {
@@ -508,13 +546,19 @@ public sealed class ApplicationController : IAsyncDisposable
         var status = Status;
         var settings = status.EffectiveSettings;
 
-        if (settings is null || !status.WowProcess.IsWindowAvailable || settings.WowLogsDirectory is null)
+        if (
+            settings is null
+            || !status.WowProcess.IsWindowAvailable
+            || settings.WowLogsDirectory is null
+        )
         {
             await StopCombatLogMonitoringAsync();
-            UpdateStatus(current => current with
-            {
-                CombatLog = GetInactiveCombatLogStatus(settings, current.WowProcess)
-            });
+            UpdateStatus(current =>
+                current with
+                {
+                    CombatLog = GetInactiveCombatLogStatus(settings, current.WowProcess),
+                }
+            );
             return;
         }
 
@@ -528,15 +572,15 @@ public sealed class ApplicationController : IAsyncDisposable
 
     private static CombatLogReaderStatus GetInactiveCombatLogStatus(
         PullWatchSettings? settings,
-        WowProcessStatus wowProcess)
+        WowProcessStatus wowProcess
+    )
     {
         return InitialCombatLogStatus with
         {
-            State = !wowProcess.IsWindowAvailable
-                ? CombatLogReaderState.WaitingForWow
-                : settings?.WowLogsDirectory is null
-                    ? CombatLogReaderState.WaitingForLogsDirectory
-                    : CombatLogReaderState.WaitingForCombatLog
+            State =
+                !wowProcess.IsWindowAvailable ? CombatLogReaderState.WaitingForWow
+                : settings?.WowLogsDirectory is null ? CombatLogReaderState.WaitingForLogsDirectory
+                : CombatLogReaderState.WaitingForCombatLog,
         };
     }
 
@@ -550,7 +594,8 @@ public sealed class ApplicationController : IAsyncDisposable
                 _ => NotifyStatusChanged(snapshot),
                 CancellationToken.None,
                 TaskContinuationOptions.None,
-                TaskScheduler.Default);
+                TaskScheduler.Default
+            );
         }
     }
 

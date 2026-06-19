@@ -5,7 +5,11 @@ namespace PullWatch;
 
 public sealed class SettingsViewModel : ObservableObject
 {
-    private readonly Func<PullWatchSettings, CancellationToken, Task<SettingsSaveResult>> _saveSettings;
+    private readonly Func<
+        PullWatchSettings,
+        CancellationToken,
+        Task<SettingsSaveResult>
+    > _saveSettings;
     private readonly ISettingsDialogs _dialogs;
     private PullWatchSettings _savedSettings;
     private bool _isLoading;
@@ -31,17 +35,21 @@ public sealed class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         ApplicationStatus initialStatus,
         Func<PullWatchSettings, CancellationToken, Task<SettingsSaveResult>> saveSettings,
-        ISettingsDialogs dialogs)
+        ISettingsDialogs dialogs
+    )
     {
         _saveSettings = saveSettings;
         _dialogs = dialogs;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
-        SaveCommand = new AsyncRelayCommand(
-            SaveAsync,
-            () => CanSave,
-            HandleCommandFailure);
-        PickWowLogsDirectoryCommand = new RelayCommand(PickWowLogsDirectory, () => IsEditingEnabled);
-        PickRecordingsDirectoryCommand = new RelayCommand(PickRecordingsDirectory, () => IsEditingEnabled);
+        SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave, HandleCommandFailure);
+        PickWowLogsDirectoryCommand = new RelayCommand(
+            PickWowLogsDirectory,
+            () => IsEditingEnabled
+        );
+        PickRecordingsDirectoryCommand = new RelayCommand(
+            PickRecordingsDirectory,
+            () => IsEditingEnabled
+        );
         LoadSettings(_savedSettings);
         ApplyStatus(initialStatus);
     }
@@ -142,9 +150,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool CanSave => IsEditingEnabled && IsDirty;
 
-    public string EditingStatus => IsEditingEnabled
-        ? "Settings are available while PullWatch is idle."
-        : "Settings are locked until the active recording finishes.";
+    public string EditingStatus =>
+        IsEditingEnabled
+            ? "Settings are available while PullWatch is idle."
+            : "Settings are locked until the active recording finishes.";
 
     public string? WowLogsDirectoryError
     {
@@ -187,7 +196,11 @@ public sealed class SettingsViewModel : ObservableObject
         IsEditingEnabled = status.Recording.State == RecordingCoordinatorState.Idle;
         OnPropertyChanged(nameof(EditingStatus));
 
-        if (!IsDirty && status.EffectiveSettings is not null && status.EffectiveSettings != _savedSettings)
+        if (
+            !IsDirty
+            && status.EffectiveSettings is not null
+            && status.EffectiveSettings != _savedSettings
+        )
         {
             _savedSettings = status.EffectiveSettings;
             LoadSettings(_savedSettings);
@@ -221,9 +234,10 @@ public sealed class SettingsViewModel : ObservableObject
         LoadSettings(_savedSettings);
         IsDirty = false;
         IsSaveError = result.Status == SettingsSaveStatus.ApplicationFailed;
-        SaveMessage = result.Status == SettingsSaveStatus.ApplicationFailed
-            ? $"Settings were saved, but combat-log monitoring could not restart: {result.Error?.Message}"
-            : "Settings saved and active.";
+        SaveMessage =
+            result.Status == SettingsSaveStatus.ApplicationFailed
+                ? $"Settings were saved, but combat-log monitoring could not restart: {result.Error?.Message}"
+                : "Settings saved and active.";
         return true;
     }
 
@@ -243,7 +257,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void PickWowLogsDirectory()
     {
-        var selected = _dialogs.PickFolder("Select the World of Warcraft logs directory", WowLogsDirectory);
+        var selected = _dialogs.PickFolder(
+            "Select the World of Warcraft logs directory",
+            WowLogsDirectory
+        );
 
         if (selected is not null)
         {
@@ -263,19 +280,29 @@ public sealed class SettingsViewModel : ObservableObject
 
     private PullWatchSettings? BuildSettings()
     {
-        if (!decimal.TryParse(
+        if (
+            !decimal.TryParse(
                 BitrateMegabits,
                 NumberStyles.Number,
                 CultureInfo.CurrentCulture,
-                out var bitrateMegabits) ||
-            bitrateMegabits <= 0 ||
-            bitrateMegabits * 1_000_000m > int.MaxValue ||
-            decimal.Truncate(bitrateMegabits * 1_000_000m) != bitrateMegabits * 1_000_000m)
+                out var bitrateMegabits
+            )
+            || bitrateMegabits <= 0
+            || bitrateMegabits * 1_000_000m > int.MaxValue
+            || decimal.Truncate(bitrateMegabits * 1_000_000m) != bitrateMegabits * 1_000_000m
+        )
         {
             BitrateError = "Enter a valid bitrate in Mbps.";
         }
 
-        if (!int.TryParse(FrameRate, NumberStyles.Integer, CultureInfo.CurrentCulture, out var frameRate))
+        if (
+            !int.TryParse(
+                FrameRate,
+                NumberStyles.Integer,
+                CultureInfo.CurrentCulture,
+                out var frameRate
+            )
+        )
         {
             FrameRateError = "Enter a valid whole-number frame rate.";
         }
@@ -296,13 +323,13 @@ public sealed class SettingsViewModel : ObservableObject
                 Bitrate = (int)(bitrateMegabits * 1_000_000m),
                 FrameRate = frameRate,
                 CaptureCursor = CaptureCursor,
-                ShowCaptureBorder = ShowCaptureBorder
+                ShowCaptureBorder = ShowCaptureBorder,
             },
             Audio = _savedSettings.Audio with
             {
                 CaptureSystemAudio = CaptureSystemAudio,
-                CaptureMicrophone = CaptureMicrophone
-            }
+                CaptureMicrophone = CaptureMicrophone,
+            },
         };
     }
 
@@ -363,7 +390,8 @@ public sealed class SettingsViewModel : ObservableObject
             RecordRaidEncounters = settings.RecordRaidEncounters;
             BitrateMegabits = (settings.Video.Bitrate / 1_000_000m).ToString(
                 "0.###",
-                CultureInfo.CurrentCulture);
+                CultureInfo.CurrentCulture
+            );
             FrameRate = settings.Video.FrameRate.ToString(CultureInfo.CurrentCulture);
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
             CaptureMicrophone = settings.Audio.CaptureMicrophone;
@@ -389,7 +417,8 @@ public sealed class SettingsViewModel : ObservableObject
     private void SetEditableProperty<T>(
         ref T field,
         T value,
-        [CallerMemberName] string? propertyName = null)
+        [CallerMemberName] string? propertyName = null
+    )
     {
         if (!SetProperty(ref field, value, propertyName))
         {

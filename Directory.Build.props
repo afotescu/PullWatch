@@ -1,8 +1,16 @@
 <Project>
-    <PropertyGroup>
-        <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
-        <Version Condition="'$(Version)' == ''">0.1.0</Version>
-        <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    </PropertyGroup>
+  <PropertyGroup>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''"
+      >$(Version)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PullWatchArtifactsRoot>$(MSBuildThisFileDirectory)artifacts\</PullWatchArtifactsRoot>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\bin\**;$(MSBuildProjectDirectory)\obj\**;$(PullWatchArtifactsRoot)**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <BaseOutputPath>$(PullWatchArtifactsRoot)tests\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(PullWatchArtifactsRoot)tests\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
 </Project>

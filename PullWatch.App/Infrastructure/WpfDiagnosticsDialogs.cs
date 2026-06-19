@@ -14,7 +14,7 @@ public sealed class WpfDiagnosticsDialogs : IDiagnosticsDialogs
             Title = "Export PullWatch diagnostics",
             FileName = suggestedFileName,
             DefaultExt = ".txt",
-            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*"
+            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
         };
 
         return Task.FromResult(dialog.ShowDialog() == true ? dialog.FileName : null);

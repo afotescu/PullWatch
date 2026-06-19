@@ -19,13 +19,12 @@ public sealed class ApplicationControllerTests
             {
                 monitorCreated = true;
                 return new FakeCombatLogMonitor();
-            });
+            }
+        );
 
         Assert.NotNull(controller.Status.EffectiveSettings);
         Assert.False(controller.StartedWithCreatedSettingsFile);
-        Assert.Equal(
-            CombatLogReaderState.WaitingForWow,
-            controller.Status.CombatLog.State);
+        Assert.Equal(CombatLogReaderState.WaitingForWow, controller.Status.CombatLog.State);
         Assert.False(monitorCreated);
     }
 
@@ -37,12 +36,14 @@ public sealed class ApplicationControllerTests
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null);
+            () => null
+        );
         await using var controller = new ApplicationController(
             bootstrapper,
             _ => new FakeRecordingService(),
             _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance
+        );
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
 
@@ -54,8 +55,9 @@ public sealed class ApplicationControllerTests
     public async Task StartupWithLogsDirectoryStartsMonitoringAndAggregatesStatus()
     {
         using var directory = new TemporaryDirectory();
-        var logsDirectory = Directory.CreateDirectory(
-            Path.Combine(directory.Path, "Logs")).FullName;
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
         var monitor = new FakeCombatLogMonitor();
         var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
@@ -63,12 +65,14 @@ public sealed class ApplicationControllerTests
             logsDirectory,
             new FakeRecordingService(),
             _ => monitor,
-            () => wowMonitor);
+            () => wowMonitor
+        );
         var status = new CombatLogReaderStatus(
             CombatLogReaderState.ReadingCombatLog,
             Path.Combine(logsDirectory, "WoWCombatLog-test.txt"),
             DateTimeOffset.UtcNow,
-            null);
+            null
+        );
 
         await WaitForAsync(() => monitor.Started);
         monitor.Publish(status);
@@ -88,12 +92,14 @@ public sealed class ApplicationControllerTests
             null,
             new FakeRecordingService(),
             _ => new FakeCombatLogMonitor(),
-            () => wowMonitor);
+            () => wowMonitor
+        );
         var status = new WowProcessStatus(
             WowProcessState.WindowAvailable,
             1234,
             "World of Warcraft",
-            null);
+            null
+        );
 
         await WaitForAsync(() => wowMonitor.Started);
         wowMonitor.Publish(status);
@@ -106,8 +112,9 @@ public sealed class ApplicationControllerTests
     public async Task CombatLogMonitoringStopsWhenWowWindowBecomesUnavailable()
     {
         using var directory = new TemporaryDirectory();
-        var logsDirectory = Directory.CreateDirectory(
-            Path.Combine(directory.Path, "Logs")).FullName;
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
         var monitor = new FakeCombatLogMonitor();
         var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
@@ -115,16 +122,17 @@ public sealed class ApplicationControllerTests
             logsDirectory,
             new FakeRecordingService(),
             _ => monitor,
-            () => wowMonitor);
+            () => wowMonitor
+        );
 
         await WaitForAsync(() => monitor.Started);
-        wowMonitor.Publish(new WowProcessStatus(
-            WowProcessState.WaitingForProcess,
-            null,
-            null,
-            null));
+        wowMonitor.Publish(
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+        );
         await WaitForAsync(() => monitor.Stopped);
-        await WaitForAsync(() => controller.Status.CombatLog.State == CombatLogReaderState.WaitingForWow);
+        await WaitForAsync(() =>
+            controller.Status.CombatLog.State == CombatLogReaderState.WaitingForWow
+        );
     }
 
     [Fact]
@@ -133,27 +141,32 @@ public sealed class ApplicationControllerTests
         using var directory = new TemporaryDirectory();
         var recorder = new FakeRecordingService
         {
-            ActiveOutputPath = Path.Combine(directory.Path, "manual.mp4")
+            ActiveOutputPath = Path.Combine(directory.Path, "manual.mp4"),
         };
         await using var controller = await CreateControllerAsync(
             directory.Path,
             null,
             recorder,
-            _ => new FakeCombatLogMonitor());
+            _ => new FakeCombatLogMonitor()
+        );
 
         Assert.Equal(
             RecordingCommandResult.Started,
-            await controller.StartManualRecordingAsync(CancellationToken.None));
-        await WaitForAsync(
-            () => controller.Status.Recording.State == RecordingCoordinatorState.Recording);
+            await controller.StartManualRecordingAsync(CancellationToken.None)
+        );
+        await WaitForAsync(() =>
+            controller.Status.Recording.State == RecordingCoordinatorState.Recording
+        );
 
         Assert.Equal(recorder.ActiveOutputPath, controller.Status.Recording.ActiveOutputPath);
 
         Assert.Equal(
             RecordingCommandResult.Stopped,
-            await controller.StopManualRecordingAsync(CancellationToken.None));
-        await WaitForAsync(
-            () => controller.Status.Recording.State == RecordingCoordinatorState.Idle);
+            await controller.StopManualRecordingAsync(CancellationToken.None)
+        );
+        await WaitForAsync(() =>
+            controller.Status.Recording.State == RecordingCoordinatorState.Idle
+        );
 
         Assert.Null(controller.Status.Recording.ActiveOutputPath);
     }
@@ -167,7 +180,8 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             recorder,
-            _ => new FakeCombatLogMonitor());
+            _ => new FakeCombatLogMonitor()
+        );
 
         await controller.StartManualRecordingAsync(CancellationToken.None);
         await controller.ShutdownAsync(CancellationToken.None);
@@ -180,10 +194,12 @@ public sealed class ApplicationControllerTests
     public async Task SavesSettingsAndRestartsMonitoringWhenLogsDirectoryChanges()
     {
         using var directory = new TemporaryDirectory();
-        var firstLogsDirectory = Directory.CreateDirectory(
-            Path.Combine(directory.Path, "FirstLogs")).FullName;
-        var secondLogsDirectory = Directory.CreateDirectory(
-            Path.Combine(directory.Path, "SecondLogs")).FullName;
+        var firstLogsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "FirstLogs"))
+            .FullName;
+        var secondLogsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "SecondLogs"))
+            .FullName;
         var monitors = new List<(string Path, FakeCombatLogMonitor Monitor)>();
         var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
@@ -196,15 +212,17 @@ public sealed class ApplicationControllerTests
                 monitors.Add((path, monitor));
                 return monitor;
             },
-            () => wowMonitor);
+            () => wowMonitor
+        );
 
         var result = await controller.SaveSettingsAsync(
             controller.Status.EffectiveSettings! with
             {
                 WowLogsDirectory = secondLogsDirectory,
-                Video = controller.Status.EffectiveSettings!.Video with { FrameRate = 120 }
+                Video = controller.Status.EffectiveSettings!.Video with { FrameRate = 120 },
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(SettingsSaveStatus.Saved, result.Status);
         Assert.Equal(120, controller.Status.EffectiveSettings!.Video.FrameRate);
@@ -219,7 +237,9 @@ public sealed class ApplicationControllerTests
     public async Task ClearingLogsDirectoryStopsMonitoring()
     {
         using var directory = new TemporaryDirectory();
-        var logsDirectory = Directory.CreateDirectory(Path.Combine(directory.Path, "Logs")).FullName;
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
         var monitor = new FakeCombatLogMonitor();
         var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
@@ -227,18 +247,24 @@ public sealed class ApplicationControllerTests
             logsDirectory,
             new FakeRecordingService(),
             _ => monitor,
-            () => wowMonitor);
+            () => wowMonitor
+        );
 
         var result = await controller.SaveSettingsAsync(
-            controller.Status.EffectiveSettings! with { WowLogsDirectory = null },
-            TestContext.Current.CancellationToken);
+            controller.Status.EffectiveSettings! with
+            {
+                WowLogsDirectory = null,
+            },
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(SettingsSaveStatus.Saved, result.Status);
         Assert.True(monitor.Stopped);
         Assert.Null(controller.Status.EffectiveSettings!.WowLogsDirectory);
         Assert.Equal(
             CombatLogReaderState.WaitingForLogsDirectory,
-            controller.Status.CombatLog.State);
+            controller.Status.CombatLog.State
+        );
     }
 
     [Fact]
@@ -249,13 +275,18 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             new FakeRecordingService(),
-            _ => new FakeCombatLogMonitor());
+            _ => new FakeCombatLogMonitor()
+        );
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
         var original = controller.Status.EffectiveSettings!;
 
         var result = await controller.SaveSettingsAsync(
-            original with { RecordMythicPlus = false },
-            TestContext.Current.CancellationToken);
+            original with
+            {
+                RecordMythicPlus = false,
+            },
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(SettingsSaveStatus.RecordingActive, result.Status);
         Assert.Equal(original, controller.Status.EffectiveSettings);
@@ -269,18 +300,21 @@ public sealed class ApplicationControllerTests
         await store.SaveAsync(
             new PullWatchSettings
             {
-                RecordingsDirectory = Path.Combine(directory.Path, "Recordings")
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null);
+            () => null
+        );
         await using var controller = new ApplicationController(
             bootstrapper,
             _ => new FakeRecordingService(),
             _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance
+        );
         await controller.StartAsync(TestContext.Current.CancellationToken);
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
         var ui = new UiSettings
@@ -291,13 +325,14 @@ public sealed class ApplicationControllerTests
                 Top = 50,
                 Width = 1200,
                 Height = 800,
-                IsMaximized = true
-            }
+                IsMaximized = true,
+            },
         };
 
         var result = await controller.SaveUiSettingsAsync(
             ui,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var persisted = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(SettingsSaveStatus.Saved, result.Status);
@@ -316,21 +351,27 @@ public sealed class ApplicationControllerTests
             Directory.CreateDirectory(Path.Combine(directory.Path, "Logs")).FullName,
             new FakeRecordingService(),
             _ => monitor,
-            () => wowMonitor);
+            () => wowMonitor
+        );
         var publisherContext = new SynchronizationContext();
         var callbackContext = new TaskCompletionSource<SynchronizationContext?>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        controller.StatusChanged += _ => callbackContext.TrySetResult(SynchronizationContext.Current);
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        controller.StatusChanged += _ =>
+            callbackContext.TrySetResult(SynchronizationContext.Current);
         var previousContext = SynchronizationContext.Current;
 
         try
         {
             SynchronizationContext.SetSynchronizationContext(publisherContext);
-            monitor.Publish(new CombatLogReaderStatus(
-                CombatLogReaderState.ReadingCombatLog,
-                "test",
-                DateTimeOffset.UtcNow,
-                null));
+            monitor.Publish(
+                new CombatLogReaderStatus(
+                    CombatLogReaderState.ReadingCombatLog,
+                    "test",
+                    DateTimeOffset.UtcNow,
+                    null
+                )
+            );
         }
         finally
         {
@@ -341,7 +382,9 @@ public sealed class ApplicationControllerTests
             publisherContext,
             await callbackContext.Task.WaitAsync(
                 TimeSpan.FromSeconds(2),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
     }
 
     private static async Task<ApplicationController> CreateControllerAsync(
@@ -349,37 +392,39 @@ public sealed class ApplicationControllerTests
         string? logsDirectory,
         FakeRecordingService recorder,
         Func<string, ICombatLogMonitor> createMonitor,
-        Func<IWowProcessMonitor>? createWowProcessMonitor = null)
+        Func<IWowProcessMonitor>? createWowProcessMonitor = null
+    )
     {
         var store = new SettingsStore(Path.Combine(rootDirectory, "settings.json"));
         await store.SaveAsync(
             new PullWatchSettings
             {
                 WowLogsDirectory = logsDirectory,
-                RecordingsDirectory = Path.Combine(rootDirectory, "Recordings")
+                RecordingsDirectory = Path.Combine(rootDirectory, "Recordings"),
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null);
+            () => null
+        );
         var controller = new ApplicationController(
             bootstrapper,
             _ => recorder,
             createMonitor,
             NullLoggerFactory.Instance,
-            createWowProcessMonitor);
+            createWowProcessMonitor
+        );
         await controller.StartAsync(TestContext.Current.CancellationToken);
         return controller;
     }
 
     private static FakeWowProcessMonitor AvailableWowMonitor()
     {
-        return new FakeWowProcessMonitor(new WowProcessStatus(
-            WowProcessState.WindowAvailable,
-            1234,
-            "World of Warcraft",
-            null));
+        return new FakeWowProcessMonitor(
+            new WowProcessStatus(WowProcessState.WindowAvailable, 1234, "World of Warcraft", null)
+        );
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

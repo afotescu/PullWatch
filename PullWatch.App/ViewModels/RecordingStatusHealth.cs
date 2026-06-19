@@ -7,5 +7,5 @@ public enum RecordingStatusHealth
     ManualOnly,
     Ready,
     Active,
-    AttentionNeeded
+    AttentionNeeded,
 }

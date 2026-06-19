@@ -14,7 +14,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ISettingsDialogs settingsDialogs,
         InMemoryLogProvider logs,
         IDiagnosticsDialogs diagnosticsDialogs,
-        bool showSettingsOnStartup = false)
+        bool showSettingsOnStartup = false
+    )
     {
         _controller = controller;
         _dispatcher = dispatcher;
@@ -24,17 +25,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             controller.Status,
             controller.StartManualRecordingAsync,
             controller.StopManualRecordingAsync,
-            OpenRecordingsFolderAsync);
+            OpenRecordingsFolderAsync
+        );
         Settings = new SettingsViewModel(
             controller.Status,
             controller.SaveSettingsAsync,
-            settingsDialogs);
+            settingsDialogs
+        );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
         [
             new NavigationItemViewModel("Recordings", "\uE80F", Recordings),
             new NavigationItemViewModel("Settings", "\uE713", Settings),
-            new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics)
+            new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics),
         ];
         _selectedNavigationItem = showSettingsOnStartup ? NavigationItems[1] : NavigationItems[0];
         _controller.StatusChanged += OnStatusChanged;

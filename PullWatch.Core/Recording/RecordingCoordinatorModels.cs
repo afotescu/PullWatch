@@ -2,27 +2,26 @@ namespace PullWatch;
 
 public abstract record RecordingContext(DateTimeOffset StartedAt);
 
-public sealed record ManualRecordingContext(DateTimeOffset StartedAt)
-    : RecordingContext(StartedAt);
+public sealed record ManualRecordingContext(DateTimeOffset StartedAt) : RecordingContext(StartedAt);
 
 public sealed record ChallengeRecordingContext(
     DateTimeOffset StartedAt,
     string DungeonName,
-    int Level)
-    : RecordingContext(StartedAt);
+    int Level
+) : RecordingContext(StartedAt);
 
 public sealed record EncounterRecordingContext(
     DateTimeOffset StartedAt,
     int EncounterId,
     string EncounterName,
-    int DifficultyId)
-    : RecordingContext(StartedAt);
+    int DifficultyId
+) : RecordingContext(StartedAt);
 
 public enum RecordingOwner
 {
     Manual,
     ChallengeMode,
-    Encounter
+    Encounter,
 }
 
 public enum RecordingCoordinatorState
@@ -30,7 +29,7 @@ public enum RecordingCoordinatorState
     Idle,
     Starting,
     Recording,
-    Stopping
+    Stopping,
 }
 
 public enum RecordingCommandResult
@@ -43,7 +42,7 @@ public enum RecordingCommandResult
     Suppressed,
     TargetUnavailable,
     Failed,
-    TimedOut
+    TimedOut,
 }
 
 public sealed record RecordingCoordinatorStatus(
@@ -54,14 +53,13 @@ public sealed record RecordingCoordinatorStatus(
     RecordingOwner? SuppressedUntilOwnerEnd,
     string? SuppressedIdentity,
     Exception? LastFailure,
-    string? ActiveOutputPath)
+    string? ActiveOutputPath
+)
 {
     public RecordingStatistics Statistics { get; init; } = new(0, 0);
 }
 
-public sealed record RecordingStatistics(
-    int ExpectedCount,
-    int SavedCount);
+public sealed record RecordingStatistics(int ExpectedCount, int SavedCount);
 
 public sealed class RecordingServiceFailedEventArgs(Exception exception) : EventArgs
 {

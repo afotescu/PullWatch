@@ -6,19 +6,18 @@ internal static class CombatLogEventMetadataParser
 {
     public static ChallengeRecordingContext ParseChallengeStart(
         CombatLogEvent combatLogEvent,
-        DateTimeOffset startedAt)
+        DateTimeOffset startedAt
+    )
     {
         var arguments = combatLogEvent.Arguments;
 
-        return new ChallengeRecordingContext(
-            startedAt,
-            arguments[0],
-            ParseInt(arguments[3]));
+        return new ChallengeRecordingContext(startedAt, arguments[0], ParseInt(arguments[3]));
     }
 
     public static EncounterRecordingContext ParseEncounterStart(
         CombatLogEvent combatLogEvent,
-        DateTimeOffset startedAt)
+        DateTimeOffset startedAt
+    )
     {
         var arguments = combatLogEvent.Arguments;
 
@@ -26,7 +25,8 @@ internal static class CombatLogEventMetadataParser
             startedAt,
             ParseInt(arguments[0]),
             arguments[1],
-            ParseInt(arguments[2]));
+            ParseInt(arguments[2])
+        );
     }
 
     private static int ParseInt(string value)

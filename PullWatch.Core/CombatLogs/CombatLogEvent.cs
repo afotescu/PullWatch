@@ -8,10 +8,10 @@ public sealed class CombatLogEvent(string name, int argumentsStart, string rawLi
 
     public string RawLine { get; } = rawLine;
 
-    public IReadOnlyList<string> Arguments => _arguments ??= ParseFields(
-        argumentsStart < RawLine.Length
-            ? RawLine.AsSpan(argumentsStart)
-            : []);
+    public IReadOnlyList<string> Arguments =>
+        _arguments ??= ParseFields(
+            argumentsStart < RawLine.Length ? RawLine.AsSpan(argumentsStart) : []
+        );
 
     private static IReadOnlyList<string> ParseFields(ReadOnlySpan<char> value)
     {

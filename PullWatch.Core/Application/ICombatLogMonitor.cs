@@ -8,5 +8,6 @@ public interface ICombatLogMonitor
 
     Task ReadAsync(
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

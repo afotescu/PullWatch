@@ -1,19 +1,21 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:local="clr-namespace:PullWatch">
-    <DataTemplate DataType="{x:Type local:RecordingsViewModel}">
-        <local:RecordingsView />
-    </DataTemplate>
+<ResourceDictionary
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:local="clr-namespace:PullWatch"
+>
+  <DataTemplate DataType="{x:Type local:RecordingsViewModel}">
+    <local:RecordingsView />
+  </DataTemplate>
 
-    <DataTemplate DataType="{x:Type local:PlaceholderViewModel}">
-        <local:PlaceholderView />
-    </DataTemplate>
+  <DataTemplate DataType="{x:Type local:PlaceholderViewModel}">
+    <local:PlaceholderView />
+  </DataTemplate>
 
-    <DataTemplate DataType="{x:Type local:SettingsViewModel}">
-        <local:SettingsView />
-    </DataTemplate>
+  <DataTemplate DataType="{x:Type local:SettingsViewModel}">
+    <local:SettingsView />
+  </DataTemplate>
 
-    <DataTemplate DataType="{x:Type local:DiagnosticsViewModel}">
-        <local:DiagnosticsView />
-    </DataTemplate>
+  <DataTemplate DataType="{x:Type local:DiagnosticsViewModel}">
+    <local:DiagnosticsView />
+  </DataTemplate>
 </ResourceDictionary>

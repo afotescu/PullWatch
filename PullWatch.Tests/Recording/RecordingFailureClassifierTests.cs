@@ -6,7 +6,8 @@ public sealed class RecordingFailureClassifierTests
     public void ClassifiesDllLoadFailuresAsVisualCRuntimeFailures()
     {
         var exception = RecordingFailureClassifier.Classify(
-            new DllNotFoundException("Unable to load DLL 'ScreenRecorderLib.dll'."));
+            new DllNotFoundException("Unable to load DLL 'ScreenRecorderLib.dll'.")
+        );
 
         Assert.Contains("Visual C++ Redistributable", exception.Message);
         Assert.IsType<DllNotFoundException>(exception.InnerException);
@@ -16,7 +17,8 @@ public sealed class RecordingFailureClassifierTests
     public void ClassifiesBadImageFormatAsArchitectureFailure()
     {
         var exception = RecordingFailureClassifier.Classify(
-            new BadImageFormatException("Bad image format."));
+            new BadImageFormatException("Bad image format.")
+        );
 
         Assert.Contains("wrong architecture", exception.Message);
         Assert.IsType<BadImageFormatException>(exception.InnerException);
@@ -26,7 +28,8 @@ public sealed class RecordingFailureClassifierTests
     public void ClassifiesMediaFoundationFailures()
     {
         var exception = RecordingFailureClassifier.Classify(
-            new InvalidOperationException("Media Foundation encoder failed."));
+            new InvalidOperationException("Media Foundation encoder failed.")
+        );
 
         Assert.Contains("Windows Media Foundation", exception.Message);
         Assert.Contains("Media Feature Pack", exception.Message);
@@ -36,7 +39,8 @@ public sealed class RecordingFailureClassifierTests
     public void ClassifiesMissingMfplatAsMediaFoundationFailure()
     {
         var exception = RecordingFailureClassifier.Classify(
-            new DllNotFoundException("Unable to load DLL 'mfplat.dll'."));
+            new DllNotFoundException("Unable to load DLL 'mfplat.dll'.")
+        );
 
         Assert.Contains("Windows Media Foundation", exception.Message);
         Assert.Contains("Media Feature Pack", exception.Message);

@@ -12,17 +12,17 @@ public sealed class RecordingCoordinatorTests
         await using var coordinator = CreateCoordinator(recorder);
         var context = Encounter(123);
 
-        var startResult = await coordinator.StartAutomaticAsync(
-            context,
-            CancellationToken.None);
+        var startResult = await coordinator.StartAutomaticAsync(context, CancellationToken.None);
         var wrongEndResult = await coordinator.StopAutomaticAsync(
             RecordingOwner.Encounter,
             "456",
-            CancellationToken.None);
+            CancellationToken.None
+        );
         var matchingEndResult = await coordinator.StopAutomaticAsync(
             RecordingOwner.Encounter,
             "123",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(RecordingCommandResult.Started, startResult);
         Assert.Equal(RecordingCommandResult.OwnerMismatch, wrongEndResult);
@@ -37,21 +37,22 @@ public sealed class RecordingCoordinatorTests
         var recorder = new FakeRecordingService();
         await using var coordinator = CreateCoordinator(recorder);
 
-        await coordinator.StartAutomaticAsync(
-            Challenge(),
-            CancellationToken.None);
+        await coordinator.StartAutomaticAsync(Challenge(), CancellationToken.None);
         await coordinator.StopManualAsync(CancellationToken.None);
 
         var nestedEncounterResult = await coordinator.StartAutomaticAsync(
             Encounter(123),
-            CancellationToken.None);
+            CancellationToken.None
+        );
         await coordinator.StopAutomaticAsync(
             RecordingOwner.ChallengeMode,
             null,
-            CancellationToken.None);
+            CancellationToken.None
+        );
         var nextEncounterResult = await coordinator.StartAutomaticAsync(
             Encounter(456),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(RecordingCommandResult.Suppressed, nestedEncounterResult);
         Assert.Equal(RecordingCommandResult.Started, nextEncounterResult);
@@ -64,9 +65,7 @@ public sealed class RecordingCoordinatorTests
         var recorder = new FakeRecordingService();
         await using var coordinator = CreateCoordinator(recorder);
 
-        await coordinator.StartAutomaticAsync(
-            Challenge(),
-            CancellationToken.None);
+        await coordinator.StartAutomaticAsync(Challenge(), CancellationToken.None);
         var result = await coordinator.StartManualAsync(CancellationToken.None);
 
         Assert.Equal(RecordingCommandResult.AlreadyActive, result);
@@ -79,16 +78,15 @@ public sealed class RecordingCoordinatorTests
         var recorder = new FakeRecordingService();
         await using var coordinator = CreateCoordinator(recorder);
 
-        await coordinator.StartAutomaticAsync(
-            Challenge(),
-            CancellationToken.None);
+        await coordinator.StartAutomaticAsync(Challenge(), CancellationToken.None);
         await coordinator.StopManualAsync(CancellationToken.None);
         await coordinator.StartManualAsync(CancellationToken.None);
 
         var endResult = await coordinator.StopAutomaticAsync(
             RecordingOwner.ChallengeMode,
             null,
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(RecordingCommandResult.OwnerMismatch, endResult);
         Assert.Null(coordinator.Status.SuppressedUntilOwnerEnd);
@@ -99,19 +97,20 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task StopWaitsForPendingStartBecauseOperationsAreSerialized()
     {
-        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingStart = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingStart = pendingStart };
         await using var coordinator = CreateCoordinator(recorder);
 
-        var startTask = coordinator.StartAutomaticAsync(
-            Encounter(123),
-            CancellationToken.None);
+        var startTask = coordinator.StartAutomaticAsync(Encounter(123), CancellationToken.None);
         await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
 
         var stopTask = coordinator.StopAutomaticAsync(
             RecordingOwner.Encounter,
             "123",
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.False(stopTask.IsCompleted);
         pendingStart.SetResult();
@@ -124,7 +123,9 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task CallerCancellationDoesNotCancelAcceptedStart()
     {
-        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingStart = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingStart = pendingStart };
         await using var coordinator = CreateCoordinator(recorder);
         using var cancellation = new CancellationTokenSource();
@@ -170,7 +171,9 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task CaptureTargetExitDuringStartupStopsAfterStartupCompletes()
     {
-        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingStart = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingStart = pendingStart };
         await using var coordinator = CreateCoordinator(recorder);
 
@@ -187,11 +190,14 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task StopTimeoutBlocksStartsUntilCleanupCompletes()
     {
-        var pendingStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingStop = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingStop = pendingStop };
         await using var coordinator = CreateCoordinator(
             recorder,
-            stopTimeout: TimeSpan.FromMilliseconds(20));
+            stopTimeout: TimeSpan.FromMilliseconds(20)
+        );
 
         await coordinator.StartManualAsync(CancellationToken.None);
         var stopResult = await coordinator.StopManualAsync(CancellationToken.None);
@@ -207,17 +213,21 @@ public sealed class RecordingCoordinatorTests
         Assert.Equal(new RecordingStatistics(1, 1), coordinator.Status.Statistics);
         Assert.Equal(
             RecordingCommandResult.Started,
-            await coordinator.StartManualAsync(CancellationToken.None));
+            await coordinator.StartManualAsync(CancellationToken.None)
+        );
     }
 
     [Fact]
     public async Task StartConfirmationTimeoutStopsAndReleasesRecorder()
     {
-        var pendingStart = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingStart = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingStart = pendingStart };
         await using var coordinator = CreateCoordinator(
             recorder,
-            startTimeout: TimeSpan.FromMilliseconds(20));
+            startTimeout: TimeSpan.FromMilliseconds(20)
+        );
 
         var result = await coordinator.StartManualAsync(CancellationToken.None);
         await WaitForStateAsync(coordinator, RecordingCoordinatorState.Idle);
@@ -232,7 +242,7 @@ public sealed class RecordingCoordinatorTests
     {
         var recorder = new FakeRecordingService
         {
-            StopException = new InvalidOperationException("finalization failed")
+            StopException = new InvalidOperationException("finalization failed"),
         };
         await using var coordinator = CreateCoordinator(recorder);
 
@@ -266,11 +276,14 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task DisposeReturnsWhenRecordingServiceDisposalTimesOut()
     {
-        var pendingDispose = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingDispose = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var recorder = new FakeRecordingService { PendingDispose = pendingDispose };
         var coordinator = CreateCoordinator(
             recorder,
-            disposeTimeout: TimeSpan.FromMilliseconds(20));
+            disposeTimeout: TimeSpan.FromMilliseconds(20)
+        );
 
         await coordinator.DisposeAsync();
 
@@ -290,19 +303,20 @@ public sealed class RecordingCoordinatorTests
             {
                 disposalStarted.Set();
                 disposeBlocker.Wait();
-            }
+            },
         };
         var coordinator = CreateCoordinator(
             recorder,
-            disposeTimeout: TimeSpan.FromMilliseconds(20));
+            disposeTimeout: TimeSpan.FromMilliseconds(20)
+        );
 
         await coordinator.DisposeAsync();
 
         try
         {
-            Assert.True(disposalStarted.Wait(
-                TimeSpan.FromSeconds(2),
-                TestContext.Current.CancellationToken));
+            Assert.True(
+                disposalStarted.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken)
+            );
             Assert.Equal(1, recorder.DisposeCalls);
         }
         finally
@@ -314,10 +328,7 @@ public sealed class RecordingCoordinatorTests
     [Fact]
     public async Task ActiveOutputPathIsExposedAndClearedWhenIdle()
     {
-        var recorder = new FakeRecordingService
-        {
-            ActiveOutputPath = @"C:\Recordings\manual.mp4"
-        };
+        var recorder = new FakeRecordingService { ActiveOutputPath = @"C:\Recordings\manual.mp4" };
         await using var coordinator = CreateCoordinator(recorder);
 
         await coordinator.StartManualAsync(CancellationToken.None);
@@ -350,7 +361,7 @@ public sealed class RecordingCoordinatorTests
     {
         var recorder = new FakeRecordingService
         {
-            StartException = new InvalidOperationException("capture failed")
+            StartException = new InvalidOperationException("capture failed"),
         };
         await using var coordinator = CreateCoordinator(recorder);
 
@@ -365,7 +376,8 @@ public sealed class RecordingCoordinatorTests
         var recorder = new FakeRecordingService
         {
             StartException = new InvalidOperationException(
-                "Could not find a running World of Warcraft window.")
+                "Could not find a running World of Warcraft window."
+            ),
         };
         await using var coordinator = CreateCoordinator(recorder);
 
@@ -380,22 +392,21 @@ public sealed class RecordingCoordinatorTests
         FakeRecordingService recorder,
         TimeSpan? startTimeout = null,
         TimeSpan? stopTimeout = null,
-        TimeSpan? disposeTimeout = null)
+        TimeSpan? disposeTimeout = null
+    )
     {
         return new RecordingCoordinator(
             recorder,
             NullLogger<RecordingCoordinator>.Instance,
             startTimeout ?? TimeSpan.FromSeconds(2),
             stopTimeout ?? TimeSpan.FromSeconds(2),
-            disposeTimeout ?? TimeSpan.FromSeconds(2));
+            disposeTimeout ?? TimeSpan.FromSeconds(2)
+        );
     }
 
     private static ChallengeRecordingContext Challenge()
     {
-        return new ChallengeRecordingContext(
-            DateTimeOffset.Now,
-            "Magisters' Terrace",
-            22);
+        return new ChallengeRecordingContext(DateTimeOffset.Now, "Magisters' Terrace", 22);
     }
 
     private static EncounterRecordingContext Encounter(int encounterId)
@@ -404,18 +415,23 @@ public sealed class RecordingCoordinatorTests
             DateTimeOffset.Now,
             encounterId,
             "Plexus Sentinel",
-            16);
+            16
+        );
     }
 
     private static async Task WaitForStateAsync(
         RecordingCoordinator coordinator,
-        RecordingCoordinatorState expectedState)
+        RecordingCoordinatorState expectedState
+    )
     {
         var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
 
         while (coordinator.Status.State != expectedState)
         {
-            Assert.True(DateTime.UtcNow < timeout, $"Coordinator did not reach state {expectedState}.");
+            Assert.True(
+                DateTime.UtcNow < timeout,
+                $"Coordinator did not reach state {expectedState}."
+            );
             await Task.Delay(10);
         }
     }

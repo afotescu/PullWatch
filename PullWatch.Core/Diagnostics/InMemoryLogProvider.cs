@@ -8,7 +8,8 @@ public sealed record ApplicationLogEntry(
     string Category,
     EventId EventId,
     string Message,
-    string? Exception);
+    string? Exception
+);
 
 public sealed class InMemoryLogProvider : ILoggerProvider
 {
@@ -84,7 +85,8 @@ public sealed class InMemoryLogProvider : ILoggerProvider
 
     private sealed class InMemoryLogger(InMemoryLogProvider provider, string category) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
         {
             return null;
         }
@@ -99,20 +101,24 @@ public sealed class InMemoryLogProvider : ILoggerProvider
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter
+        )
         {
             if (!IsEnabled(logLevel))
             {
                 return;
             }
 
-            provider.Add(new ApplicationLogEntry(
-                DateTimeOffset.Now,
-                logLevel,
-                category,
-                eventId,
-                formatter(state, exception),
-                exception?.ToString()));
+            provider.Add(
+                new ApplicationLogEntry(
+                    DateTimeOffset.Now,
+                    logLevel,
+                    category,
+                    eventId,
+                    formatter(state, exception),
+                    exception?.ToString()
+                )
+            );
         }
     }
 }

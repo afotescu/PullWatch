@@ -12,7 +12,8 @@ public sealed class SettingsViewModelTests
             {
                 saved = settings;
                 return Saved(settings);
-            });
+            }
+        );
 
         Assert.Equal("12", viewModel.BitrateMegabits);
 
@@ -47,7 +48,8 @@ public sealed class SettingsViewModelTests
             {
                 saveCalled = true;
                 return Saved(settings);
-            });
+            }
+        );
         viewModel.FrameRate = "not a number";
 
         var saved = await viewModel.SaveChangesAsync();
@@ -75,8 +77,11 @@ public sealed class SettingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromException<SettingsSaveResult>(
-                new InvalidOperationException("settings service unavailable")));
+            _ =>
+                Task.FromException<SettingsSaveResult>(
+                    new InvalidOperationException("settings service unavailable")
+                )
+        );
         viewModel.RecordMythicPlus = false;
 
         await viewModel.SaveCommand.ExecuteAsync();
@@ -84,17 +89,20 @@ public sealed class SettingsViewModelTests
         Assert.True(viewModel.IsSaveError);
         Assert.Equal(
             "Could not save settings: settings service unavailable",
-            viewModel.SaveMessage);
+            viewModel.SaveMessage
+        );
     }
 
     private static SettingsViewModel CreateViewModel(
         ApplicationStatus status,
-        Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null)
+        Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null
+    )
     {
         return new SettingsViewModel(
             status,
             (settings, _) => save?.Invoke(settings) ?? Saved(settings),
-            new FakeSettingsDialogs());
+            new FakeSettingsDialogs()
+        );
     }
 
     private static Task<SettingsSaveResult> Saved(PullWatchSettings settings)
@@ -104,32 +112,22 @@ public sealed class SettingsViewModelTests
 
     private static ApplicationStatus Status(
         RecordingCoordinatorState state,
-        PullWatchSettings? settings = null)
+        PullWatchSettings? settings = null
+    )
     {
         return new ApplicationStatus(
-            settings ?? new PullWatchSettings
-            {
-                RecordingsDirectory = Path.Combine(Path.GetTempPath(), "PullWatchViewModelTests")
-            },
-            new RecordingCoordinatorStatus(
-                state,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null),
-            new CombatLogReaderStatus(
-                CombatLogReaderState.WaitingForCombatLog,
-                null,
-                null,
-                null),
-            new WowProcessStatus(
-                WowProcessState.WaitingForProcess,
-                null,
-                null,
-                null));
+            settings
+                ?? new PullWatchSettings
+                {
+                    RecordingsDirectory = Path.Combine(
+                        Path.GetTempPath(),
+                        "PullWatchViewModelTests"
+                    ),
+                },
+            new RecordingCoordinatorStatus(state, null, null, null, null, null, null, null),
+            new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+        );
     }
 
     private sealed class FakeSettingsDialogs : ISettingsDialogs

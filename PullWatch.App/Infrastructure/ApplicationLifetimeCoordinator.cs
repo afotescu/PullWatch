@@ -11,7 +11,8 @@ public sealed class ApplicationLifetimeCoordinator
         Func<ApplicationStatus> getStatus,
         Func<bool> confirmExitWhileRecording,
         Func<CancellationToken, Task<RecordingCommandResult>> finalizeRecording,
-        Action requestShutdown)
+        Action requestShutdown
+    )
     {
         _getStatus = getStatus;
         _confirmExitWhileRecording = confirmExitWhileRecording;
@@ -45,8 +46,11 @@ public sealed class ApplicationLifetimeCoordinator
             var result = await _finalizeRecording(cancellationToken);
             LastFinalizationResult = result;
 
-            if (result is not RecordingCommandResult.Stopped and
-                not RecordingCommandResult.NoActiveRecording)
+            if (
+                result
+                is not RecordingCommandResult.Stopped
+                    and not RecordingCommandResult.NoActiveRecording
+            )
             {
                 return false;
             }

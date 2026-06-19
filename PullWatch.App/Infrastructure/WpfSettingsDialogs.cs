@@ -10,7 +10,7 @@ public sealed class WpfSettingsDialogs : ISettingsDialogs
         var dialog = new OpenFolderDialog
         {
             Title = title,
-            InitialDirectory = initialDirectory ?? string.Empty
+            InitialDirectory = initialDirectory ?? string.Empty,
         };
 
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
@@ -19,9 +19,10 @@ public sealed class WpfSettingsDialogs : ISettingsDialogs
     public bool SaveBeforeLeavingSettings()
     {
         return MessageBox.Show(
-                   "Save your settings changes before leaving?",
-                   "Unsaved settings",
-                   MessageBoxButton.YesNo,
-                   MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                "Save your settings changes before leaving?",
+                "Unsaved settings",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning
+            ) == MessageBoxResult.Yes;
     }
 }

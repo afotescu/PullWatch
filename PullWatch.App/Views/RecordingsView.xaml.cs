@@ -23,13 +23,16 @@ public partial class RecordingsView : UserControl
             TimeSpan.FromMilliseconds(250),
             DispatcherPriority.Background,
             OnPositionTimerTick,
-            Dispatcher);
+            Dispatcher
+        );
         PlaybackSlider.AddHandler(
             Thumb.DragStartedEvent,
-            new DragStartedEventHandler(OnPlaybackThumbDragStarted));
+            new DragStartedEventHandler(OnPlaybackThumbDragStarted)
+        );
         PlaybackSlider.AddHandler(
             Thumb.DragCompletedEvent,
-            new DragCompletedEventHandler(OnPlaybackThumbDragCompleted));
+            new DragCompletedEventHandler(OnPlaybackThumbDragCompleted)
+        );
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         DataContextChanged += OnDataContextChanged;
@@ -97,7 +100,10 @@ public partial class RecordingsView : UserControl
         var selectedRecording = _viewModel?.SelectedRecording;
         RecordingPlayer.Source = selectedRecording?.Source;
         PlayPauseButton.IsEnabled = selectedRecording is not null;
-        PlayerPlaceholder.SetCurrentValue(TextBlock.TextProperty, _viewModel?.RecordingLibraryStatus ?? string.Empty);
+        PlayerPlaceholder.SetCurrentValue(
+            TextBlock.TextProperty,
+            _viewModel?.RecordingLibraryStatus ?? string.Empty
+        );
     }
 
     private void OnPlayPauseClicked(object sender, RoutedEventArgs eventArgs)
@@ -157,7 +163,8 @@ public partial class RecordingsView : UserControl
         PlaybackSlider.IsEnabled = false;
         PlayerPlaceholder.SetCurrentValue(
             TextBlock.TextProperty,
-            $"This recording could not be played: {eventArgs.ErrorException.Message}");
+            $"This recording could not be played: {eventArgs.ErrorException.Message}"
+        );
         PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Visible);
     }
 
@@ -200,7 +207,8 @@ public partial class RecordingsView : UserControl
 
     private void OnPlaybackSliderValueChanged(
         object sender,
-        RoutedPropertyChangedEventArgs<double> eventArgs)
+        RoutedPropertyChangedEventArgs<double> eventArgs
+    )
     {
         if (_isSeeking)
         {
@@ -228,8 +236,8 @@ public partial class RecordingsView : UserControl
         }
 
         var ratio = Math.Clamp(point.X / PlaybackSlider.ActualWidth, 0, 1);
-        PlaybackSlider.Value = PlaybackSlider.Minimum +
-                               ratio * (PlaybackSlider.Maximum - PlaybackSlider.Minimum);
+        PlaybackSlider.Value =
+            PlaybackSlider.Minimum + ratio * (PlaybackSlider.Maximum - PlaybackSlider.Minimum);
         SeekToSliderValue();
     }
 

@@ -27,9 +27,12 @@ public sealed class ApplicationLifetimeCoordinatorTests
                 finalized = true;
                 return Task.FromResult(RecordingCommandResult.Stopped);
             },
-            shutdown: () => shutdown = true);
+            shutdown: () => shutdown = true
+        );
 
-        var result = await coordinator.RequestExplicitExitAsync(TestContext.Current.CancellationToken);
+        var result = await coordinator.RequestExplicitExitAsync(
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(result);
         Assert.True(finalized);
@@ -50,9 +53,12 @@ public sealed class ApplicationLifetimeCoordinatorTests
                 finalized = true;
                 return Task.FromResult(RecordingCommandResult.Stopped);
             },
-            shutdown: () => shutdown = true);
+            shutdown: () => shutdown = true
+        );
 
-        var result = await coordinator.RequestExplicitExitAsync(TestContext.Current.CancellationToken);
+        var result = await coordinator.RequestExplicitExitAsync(
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(result);
         Assert.False(finalized);
@@ -63,16 +69,21 @@ public sealed class ApplicationLifetimeCoordinatorTests
     [Theory]
     [InlineData(RecordingCommandResult.Failed)]
     [InlineData(RecordingCommandResult.TimedOut)]
-    public async Task FailedFinalizationLeavesApplicationRunning(RecordingCommandResult finalizationResult)
+    public async Task FailedFinalizationLeavesApplicationRunning(
+        RecordingCommandResult finalizationResult
+    )
     {
         var shutdown = false;
         var coordinator = CreateCoordinator(
             Status(RecordingCoordinatorState.Recording),
             confirm: () => true,
             finalize: _ => Task.FromResult(finalizationResult),
-            shutdown: () => shutdown = true);
+            shutdown: () => shutdown = true
+        );
 
-        var result = await coordinator.RequestExplicitExitAsync(TestContext.Current.CancellationToken);
+        var result = await coordinator.RequestExplicitExitAsync(
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(result);
         Assert.False(shutdown);
@@ -84,13 +95,15 @@ public sealed class ApplicationLifetimeCoordinatorTests
         ApplicationStatus status,
         Func<bool>? confirm = null,
         Func<CancellationToken, Task<RecordingCommandResult>>? finalize = null,
-        Action? shutdown = null)
+        Action? shutdown = null
+    )
     {
         return new ApplicationLifetimeCoordinator(
             () => status,
             confirm ?? (() => true),
             finalize ?? (_ => Task.FromResult(RecordingCommandResult.NoActiveRecording)),
-            shutdown ?? (() => { }));
+            shutdown ?? (() => { })
+        );
     }
 
     private static ApplicationStatus Status(RecordingCoordinatorState state)
@@ -107,16 +120,10 @@ public sealed class ApplicationLifetimeCoordinatorTests
                 null,
                 null,
                 null,
-                null),
-            new CombatLogReaderStatus(
-                CombatLogReaderState.WaitingForCombatLog,
-                null,
-                null,
-                null),
-            new WowProcessStatus(
-                WowProcessState.WaitingForProcess,
-                null,
-                null,
-                null));
+                null
+            ),
+            new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+        );
     }
 }

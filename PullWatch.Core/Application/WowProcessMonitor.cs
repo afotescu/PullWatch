@@ -13,18 +13,12 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
     private readonly object _statusLock = new();
     private readonly object _processLock = new();
     private readonly object _exitSignalLock = new();
-    private WowProcessStatus _status = new(
-        WowProcessState.WaitingForProcess,
-        null,
-        null,
-        null);
+    private WowProcessStatus _status = new(WowProcessState.WaitingForProcess, null, null, null);
     private Process? _observedProcess;
     private TaskCompletionSource _targetExited = CreateCompletionSource();
     private bool _disposed;
 
-    public WowProcessMonitor(
-        ILogger<WowProcessMonitor> logger,
-        TimeSpan? pollInterval = null)
+    public WowProcessMonitor(ILogger<WowProcessMonitor> logger, TimeSpan? pollInterval = null)
     {
         _logger = logger;
         _pollInterval = pollInterval ?? DefaultPollInterval;
@@ -114,7 +108,8 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
                         WowProcessState.WindowAvailable,
                         selectedProcess.Id,
                         string.IsNullOrWhiteSpace(title) ? null : title,
-                        null);
+                        null
+                    );
                 }
                 catch (InvalidOperationException)
                 {
@@ -125,7 +120,12 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
             ClearObservedProcess();
             return firstProcessId is null
                 ? new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
-                : new WowProcessStatus(WowProcessState.WaitingForWindow, firstProcessId, null, null);
+                : new WowProcessStatus(
+                    WowProcessState.WaitingForWindow,
+                    firstProcessId,
+                    null,
+                    null
+                );
         }
         finally
         {

@@ -15,7 +15,8 @@ public sealed class SettingsBootstrapperTests
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => detectedLogsDirectory);
+            () => detectedLogsDirectory
+        );
 
         var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
         var persisted = await store.LoadAsync(cancellationToken);
@@ -39,7 +40,8 @@ public sealed class SettingsBootstrapperTests
         var bootstrapper = new SettingsBootstrapper(
             new SettingsStore(path),
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null);
+            () => null
+        );
 
         var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
 

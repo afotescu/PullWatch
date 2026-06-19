@@ -5,7 +5,8 @@ namespace PullWatch;
 public sealed class AsyncRelayCommand(
     Func<Task> execute,
     Func<bool>? canExecute = null,
-    Action<Exception>? onException = null) : ObservableObject, ICommand
+    Action<Exception>? onException = null
+) : ObservableObject, ICommand
 {
     private bool _isExecuting;
     private Exception? _lastException;
@@ -67,7 +68,8 @@ public sealed class AsyncRelayCommand(
                 LastException = new AggregateException(
                     "Command execution and exception reporting both failed.",
                     exception,
-                    reportingException);
+                    reportingException
+                );
             }
         }
         finally

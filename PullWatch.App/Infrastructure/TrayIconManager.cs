@@ -6,7 +6,10 @@ namespace PullWatch;
 
 public sealed class TrayIconManager : IDisposable
 {
-    private static readonly Uri TrayIconUri = new("pack://application:,,,/Assets/favicon.ico", UriKind.Absolute);
+    private static readonly Uri TrayIconUri = new(
+        "pack://application:,,,/Assets/favicon.ico",
+        UriKind.Absolute
+    );
 
     private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
@@ -20,7 +23,8 @@ public sealed class TrayIconManager : IDisposable
         ApplicationController controller,
         Action showWindow,
         Func<Task> requestExit,
-        ILogger<TrayIconManager> logger)
+        ILogger<TrayIconManager> logger
+    )
     {
         _controller = controller;
         _showWindow = showWindow;
@@ -42,7 +46,7 @@ public sealed class TrayIconManager : IDisposable
             Icon = _trayIcon,
             Text = "PullWatch",
             ContextMenuStrip = menu,
-            Visible = true
+            Visible = true,
         };
         _notifyIcon.DoubleClick += (_, _) => _showWindow();
         _controller.StatusChanged += OnStatusChanged;
@@ -78,7 +82,9 @@ public sealed class TrayIconManager : IDisposable
         {
             if (_controller.OperatingSystemActions is not null)
             {
-                await _controller.OperatingSystemActions.OpenRecordingsFolderAsync(CancellationToken.None);
+                await _controller.OperatingSystemActions.OpenRecordingsFolderAsync(
+                    CancellationToken.None
+                );
             }
         });
     }
@@ -95,11 +101,14 @@ public sealed class TrayIconManager : IDisposable
 
     private void ApplyStatus(ApplicationStatus status)
     {
-        _recordingItem.Text = status.Recording.State == RecordingCoordinatorState.Idle
-            ? "Start manual recording"
-            : "Stop recording";
-        _recordingItem.Enabled = status.Recording.State is
-            RecordingCoordinatorState.Idle or RecordingCoordinatorState.Recording;
+        _recordingItem.Text =
+            status.Recording.State == RecordingCoordinatorState.Idle
+                ? "Start manual recording"
+                : "Stop recording";
+        _recordingItem.Enabled =
+            status.Recording.State
+                is RecordingCoordinatorState.Idle
+                    or RecordingCoordinatorState.Recording;
     }
 
     private static Icon LoadTrayIcon(ILogger logger)
@@ -136,7 +145,8 @@ public sealed class TrayIconManager : IDisposable
                 5000,
                 "PullWatch command failed",
                 exception.Message,
-                ToolTipIcon.Error);
+                ToolTipIcon.Error
+            );
         }
     }
 }

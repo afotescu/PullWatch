@@ -32,6 +32,12 @@ jobs:
       - name: Show .NET info
         run: dotnet --info
 
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Check formatting
+        run: dotnet csharpier check .
+
       - name: Restore
         run: dotnet restore PullWatch.sln -p:Platform=${{ env.PLATFORM }}
 

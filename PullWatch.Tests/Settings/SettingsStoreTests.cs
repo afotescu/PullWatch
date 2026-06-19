@@ -30,13 +30,9 @@ public sealed class SettingsStoreTests
                 Bitrate = 20_000_000,
                 FrameRate = 120,
                 CaptureCursor = false,
-                ShowCaptureBorder = true
+                ShowCaptureBorder = true,
             },
-            Audio = new AudioSettings
-            {
-                CaptureSystemAudio = false,
-                CaptureMicrophone = true
-            }
+            Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
         };
 
         await store.SaveAsync(settings, CancellationToken.None);
@@ -72,7 +68,8 @@ public sealed class SettingsStoreTests
         await File.WriteAllTextAsync(
             path,
             """{ "Version": 1, "FutureSetting": true }""",
-            cancellationToken);
+            cancellationToken
+        );
         var store = new SettingsStore(path);
 
         var result = await store.LoadAsync(cancellationToken);
@@ -91,10 +88,12 @@ public sealed class SettingsStoreTests
         await File.WriteAllTextAsync(path, existingJson, cancellationToken);
         var store = new SettingsStore(
             path,
-            (_, _) => throw new IOException("Simulated replace failure."));
+            (_, _) => throw new IOException("Simulated replace failure.")
+        );
 
-        await Assert.ThrowsAsync<IOException>(
-            () => store.SaveAsync(new PullWatchSettings(), cancellationToken));
+        await Assert.ThrowsAsync<IOException>(() =>
+            store.SaveAsync(new PullWatchSettings(), cancellationToken)
+        );
 
         Assert.Equal(existingJson, await File.ReadAllTextAsync(path, cancellationToken));
         Assert.Single(Directory.EnumerateFiles(directory.Path));

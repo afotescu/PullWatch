@@ -12,7 +12,7 @@ public sealed class DiagnosticsReportBuilderTests
             new PullWatchSettings
             {
                 WowLogsDirectory = @"C:\World of Warcraft\_retail_\Logs",
-                RecordingsDirectory = @"D:\Recordings"
+                RecordingsDirectory = @"D:\Recordings",
             },
             new RecordingCoordinatorStatus(
                 RecordingCoordinatorState.Recording,
@@ -22,28 +22,31 @@ public sealed class DiagnosticsReportBuilderTests
                 null,
                 null,
                 failure,
-                @"D:\Recordings\active.mp4"),
+                @"D:\Recordings\active.mp4"
+            ),
             new CombatLogReaderStatus(
                 CombatLogReaderState.ReadingCombatLog,
                 @"C:\World of Warcraft\_retail_\Logs\WoWCombatLog.txt",
                 DateTimeOffset.UtcNow,
-                null),
-            new WowProcessStatus(
-                WowProcessState.WindowAvailable,
-                1234,
-                "World of Warcraft",
-                null));
+                null
+            ),
+            new WowProcessStatus(WowProcessState.WindowAvailable, 1234, "World of Warcraft", null)
+        );
 
         var report = DiagnosticsReportBuilder.Build(
             "1.2.3",
             status,
-            [new ApplicationLogEntry(
-                DateTimeOffset.Now,
-                LogLevel.Warning,
-                "PullWatch.Test",
-                new EventId(1),
-                "test warning",
-                null)]);
+            [
+                new ApplicationLogEntry(
+                    DateTimeOffset.Now,
+                    LogLevel.Warning,
+                    "PullWatch.Test",
+                    new EventId(1),
+                    "test warning",
+                    null
+                ),
+            ]
+        );
 
         Assert.Contains("App version: 1.2.3", report);
         Assert.Contains(status.CombatLog.CurrentPath!, report);

@@ -10,14 +10,19 @@ public sealed class SingleInstanceCoordinatorTests
         var name = $"PullWatch.Tests.{Guid.NewGuid():N}";
         await using var first = new SingleInstanceCoordinator(name);
         await using var second = new SingleInstanceCoordinator(name);
-        var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activated = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         Assert.True(first.TryAcquire());
         first.StartActivationListener(() => activated.TrySetResult());
         Assert.False(second.TryAcquire());
 
         Assert.True(await second.ActivateExistingAsync(TestContext.Current.CancellationToken));
-        await activated.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await activated.Task.WaitAsync(
+            TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken
+        );
     }
 
     [Fact]
@@ -28,7 +33,9 @@ public sealed class SingleInstanceCoordinatorTests
 
         try
         {
-            SynchronizationContext.SetSynchronizationContext(new NonPumpingSynchronizationContext());
+            SynchronizationContext.SetSynchronizationContext(
+                new NonPumpingSynchronizationContext()
+            );
             Assert.True(coordinator.TryAcquire());
             coordinator.StartActivationListener(() => { });
         }
@@ -39,7 +46,8 @@ public sealed class SingleInstanceCoordinatorTests
 
         await Task.Run(
                 () => coordinator.DisposeAsync().AsTask(),
-                TestContext.Current.CancellationToken)
+                TestContext.Current.CancellationToken
+            )
             .WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 
@@ -49,29 +57,35 @@ public sealed class SingleInstanceCoordinatorTests
         var name = $"PullWatch.Tests.{Guid.NewGuid():N}";
         await using var first = new SingleInstanceCoordinator(name);
         await using var second = new SingleInstanceCoordinator(name);
-        var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activated = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         Assert.True(first.TryAcquire());
         first.StartActivationListener(() => activated.TrySetResult());
         Assert.False(second.TryAcquire());
 
-        await using (var incompleteClient = new NamedPipeClientStream(
-                         ".",
-                         name,
-                         PipeDirection.Out,
-                         PipeOptions.Asynchronous))
+        await using (
+            var incompleteClient = new NamedPipeClientStream(
+                ".",
+                name,
+                PipeDirection.Out,
+                PipeOptions.Asynchronous
+            )
+        )
         {
             await incompleteClient.ConnectAsync(TestContext.Current.CancellationToken);
         }
 
         Assert.True(await second.ActivateExistingAsync(TestContext.Current.CancellationToken));
-        await activated.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await activated.Task.WaitAsync(
+            TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken
+        );
     }
 
     private sealed class NonPumpingSynchronizationContext : SynchronizationContext
     {
-        public override void Post(SendOrPostCallback callback, object? state)
-        {
-        }
+        public override void Post(SendOrPostCallback callback, object? state) { }
     }
 }

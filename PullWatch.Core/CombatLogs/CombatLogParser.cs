@@ -25,9 +25,7 @@ internal static class CombatLogParser
             return false;
         }
 
-        var argumentsStart = eventEnd < line.Length
-            ? eventEnd + 1
-            : line.Length;
+        var argumentsStart = eventEnd < line.Length ? eventEnd + 1 : line.Length;
         combatLogEvent = new CombatLogEvent(eventName, argumentsStart, line);
         return true;
     }

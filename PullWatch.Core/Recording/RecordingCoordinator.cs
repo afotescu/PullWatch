@@ -26,14 +26,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         null,
         null,
         null,
-        null);
+        null
+    );
     private bool _disposed;
 
     private enum StopRequestKind
     {
         Automatic,
         Manual,
-        Shutdown
+        Shutdown,
     }
 
     public RecordingCoordinator(
@@ -41,7 +42,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         ILogger<RecordingCoordinator> logger,
         TimeSpan? startTimeout = null,
         TimeSpan? stopTimeout = null,
-        TimeSpan? disposeTimeout = null)
+        TimeSpan? disposeTimeout = null
+    )
     {
         _recordingService = recordingService;
         _logger = logger;
@@ -58,11 +60,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 
     public Task<RecordingCommandResult> StartAutomaticAsync(
         RecordingContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (context is ManualRecordingContext)
         {
-            throw new ArgumentException("Automatic recording context cannot be manual.", nameof(context));
+            throw new ArgumentException(
+                "Automatic recording context cannot be manual.",
+                nameof(context)
+            );
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -72,17 +78,22 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     public Task<RecordingCommandResult> StartManualAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StartCoreAsync(new ManualRecordingContext(DateTimeOffset.Now)).WaitAsync(cancellationToken);
+        return StartCoreAsync(new ManualRecordingContext(DateTimeOffset.Now))
+            .WaitAsync(cancellationToken);
     }
 
     public Task<RecordingCommandResult> StopAutomaticAsync(
         RecordingOwner owner,
         string? identity,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (owner == RecordingOwner.Manual)
         {
-            throw new ArgumentException("Automatic recording owner cannot be manual.", nameof(owner));
+            throw new ArgumentException(
+                "Automatic recording owner cannot be manual.",
+                nameof(owner)
+            );
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -93,15 +104,13 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     public Task<RecordingCommandResult> StopManualAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(null, null, StopRequestKind.Manual)
-            .WaitAsync(cancellationToken);
+        return StopCoreAsync(null, null, StopRequestKind.Manual).WaitAsync(cancellationToken);
     }
 
     public Task<RecordingCommandResult> ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(null, null, StopRequestKind.Shutdown)
-            .WaitAsync(cancellationToken);
+        return StopCoreAsync(null, null, StopRequestKind.Shutdown).WaitAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -127,7 +136,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             {
                 disposeTask = Task.Run(
                     async () => await _recordingService.DisposeAsync(),
-                    CancellationToken.None);
+                    CancellationToken.None
+                );
                 await disposeTask.WaitAsync(_disposeTimeout);
             }
             catch (TimeoutException exception)
@@ -136,13 +146,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 {
                     _ = ObserveBackgroundTaskAsync(
                         disposeTask,
-                        "Recording service disposal failed after timing out");
+                        "Recording service disposal failed after timing out"
+                    );
                 }
 
                 _logger.LogError(
                     exception,
                     "Recording service disposal timed out after {DisposeTimeout}",
-                    _disposeTimeout);
+                    _disposeTimeout
+                );
             }
             catch (Exception exception)
             {
@@ -167,7 +179,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     "Ignoring {RecordingOwner} recording start because {ActiveOwner} owns state {RecordingState}",
                     owner,
                     status.Owner,
-                    status.State);
+                    status.State
+                );
                 return RecordingCommandResult.AlreadyActive;
             }
 
@@ -176,7 +189,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 _logger.LogInformation(
                     "Ignoring {RecordingOwner} recording start until the manually stopped {SuppressedOwner} activity ends",
                     owner,
-                    status.SuppressedUntilOwnerEnd);
+                    status.SuppressedUntilOwnerEnd
+                );
                 return RecordingCommandResult.Suppressed;
             }
 
@@ -191,14 +205,16 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     owner,
                     identity,
                     context,
-                    activeOutputPath: _recordingService.ActiveOutputPath);
+                    activeOutputPath: _recordingService.ActiveOutputPath
+                );
                 await startTask.WaitAsync(_startTimeout);
                 PublishStatus(
                     RecordingCoordinatorState.Recording,
                     owner,
                     identity,
                     context,
-                    activeOutputPath: _recordingService.ActiveOutputPath);
+                    activeOutputPath: _recordingService.ActiveOutputPath
+                );
                 return RecordingCommandResult.Started;
             }
             catch (Exception exception) when (IsTargetUnavailableException(exception))
@@ -209,31 +225,42 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     null,
                     null,
                     null,
-                    clearLastFailure: true);
+                    clearLastFailure: true
+                );
                 _logger.LogInformation(
                     exception,
                     "Could not start {RecordingOwner} recording because the capture target is unavailable",
-                    owner);
+                    owner
+                );
                 return RecordingCommandResult.TargetUnavailable;
             }
             catch (TimeoutException exception)
             {
                 var failure = new TimeoutException(
                     $"Recording start timed out after {_startTimeout}.",
-                    exception);
+                    exception
+                );
                 PublishStatus(
                     RecordingCoordinatorState.Stopping,
                     owner,
                     identity,
                     context,
-                    failure);
+                    failure
+                );
                 if (startTask is not null)
                 {
-                    _ = ObserveBackgroundTaskAsync(startTask, "Recorder startup failed after timing out");
+                    _ = ObserveBackgroundTaskAsync(
+                        startTask,
+                        "Recorder startup failed after timing out"
+                    );
                 }
 
                 _ = ObserveCleanupAsync(_recordingService.StopAsync(CancellationToken.None));
-                _logger.LogError(exception, "Recording start timed out for {RecordingOwner}", owner);
+                _logger.LogError(
+                    exception,
+                    "Recording start timed out for {RecordingOwner}",
+                    owner
+                );
                 return RecordingCommandResult.TimedOut;
             }
             catch (Exception exception)
@@ -252,7 +279,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private async Task<RecordingCommandResult> StopCoreAsync(
         RecordingOwner? requestedOwner,
         string? requestedIdentity,
-        StopRequestKind requestKind)
+        StopRequestKind requestKind
+    )
     {
         await _operationLock.WaitAsync(CancellationToken.None);
 
@@ -260,8 +288,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         {
             var status = Status;
             var suppressionEndMatched =
-                requestKind == StopRequestKind.Automatic &&
-                IsSuppressionEndMatch(requestedOwner, requestedIdentity);
+                requestKind == StopRequestKind.Automatic
+                && IsSuppressionEndMatch(requestedOwner, requestedIdentity);
 
             if (suppressionEndMatched)
             {
@@ -274,23 +302,33 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 return RecordingCommandResult.NoActiveRecording;
             }
 
-            if (requestKind == StopRequestKind.Automatic &&
-                !IsActivityMatch(status, requestedOwner, requestedIdentity))
+            if (
+                requestKind == StopRequestKind.Automatic
+                && !IsActivityMatch(status, requestedOwner, requestedIdentity)
+            )
             {
                 _logger.LogInformation(
                     "Ignoring recording stop for {RequestedOwner} because recording is owned by {ActiveOwner}",
                     requestedOwner,
-                    status.Owner);
+                    status.Owner
+                );
                 return RecordingCommandResult.OwnerMismatch;
             }
 
-            if (requestKind == StopRequestKind.Manual &&
-                status.Owner is not null and not RecordingOwner.Manual)
+            if (
+                requestKind == StopRequestKind.Manual
+                && status.Owner is not null and not RecordingOwner.Manual
+            )
             {
                 SetSuppression(status.Owner.Value, status.Identity);
             }
 
-            PublishStatus(RecordingCoordinatorState.Stopping, status.Owner, status.Identity, status.Context);
+            PublishStatus(
+                RecordingCoordinatorState.Stopping,
+                status.Owner,
+                status.Identity,
+                status.Context
+            );
             var stopTask = _recordingService.StopAsync(CancellationToken.None);
 
             try
@@ -304,21 +342,31 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             {
                 var failure = new TimeoutException(
                     $"Recording stop timed out after {_stopTimeout}.",
-                    exception);
+                    exception
+                );
                 PublishStatus(
                     RecordingCoordinatorState.Stopping,
                     status.Owner,
                     status.Identity,
                     status.Context,
-                    failure);
+                    failure
+                );
                 _ = ObserveCleanupAsync(stopTask);
-                _logger.LogError(exception, "Recording stop timed out for {RecordingOwner}", status.Owner);
+                _logger.LogError(
+                    exception,
+                    "Recording stop timed out for {RecordingOwner}",
+                    status.Owner
+                );
                 return RecordingCommandResult.TimedOut;
             }
             catch (Exception exception)
             {
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null, exception);
-                _logger.LogError(exception, "Could not stop {RecordingOwner} recording", status.Owner);
+                _logger.LogError(
+                    exception,
+                    "Could not stop {RecordingOwner} recording",
+                    status.Owner
+                );
                 return RecordingCommandResult.Failed;
             }
         }
@@ -387,7 +435,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         {
             _logger.LogError(
                 "Could not gracefully stop recording after the capture target exited: {RecordingCommandResult}",
-                result);
+                result
+            );
         }
     }
 
@@ -411,23 +460,24 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private bool IsSuppressionEndMatch(RecordingOwner? owner, string? identity)
     {
         var status = Status;
-        return status.SuppressedUntilOwnerEnd == owner &&
-               IdentitiesMatch(status.SuppressedIdentity, identity);
+        return status.SuppressedUntilOwnerEnd == owner
+            && IdentitiesMatch(status.SuppressedIdentity, identity);
     }
 
     private static bool IsActivityMatch(
         RecordingCoordinatorStatus status,
         RecordingOwner? owner,
-        string? identity)
+        string? identity
+    )
     {
         return status.Owner == owner && IdentitiesMatch(status.Identity, identity);
     }
 
     private static bool IdentitiesMatch(string? activeIdentity, string? requestedIdentity)
     {
-        return activeIdentity is null ||
-               requestedIdentity is null ||
-               StringComparer.Ordinal.Equals(activeIdentity, requestedIdentity);
+        return activeIdentity is null
+            || requestedIdentity is null
+            || StringComparer.Ordinal.Equals(activeIdentity, requestedIdentity);
     }
 
     private static RecordingOwner GetOwner(RecordingContext context)
@@ -437,7 +487,11 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             ManualRecordingContext => RecordingOwner.Manual,
             ChallengeRecordingContext => RecordingOwner.ChallengeMode,
             EncounterRecordingContext => RecordingOwner.Encounter,
-            _ => throw new ArgumentOutOfRangeException(nameof(context), context, "Unknown recording context.")
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(context),
+                context,
+                "Unknown recording context."
+            ),
         };
     }
 
@@ -450,20 +504,12 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 
     private void SetSuppression(RecordingOwner owner, string? identity)
     {
-        SetStatus(Status with
-        {
-            SuppressedUntilOwnerEnd = owner,
-            SuppressedIdentity = identity
-        });
+        SetStatus(Status with { SuppressedUntilOwnerEnd = owner, SuppressedIdentity = identity });
     }
 
     private void ClearSuppression()
     {
-        SetStatus(Status with
-        {
-            SuppressedUntilOwnerEnd = null,
-            SuppressedIdentity = null
-        });
+        SetStatus(Status with { SuppressedUntilOwnerEnd = null, SuppressedIdentity = null });
     }
 
     private void PublishStatus(
@@ -474,7 +520,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         Exception? lastFailure = null,
         RecordingOwner? suppressedUntilOwnerEnd = null,
         string? activeOutputPath = null,
-        bool clearLastFailure = false)
+        bool clearLastFailure = false
+    )
     {
         var current = Status;
         var snapshot = new RecordingCoordinatorStatus(
@@ -487,9 +534,10 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             clearLastFailure ? null : lastFailure ?? current.LastFailure,
             state == RecordingCoordinatorState.Idle
                 ? null
-                : activeOutputPath ?? current.ActiveOutputPath)
+                : activeOutputPath ?? current.ActiveOutputPath
+        )
         {
-            Statistics = new RecordingStatistics(_expectedCount, _savedCount)
+            Statistics = new RecordingStatistics(_expectedCount, _savedCount),
         };
 
         SetStatus(snapshot);
@@ -509,7 +557,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 _ => PublishStatusNotification(snapshot),
                 CancellationToken.None,
                 TaskContinuationOptions.None,
-                TaskScheduler.Default);
+                TaskScheduler.Default
+            );
         }
     }
 
@@ -539,13 +588,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     {
         var text = exception.ToString();
 
-        if (text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase) &&
-            text.Contains("window", StringComparison.OrdinalIgnoreCase))
+        if (
+            text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase)
+            && text.Contains("window", StringComparison.OrdinalIgnoreCase)
+        )
         {
             return true;
         }
 
-        return exception.InnerException is not null &&
-               IsTargetUnavailableException(exception.InnerException);
+        return exception.InnerException is not null
+            && IsTargetUnavailableException(exception.InnerException);
     }
 }

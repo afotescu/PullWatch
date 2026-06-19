@@ -6,7 +6,8 @@ internal sealed class FakeCombatLogMonitor : ICombatLogMonitor
         CombatLogReaderState.WaitingForCombatLog,
         null,
         null,
-        null);
+        null
+    );
 
     public event Action<CombatLogReaderStatus>? StatusChanged;
 
@@ -18,7 +19,8 @@ internal sealed class FakeCombatLogMonitor : ICombatLogMonitor
 
     public async Task ReadAsync(
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Started = true;
 

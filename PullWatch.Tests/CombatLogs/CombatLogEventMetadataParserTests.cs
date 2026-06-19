@@ -9,7 +9,8 @@ public sealed class CombatLogEventMetadataParserTests
     {
         var combatLogEvent = CreateEvent(
             WowEvents.ChallengeModeStart,
-            "\"Magisters' Terrace\",2811,558,22,[9,10,147]");
+            "\"Magisters' Terrace\",2811,558,22,[9,10,147]"
+        );
 
         var context = CombatLogEventMetadataParser.ParseChallengeStart(combatLogEvent, StartedAt);
 
@@ -23,7 +24,8 @@ public sealed class CombatLogEventMetadataParserTests
     {
         var combatLogEvent = CreateEvent(
             WowEvents.EncounterStart,
-            "3129,\"Plexus Sentinel\",16,20,2810");
+            "3129,\"Plexus Sentinel\",16,20,2810"
+        );
 
         var context = CombatLogEventMetadataParser.ParseEncounterStart(combatLogEvent, StartedAt);
 

@@ -6,11 +6,15 @@ namespace PullWatch;
 public sealed class CombatLogEventHandler(
     RecordingCoordinator recordingCoordinator,
     SettingsProvider settingsProvider,
-    ILogger<CombatLogEventHandler> logger)
+    ILogger<CombatLogEventHandler> logger
+)
 {
     private long _previousRecordingEventTimestamp;
 
-    public async Task HandleAsync(CombatLogEvent combatLogEvent, CancellationToken cancellationToken)
+    public async Task HandleAsync(
+        CombatLogEvent combatLogEvent,
+        CancellationToken cancellationToken
+    )
     {
         var eventTimestamp = Stopwatch.GetTimestamp();
         var receivedAt = DateTimeOffset.Now;
@@ -28,7 +32,8 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     CombatLogEventMetadataParser.ParseChallengeStart(combatLogEvent, receivedAt),
-                    cancellationToken);
+                    cancellationToken
+                );
                 break;
             case WowEvents.EncounterStart:
                 if (!settingsProvider.Current.RecordRaidEncounters)
@@ -40,7 +45,8 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     eventTimestamp,
                     CombatLogEventMetadataParser.ParseEncounterStart(combatLogEvent, receivedAt),
-                    cancellationToken);
+                    cancellationToken
+                );
                 break;
             case WowEvents.ChallengeModeEnd:
                 await HandleEndAsync(
@@ -48,7 +54,8 @@ public sealed class CombatLogEventHandler(
                     eventTimestamp,
                     RecordingOwner.ChallengeMode,
                     null,
-                    cancellationToken);
+                    cancellationToken
+                );
                 break;
             case WowEvents.EncounterEnd:
                 await HandleEndAsync(
@@ -56,7 +63,8 @@ public sealed class CombatLogEventHandler(
                     eventTimestamp,
                     RecordingOwner.Encounter,
                     GetEncounterIdentity(combatLogEvent),
-                    cancellationToken);
+                    cancellationToken
+                );
                 break;
         }
     }
@@ -65,7 +73,8 @@ public sealed class CombatLogEventHandler(
         CombatLogEvent combatLogEvent,
         long eventTimestamp,
         RecordingContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
         var result = await recordingCoordinator.StartAutomaticAsync(context, cancellationToken);
@@ -78,10 +87,15 @@ public sealed class CombatLogEventHandler(
         long eventTimestamp,
         RecordingOwner owner,
         string? identity,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
-        var result = await recordingCoordinator.StopAutomaticAsync(owner, identity, cancellationToken);
+        var result = await recordingCoordinator.StopAutomaticAsync(
+            owner,
+            identity,
+            cancellationToken
+        );
         LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
     }
@@ -91,14 +105,13 @@ public sealed class CombatLogEventHandler(
         logger.LogInformation(
             "Recording coordinator handled {EventName} with result {RecordingCommandResult}",
             eventName,
-            result);
+            result
+        );
     }
 
     private static string? GetEncounterIdentity(CombatLogEvent combatLogEvent)
     {
-        return combatLogEvent.Arguments.Count > 0
-            ? combatLogEvent.Arguments[0]
-            : null;
+        return combatLogEvent.Arguments.Count > 0 ? combatLogEvent.Arguments[0] : null;
     }
 
     private void LogEventHandled(string eventName, long eventTimestamp)
@@ -106,7 +119,8 @@ public sealed class CombatLogEventHandler(
         logger.LogInformation(
             "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
             eventName,
-            Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds);
+            Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds
+        );
     }
 
     private void LogRecordingEventReceived(CombatLogEvent combatLogEvent, long eventTimestamp)
@@ -122,7 +136,8 @@ public sealed class CombatLogEventHandler(
             logger.LogInformation(
                 "Received {EventName}; previous recording event was {ElapsedSincePreviousEvent}",
                 eventName,
-                Stopwatch.GetElapsedTime(_previousRecordingEventTimestamp, eventTimestamp));
+                Stopwatch.GetElapsedTime(_previousRecordingEventTimestamp, eventTimestamp)
+            );
         }
 
         _previousRecordingEventTimestamp = eventTimestamp;
@@ -142,7 +157,8 @@ public sealed class CombatLogEventHandler(
                 arguments[1],
                 arguments[2],
                 arguments[3],
-                arguments[4]);
+                arguments[4]
+            );
             return;
         }
 
@@ -154,7 +170,8 @@ public sealed class CombatLogEventHandler(
                 arguments[0],
                 arguments[2],
                 arguments[3],
-                arguments[4]);
+                arguments[4]
+            );
             return;
         }
 
@@ -167,7 +184,8 @@ public sealed class CombatLogEventHandler(
                 arguments[2],
                 arguments[3],
                 arguments[4],
-                arguments[5]);
+                arguments[5]
+            );
         }
     }
 }

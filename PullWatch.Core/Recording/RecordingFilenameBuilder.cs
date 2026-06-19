@@ -22,9 +22,7 @@ internal static class RecordingFilenameBuilder
 
     internal static string BuildBaseName(RecordingContext context)
     {
-        var timestamp = context.StartedAt.ToString(
-            "yyyyMMdd_HHmmss",
-            CultureInfo.InvariantCulture);
+        var timestamp = context.StartedAt.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
 
         return context switch
         {
@@ -33,7 +31,11 @@ internal static class RecordingFilenameBuilder
                 $"{timestamp}_mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.Level}",
             EncounterRecordingContext encounter =>
                 $"{timestamp}_raid_{Sanitize(encounter.EncounterName)}_{GetDifficultyName(encounter.DifficultyId)}",
-            _ => throw new ArgumentOutOfRangeException(nameof(context), context, "Unknown recording context.")
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(context),
+                context,
+                "Unknown recording context."
+            ),
         };
     }
 
@@ -72,7 +74,7 @@ internal static class RecordingFilenameBuilder
             15 => "heroic",
             16 => "mythic",
             17 => "raid-finder",
-            _ => $"difficulty-{difficultyId}"
+            _ => $"difficulty-{difficultyId}",
         };
     }
 }

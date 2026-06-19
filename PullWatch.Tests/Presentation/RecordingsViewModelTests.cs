@@ -12,7 +12,8 @@ public sealed class RecordingsViewModelTests
         string expectedTitle,
         bool canRunManualCommand,
         bool isManualStopMode,
-        string expectedManualButtonText)
+        string expectedManualButtonText
+    )
     {
         var viewModel = CreateViewModel(Status(state));
 
@@ -25,18 +26,23 @@ public sealed class RecordingsViewModelTests
     [Fact]
     public void ReadingCombatLogReportsAutomaticReadiness()
     {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            combatLogState: CombatLogReaderState.ReadingCombatLog,
-            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt"));
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                combatLogState: CombatLogReaderState.ReadingCombatLog,
+                combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt"
+            )
+        );
 
         Assert.Equal("Ready", viewModel.StateTitle);
         Assert.Equal(
             string.Join(
                 Environment.NewLine,
                 "WoW is running.",
-                "Manual and automatic recording are ready."),
-            viewModel.ReadinessDetail);
+                "Manual and automatic recording are ready."
+            ),
+            viewModel.ReadinessDetail
+        );
         Assert.Equal(RecordingStatusHealth.Ready, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
@@ -44,20 +50,17 @@ public sealed class RecordingsViewModelTests
     [Theory]
     [InlineData(CombatLogReaderState.WaitingForLogsDirectory)]
     [InlineData(CombatLogReaderState.WaitingForCombatLog)]
-    public void MissingCombatLogPrerequisitesReportManualOnly(
-        CombatLogReaderState combatLogState)
+    public void MissingCombatLogPrerequisitesReportManualOnly(CombatLogReaderState combatLogState)
     {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            combatLogState: combatLogState));
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, combatLogState: combatLogState)
+        );
 
         Assert.Equal("Ready", viewModel.StateTitle);
         Assert.StartsWith(
-            string.Join(
-                Environment.NewLine,
-                "WoW is running.",
-                "Manual recording is ready."),
-            viewModel.ReadinessDetail);
+            string.Join(Environment.NewLine, "WoW is running.", "Manual recording is ready."),
+            viewModel.ReadinessDetail
+        );
         Assert.Equal(RecordingStatusHealth.ManualOnly, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
@@ -65,19 +68,24 @@ public sealed class RecordingsViewModelTests
     [Fact]
     public void CombatLogErrorReportsAttentionWithoutDisablingManualRecording()
     {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            combatLogState: CombatLogReaderState.ReadingCombatLog,
-            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
-            combatLogError: new IOException("Access denied.")));
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                combatLogState: CombatLogReaderState.ReadingCombatLog,
+                combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
+                combatLogError: new IOException("Access denied.")
+            )
+        );
 
         Assert.Equal("Ready", viewModel.StateTitle);
         Assert.Equal(
             string.Join(
                 Environment.NewLine,
                 "WoW is running.",
-                "Manual recording is ready, but automatic recording cannot read combat logs: Access denied."),
-            viewModel.ReadinessDetail);
+                "Manual recording is ready, but automatic recording cannot read combat logs: Access denied."
+            ),
+            viewModel.ReadinessDetail
+        );
         Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
@@ -85,11 +93,14 @@ public sealed class RecordingsViewModelTests
     [Fact]
     public void MissingWowWindowDisablesManualRecordingAndAutomaticReadiness()
     {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            combatLogState: CombatLogReaderState.ReadingCombatLog,
-            combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
-            wowProcessState: WowProcessState.WaitingForProcess));
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                combatLogState: CombatLogReaderState.ReadingCombatLog,
+                combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt",
+                wowProcessState: WowProcessState.WaitingForProcess
+            )
+        );
 
         Assert.Equal("Waiting", viewModel.StateTitle);
         Assert.Equal(RecordingStatusHealth.Waiting, viewModel.StatusHealth);
@@ -99,10 +110,13 @@ public sealed class RecordingsViewModelTests
     [Fact]
     public void WowProcessWithoutWindowDisablesManualRecording()
     {
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            wowProcessState: WowProcessState.WaitingForWindow,
-            wowProcessId: 42));
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                wowProcessState: WowProcessState.WaitingForWindow,
+                wowProcessId: 42
+            )
+        );
 
         Assert.Equal("Waiting", viewModel.StateTitle);
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
@@ -112,10 +126,12 @@ public sealed class RecordingsViewModelTests
     public async Task ManualCommandDisablesDuringExecutionAndReportsResult()
     {
         var pendingStart = new TaskCompletionSource<RecordingCommandResult>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => pendingStart.Task);
+            _ => pendingStart.Task
+        );
 
         var execution = viewModel.ManualRecordingCommand.ExecuteAsync();
 
@@ -135,11 +151,13 @@ public sealed class RecordingsViewModelTests
     [InlineData(RecordingCommandResult.TimedOut, "The recorder did not respond in time.")]
     public async Task ManualCommandReportsNonSuccessResults(
         RecordingCommandResult result,
-        string expectedMessage)
+        string expectedMessage
+    )
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromResult(result));
+            _ => Task.FromResult(result)
+        );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
 
@@ -151,8 +169,11 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromException<RecordingCommandResult>(
-                new InvalidOperationException("controller unavailable")));
+            _ =>
+                Task.FromException<RecordingCommandResult>(
+                    new InvalidOperationException("controller unavailable")
+                )
+        );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
 
@@ -164,12 +185,16 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromResult(RecordingCommandResult.Failed));
+            _ => Task.FromResult(RecordingCommandResult.Failed)
+        );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Idle,
-            lastFailure: new InvalidOperationException("encoder failed")));
+        viewModel.ApplyStatus(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException("encoder failed")
+            )
+        );
 
         Assert.Equal("The recording command failed: encoder failed", viewModel.CommandMessage);
     }
@@ -178,23 +203,24 @@ public sealed class RecordingsViewModelTests
     public void FailureBannerPersistsUntilDismissedAndReturnsForNewFailure()
     {
         var firstFailure = new InvalidOperationException("capture failed");
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Idle,
-            lastFailure: firstFailure));
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, lastFailure: firstFailure)
+        );
 
         Assert.True(viewModel.IsFailureVisible);
         Assert.Equal("capture failed", viewModel.FailureMessage);
 
         viewModel.DismissFailureCommand.Execute(null);
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Idle,
-            lastFailure: firstFailure));
+        viewModel.ApplyStatus(Status(RecordingCoordinatorState.Idle, lastFailure: firstFailure));
 
         Assert.False(viewModel.IsFailureVisible);
 
-        viewModel.ApplyStatus(Status(
-            RecordingCoordinatorState.Idle,
-            lastFailure: new InvalidOperationException("finalization failed")));
+        viewModel.ApplyStatus(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException("finalization failed")
+            )
+        );
 
         Assert.True(viewModel.IsFailureVisible);
         Assert.Equal("finalization failed", viewModel.FailureMessage);
@@ -216,8 +242,11 @@ public sealed class RecordingsViewModelTests
             Status(
                 RecordingCoordinatorState.Idle,
                 lastFailure: new InvalidOperationException(
-                    "Could not find a running World of Warcraft window.")),
-            _ => Task.FromResult(RecordingCommandResult.Failed));
+                    "Could not find a running World of Warcraft window."
+                )
+            ),
+            _ => Task.FromResult(RecordingCommandResult.Failed)
+        );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
 
@@ -232,12 +261,16 @@ public sealed class RecordingsViewModelTests
     {
         var stopCalls = 0;
         var viewModel = CreateViewModel(
-            Status(RecordingCoordinatorState.Recording, new ManualRecordingContext(DateTimeOffset.Now)),
+            Status(
+                RecordingCoordinatorState.Recording,
+                new ManualRecordingContext(DateTimeOffset.Now)
+            ),
             stopManual: _ =>
             {
                 stopCalls++;
                 return Task.FromResult(RecordingCommandResult.Stopped);
-            });
+            }
+        );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
 
@@ -252,13 +285,23 @@ public sealed class RecordingsViewModelTests
 
         try
         {
-            var older = WriteRecording(directory, "older.mp4", "older", new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
-            var newer = WriteRecording(directory, "newer.mp4", "newer", new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc));
+            var older = WriteRecording(
+                directory,
+                "older.mp4",
+                "older",
+                new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc)
+            );
+            var newer = WriteRecording(
+                directory,
+                "newer.mp4",
+                "newer",
+                new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)
+            );
             File.WriteAllText(Path.Combine(directory, "notes.txt"), "ignored");
 
-            var viewModel = CreateViewModel(Status(
-                RecordingCoordinatorState.Idle,
-                recordingsDirectory: directory));
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory)
+            );
 
             Assert.Collection(
                 viewModel.Recordings,
@@ -271,7 +314,8 @@ public sealed class RecordingsViewModelTests
                 {
                     Assert.Equal(older, second.Path);
                     Assert.Equal("older", second.DisplayName);
-                });
+                }
+            );
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
             Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
         }
@@ -290,7 +334,8 @@ public sealed class RecordingsViewModelTests
         Assert.Null(viewModel.SelectedRecording);
         Assert.Equal(
             "Choose a recordings directory in settings to review videos here.",
-            viewModel.RecordingLibraryStatus);
+            viewModel.RecordingLibraryStatus
+        );
     }
 
     [Fact]
@@ -300,18 +345,38 @@ public sealed class RecordingsViewModelTests
 
         try
         {
-            var older = WriteRecording(directory, "older.mp4", "older", new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc));
-            WriteRecording(directory, "newer.mp4", "newer", new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc));
-            var viewModel = CreateViewModel(Status(
-                RecordingCoordinatorState.Idle,
-                recordingsDirectory: directory));
-            viewModel.SelectedRecording = viewModel.Recordings.Single(recording => recording.Path == older);
+            var older = WriteRecording(
+                directory,
+                "older.mp4",
+                "older",
+                new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc)
+            );
+            WriteRecording(
+                directory,
+                "newer.mp4",
+                "newer",
+                new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory)
+            );
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
+                recording.Path == older
+            );
 
-            WriteRecording(directory, "newest.mp4", "newest", new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc));
-            viewModel.ApplyStatus(Status(
-                RecordingCoordinatorState.Idle,
-                recordingsDirectory: directory,
-                savedCount: 1));
+            WriteRecording(
+                directory,
+                "newest.mp4",
+                "newest",
+                new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc)
+            );
+            viewModel.ApplyStatus(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    savedCount: 1
+                )
+            );
 
             Assert.Equal(older, viewModel.SelectedRecording?.Path);
             Assert.Equal("newest", viewModel.Recordings[0].DisplayName);
@@ -330,9 +395,9 @@ public sealed class RecordingsViewModelTests
     public void FormatsDurationFromRecordingStart(int elapsedSeconds, string expected)
     {
         var startedAt = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero);
-        var viewModel = CreateViewModel(Status(
-            RecordingCoordinatorState.Recording,
-            new ManualRecordingContext(startedAt)));
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Recording, new ManualRecordingContext(startedAt))
+        );
 
         viewModel.UpdateDuration(startedAt.AddSeconds(elapsedSeconds));
 
@@ -342,13 +407,15 @@ public sealed class RecordingsViewModelTests
     private static RecordingsViewModel CreateViewModel(
         ApplicationStatus status,
         Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null,
-        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null)
+        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null
+    )
     {
         return new RecordingsViewModel(
             status,
             startManual ?? (_ => Task.FromResult(RecordingCommandResult.Started)),
             stopManual ?? (_ => Task.FromResult(RecordingCommandResult.Stopped)),
-            () => Task.CompletedTask);
+            () => Task.CompletedTask
+        );
     }
 
     private static ApplicationStatus Status(
@@ -362,21 +429,19 @@ public sealed class RecordingsViewModelTests
         Exception? combatLogError = null,
         WowProcessState wowProcessState = WowProcessState.WindowAvailable,
         int? wowProcessId = 10,
-        string? wowWindowTitle = "World of Warcraft")
+        string? wowWindowTitle = "World of Warcraft"
+    )
     {
         RecordingOwner? owner = context switch
         {
             ManualRecordingContext => RecordingOwner.Manual,
             ChallengeRecordingContext => RecordingOwner.ChallengeMode,
             EncounterRecordingContext => RecordingOwner.Encounter,
-            _ => null
+            _ => null,
         };
 
         return new ApplicationStatus(
-            new PullWatchSettings
-            {
-                RecordingsDirectory = recordingsDirectory
-            },
+            new PullWatchSettings { RecordingsDirectory = recordingsDirectory },
             new RecordingCoordinatorStatus(
                 state,
                 owner,
@@ -385,25 +450,23 @@ public sealed class RecordingsViewModelTests
                 null,
                 null,
                 lastFailure,
-                state == RecordingCoordinatorState.Idle ? null : @"C:\Recordings\active.mp4")
+                state == RecordingCoordinatorState.Idle ? null : @"C:\Recordings\active.mp4"
+            )
             {
-                Statistics = new RecordingStatistics(0, savedCount)
+                Statistics = new RecordingStatistics(0, savedCount),
             },
-            new CombatLogReaderStatus(
-                combatLogState,
-                combatLogPath,
-                null,
-                combatLogError),
-            new WowProcessStatus(
-                wowProcessState,
-                wowProcessId,
-                wowWindowTitle,
-                null));
+            new CombatLogReaderStatus(combatLogState, combatLogPath, null, combatLogError),
+            new WowProcessStatus(wowProcessState, wowProcessId, wowWindowTitle, null)
+        );
     }
 
     private static string CreateTempDirectory()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "PullWatch.Tests", Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "PullWatch.Tests",
+            Guid.NewGuid().ToString("N")
+        );
         Directory.CreateDirectory(directory);
         return directory;
     }
@@ -412,7 +475,8 @@ public sealed class RecordingsViewModelTests
         string directory,
         string fileName,
         string content,
-        DateTime lastWriteTimeUtc)
+        DateTime lastWriteTimeUtc
+    )
     {
         var path = Path.Combine(directory, fileName);
         File.WriteAllText(path, content);

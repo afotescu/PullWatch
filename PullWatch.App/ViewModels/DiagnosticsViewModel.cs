@@ -10,7 +10,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public DiagnosticsViewModel(
         ApplicationStatus initialStatus,
         InMemoryLogProvider logs,
-        IDiagnosticsDialogs dialogs)
+        IDiagnosticsDialogs dialogs
+    )
     {
         _status = initialStatus;
         _logs = logs;
@@ -18,7 +19,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
         CopyDiagnosticsCommand = new RelayCommand(CopyDiagnostics);
         ExportDiagnosticsCommand = new AsyncRelayCommand(
             ExportDiagnosticsAsync,
-            onException: HandleCommandFailure);
+            onException: HandleCommandFailure
+        );
     }
 
     public RelayCommand CopyDiagnosticsCommand { get; }
@@ -107,7 +109,8 @@ public sealed class DiagnosticsViewModel : ObservableObject
         return DiagnosticsReportBuilder.Build(
             ApplicationVersion.Current,
             _status,
-            _logs.GetSnapshot());
+            _logs.GetSnapshot()
+        );
     }
 
     private void HandleCommandFailure(Exception exception)
@@ -122,7 +125,9 @@ public sealed class DiagnosticsViewModel : ObservableObject
             : string.Join(
                 Environment.NewLine,
                 logs.Select(log =>
-                    $"{log.Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{log.Level}] {log.Category}: {log.Message}"));
+                    $"{log.Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{log.Level}] {log.Category}: {log.Message}"
+                )
+            );
     }
 
     private static string Value(object? value)

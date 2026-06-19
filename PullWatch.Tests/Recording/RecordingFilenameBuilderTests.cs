@@ -9,20 +9,20 @@ public sealed class RecordingFilenameBuilderTests
     {
         Assert.Equal(
             "20260615_001510_manual",
-            RecordingFilenameBuilder.BuildBaseName(new ManualRecordingContext(StartedAt)));
+            RecordingFilenameBuilder.BuildBaseName(new ManualRecordingContext(StartedAt))
+        );
         Assert.Equal(
             "20260615_001510_mythic-plus_magisters-terrace_22",
-            RecordingFilenameBuilder.BuildBaseName(new ChallengeRecordingContext(
-                StartedAt,
-                "Magisters' Terrace",
-                22)));
+            RecordingFilenameBuilder.BuildBaseName(
+                new ChallengeRecordingContext(StartedAt, "Magisters' Terrace", 22)
+            )
+        );
         Assert.Equal(
             "20260615_001510_raid_plexus-sentinel_mythic",
-            RecordingFilenameBuilder.BuildBaseName(new EncounterRecordingContext(
-                StartedAt,
-                3129,
-                "Plexus Sentinel",
-                16)));
+            RecordingFilenameBuilder.BuildBaseName(
+                new EncounterRecordingContext(StartedAt, 3129, "Plexus Sentinel", 16)
+            )
+        );
     }
 
     [Theory]
@@ -43,7 +43,8 @@ public sealed class RecordingFilenameBuilderTests
 
         Assert.Equal(
             "20260615_001510_raid_boss_difficulty-99",
-            RecordingFilenameBuilder.BuildBaseName(context));
+            RecordingFilenameBuilder.BuildBaseName(context)
+        );
     }
 
     [Fact]
@@ -59,9 +60,7 @@ public sealed class RecordingFilenameBuilderTests
 
             var path = RecordingFilenameBuilder.CreateAvailablePath(directory.FullName, context);
 
-            Assert.Equal(
-                Path.Combine(directory.FullName, "20260615_001510_manual_3.mp4"),
-                path);
+            Assert.Equal(Path.Combine(directory.FullName, "20260615_001510_manual_3.mp4"), path);
         }
         finally
         {

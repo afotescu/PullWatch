@@ -18,7 +18,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
         CombatLogReaderState.WaitingForLogsDirectory,
         null,
         null,
-        null);
+        null
+    );
     private DateTimeOffset _lastErrorLogTime = DateTimeOffset.MinValue;
     private string? _lastLoggedErrorMessage;
     private bool _hasPublishedState;
@@ -27,7 +28,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
         string logsDirectory,
         ILogger<CombatLogReader> logger,
         TimeSpan? pollInterval = null,
-        TimeSpan? maximumRetryDelay = null)
+        TimeSpan? maximumRetryDelay = null
+    )
     {
         _logsDirectory = logsDirectory;
         _logger = logger;
@@ -41,7 +43,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
     public async Task ReadAsync(
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(handleEventAsync);
 
@@ -87,7 +90,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private async Task<FileSession?> ReadSessionAsync(
         FileSession session,
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var stream = OpenSessionStream(session);
         PublishReadableStatus(session.Candidate.FullName);
@@ -106,7 +110,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
                     buffer.AsMemory(0, bytesRead),
                     session.PendingLine,
                     handleEventAsync,
-                    cancellationToken);
+                    cancellationToken
+                );
                 continue;
             }
 
@@ -123,9 +128,11 @@ public sealed class CombatLogReader : ICombatLogMonitor
                     ? null
                     : SwitchTo(discovery.Candidate, session.Candidate.FullName);
             }
-            else if (discovery.Candidate is not null &&
-                     !PathComparer.Equals(discovery.Candidate.FullName, session.Candidate.FullName) &&
-                     discovery.Candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc)
+            else if (
+                discovery.Candidate is not null
+                && !PathComparer.Equals(discovery.Candidate.FullName, session.Candidate.FullName)
+                && discovery.Candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc
+            )
             {
                 return SwitchTo(discovery.Candidate, session.Candidate.FullName);
             }
@@ -146,7 +153,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete,
                 bufferSize: 4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
+                FileOptions.Asynchronous | FileOptions.SequentialScan
+            );
 
             stream.Seek(session.Offset, SeekOrigin.Begin);
             return stream;
@@ -161,7 +169,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private static async Task<int> ReadBytesAsync(
         FileStream stream,
         byte[] buffer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -177,7 +186,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
         ReadOnlyMemory<byte> bytes,
         List<byte> pendingLine,
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var completedLines = ExtractCompletedLines(bytes.Span, pendingLine);
 
@@ -192,7 +202,10 @@ public sealed class CombatLogReader : ICombatLogMonitor
         }
     }
 
-    private static List<string> ExtractCompletedLines(ReadOnlySpan<byte> bytes, List<byte> pendingLine)
+    private static List<string> ExtractCompletedLines(
+        ReadOnlySpan<byte> bytes,
+        List<byte> pendingLine
+    )
     {
         var completedLines = new List<string>();
 
@@ -232,8 +245,10 @@ public sealed class CombatLogReader : ICombatLogMonitor
                     new FileCandidate(
                         latestCombatLog.FullName,
                         latestCombatLog.LastWriteTimeUtc,
-                        latestCombatLog.Length),
-                    null);
+                        latestCombatLog.Length
+                    ),
+                    null
+                );
         }
         catch (DirectoryNotFoundException)
         {
@@ -268,52 +283,57 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private void PublishSuccessfulRead(string path)
     {
         var current = Status;
-        SetStatus(current with
-        {
-            State = CombatLogReaderState.ReadingCombatLog,
-            CurrentPath = path,
-            LastSuccessfulReadTime = DateTimeOffset.UtcNow,
-            LastFileSystemError = null
-        });
+        SetStatus(
+            current with
+            {
+                State = CombatLogReaderState.ReadingCombatLog,
+                CurrentPath = path,
+                LastSuccessfulReadTime = DateTimeOffset.UtcNow,
+                LastFileSystemError = null,
+            }
+        );
     }
 
     private void PublishReadableStatus(string path)
     {
         var current = Status;
-        if (_hasPublishedState &&
-            current.State == CombatLogReaderState.ReadingCombatLog &&
-            PathComparer.Equals(current.CurrentPath, path) &&
-            current.LastFileSystemError is null)
+        if (
+            _hasPublishedState
+            && current.State == CombatLogReaderState.ReadingCombatLog
+            && PathComparer.Equals(current.CurrentPath, path)
+            && current.LastFileSystemError is null
+        )
         {
             return;
         }
 
         _hasPublishedState = true;
-        SetStatus(current with
-        {
-            State = CombatLogReaderState.ReadingCombatLog,
-            CurrentPath = path,
-            LastFileSystemError = null
-        });
+        SetStatus(
+            current with
+            {
+                State = CombatLogReaderState.ReadingCombatLog,
+                CurrentPath = path,
+                LastFileSystemError = null,
+            }
+        );
 
         _logger.LogInformation(
             "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}",
             CombatLogReaderState.ReadingCombatLog,
-            path);
+            path
+        );
     }
 
     private void PublishError(Exception exception, string? currentPath)
     {
         var current = Status;
-        SetStatus(current with
-        {
-            CurrentPath = currentPath,
-            LastFileSystemError = exception
-        });
+        SetStatus(current with { CurrentPath = currentPath, LastFileSystemError = exception });
 
         var now = DateTimeOffset.UtcNow;
-        if (!StringComparer.Ordinal.Equals(_lastLoggedErrorMessage, exception.Message) ||
-            now - _lastErrorLogTime >= ErrorLogInterval)
+        if (
+            !StringComparer.Ordinal.Equals(_lastLoggedErrorMessage, exception.Message)
+            || now - _lastErrorLogTime >= ErrorLogInterval
+        )
         {
             _logger.LogWarning(exception, "Combat log filesystem operation failed; retrying");
             _lastLoggedErrorMessage = exception.Message;
@@ -324,34 +344,37 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private void PublishStatus(CombatLogReaderState state, string? currentPath)
     {
         var current = Status;
-        if (_hasPublishedState &&
-            current.State == state &&
-            PathComparer.Equals(current.CurrentPath, currentPath))
+        if (
+            _hasPublishedState
+            && current.State == state
+            && PathComparer.Equals(current.CurrentPath, currentPath)
+        )
         {
             return;
         }
 
         _hasPublishedState = true;
-        SetStatus(current with
-        {
-            State = state,
-            CurrentPath = currentPath
-        });
+        SetStatus(current with { State = state, CurrentPath = currentPath });
 
-        if (state is CombatLogReaderState.WaitingForLogsDirectory or
-            CombatLogReaderState.WaitingForCombatLog)
+        if (
+            state
+            is CombatLogReaderState.WaitingForLogsDirectory
+                or CombatLogReaderState.WaitingForCombatLog
+        )
         {
             _logger.LogWarning(
                 "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}",
                 state,
-                currentPath);
+                currentPath
+            );
         }
         else
         {
             _logger.LogInformation(
                 "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}",
                 state,
-                currentPath);
+                currentPath
+            );
         }
     }
 
@@ -381,7 +404,8 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private TimeSpan IncreaseRetryDelay(TimeSpan current)
     {
         return TimeSpan.FromMilliseconds(
-            Math.Min(current.TotalMilliseconds * 2, _maximumRetryDelay.TotalMilliseconds));
+            Math.Min(current.TotalMilliseconds * 2, _maximumRetryDelay.TotalMilliseconds)
+        );
     }
 
     private static bool IsTransientFileSystemException(Exception exception)
@@ -405,11 +429,11 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private sealed record DiscoveryResult(
         bool LogsDirectoryExists,
         FileCandidate? Candidate,
-        Exception? Error);
+        Exception? Error
+    );
 
     private sealed class CombatLogFileSystemException(Exception fileSystemError) : Exception
     {
         public Exception FileSystemError { get; } = fileSystemError;
     }
-
 }

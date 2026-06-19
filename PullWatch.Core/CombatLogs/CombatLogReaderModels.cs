@@ -6,11 +6,12 @@ public enum CombatLogReaderState
     WaitingForLogsDirectory,
     WaitingForCombatLog,
     ReadingCombatLog,
-    SwitchingCombatLog
+    SwitchingCombatLog,
 }
 
 public sealed record CombatLogReaderStatus(
     CombatLogReaderState State,
     string? CurrentPath,
     DateTimeOffset? LastSuccessfulReadTime,
-    Exception? LastFileSystemError);
+    Exception? LastFileSystemError
+);

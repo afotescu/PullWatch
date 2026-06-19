@@ -67,7 +67,7 @@ public sealed class CombatLogEventHandlerTests
     {
         var recorder = new FakeRecordingService
         {
-            StartException = new InvalidOperationException("Start failed")
+            StartException = new InvalidOperationException("Start failed"),
         };
         var handler = CreateHandler(recorder);
 
@@ -97,11 +97,9 @@ public sealed class CombatLogEventHandlerTests
     public async Task DisabledAutomaticRecordingTypesDoNotStart()
     {
         var recorder = new FakeRecordingService();
-        var settingsProvider = new SettingsProvider(new PullWatchSettings
-        {
-            RecordMythicPlus = false,
-            RecordRaidEncounters = false
-        });
+        var settingsProvider = new SettingsProvider(
+            new PullWatchSettings { RecordMythicPlus = false, RecordRaidEncounters = false }
+        );
         var handler = CreateHandler(recorder, settingsProvider);
 
         await HandleAsync(handler, WowEvents.ChallengeModeStart);
@@ -126,16 +124,19 @@ public sealed class CombatLogEventHandlerTests
 
     private static CombatLogEventHandler CreateHandler(
         IRecordingService recordingService,
-        SettingsProvider? settingsProvider = null)
+        SettingsProvider? settingsProvider = null
+    )
     {
         var coordinator = new RecordingCoordinator(
             recordingService,
-            NullLogger<RecordingCoordinator>.Instance);
+            NullLogger<RecordingCoordinator>.Instance
+        );
 
         return new CombatLogEventHandler(
             coordinator,
             settingsProvider ?? new SettingsProvider(new PullWatchSettings()),
-            NullLogger<CombatLogEventHandler>.Instance);
+            NullLogger<CombatLogEventHandler>.Instance
+        );
     }
 
     private static Task HandleAsync(CombatLogEventHandler handler, string eventName)
@@ -146,30 +147,33 @@ public sealed class CombatLogEventHandlerTests
             WowEvents.ChallengeModeEnd => "2811,0,0,0,0.000000,0.000000",
             WowEvents.EncounterStart => "3129,\"Plexus Sentinel\",16,20,2810",
             WowEvents.EncounterEnd => "3129,\"Plexus Sentinel\",16,20,1,70964",
-            _ => ""
+            _ => "",
         };
         var rawLine = $"{eventName},{arguments}";
 
         return handler.HandleAsync(
             new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
-            CancellationToken.None);
+            CancellationToken.None
+        );
     }
 
     private static Task HandleAsync(
         CombatLogEventHandler handler,
         string eventName,
-        string firstArgument)
+        string firstArgument
+    )
     {
         var arguments = eventName switch
         {
             WowEvents.EncounterStart => $"{firstArgument},\"Plexus Sentinel\",16,20,2810",
             WowEvents.EncounterEnd => $"{firstArgument},\"Plexus Sentinel\",16,20,1,70964",
-            _ => firstArgument
+            _ => firstArgument,
         };
         var rawLine = $"{eventName},{arguments}";
 
         return handler.HandleAsync(
             new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
-            CancellationToken.None);
+            CancellationToken.None
+        );
     }
 }

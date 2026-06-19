@@ -55,13 +55,18 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                 ".",
                 _pipeName,
                 PipeDirection.Out,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous
+            );
             await client.ConnectAsync(2000, cancellationToken).ConfigureAwait(false);
             await client.WriteAsync(new byte[] { 1 }, cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (Exception exception) when (
-            exception is System.IO.IOException or TimeoutException or OperationCanceledException)
+        catch (Exception exception)
+            when (exception
+                    is System.IO.IOException
+                        or TimeoutException
+                        or OperationCanceledException
+            )
         {
             return false;
         }
@@ -77,9 +82,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             {
                 await _listenerTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
-            {
-            }
+            catch (OperationCanceledException) { }
         }
 
         _mutex?.Dispose();
@@ -99,7 +102,8 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                     PipeDirection.In,
                     1,
                     PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                    PipeOptions.Asynchronous
+                );
                 await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                 var buffer = new byte[1];
                 await server.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
