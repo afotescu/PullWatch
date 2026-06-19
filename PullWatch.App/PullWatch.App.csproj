@@ -13,12 +13,16 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PullWatchBuildForTests)' == 'true'">
-    <OutputPath>$(PullWatchArtifactsRoot)tests\references\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</OutputPath>
+    <OutputPath>$(PullWatchArtifactsRoot)tests\references\PullWatch.App\$(Platform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(PullWatchArtifactsRoot)tests\references\obj\PullWatch.App\$(Platform)\$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
-    <ProjectReference Include="..\PullWatch.Core\PullWatch.Core.csproj" />
+    <ProjectReference
+      Include="..\PullWatch.Core\PullWatch.Core.csproj"
+      GlobalPropertiesToRemove="PullWatchBuildForTests"
+    />
   </ItemGroup>
 
   <ItemGroup>
