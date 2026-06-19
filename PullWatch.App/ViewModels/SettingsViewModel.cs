@@ -1,45 +1,33 @@
-using System.Globalization;
 using System.Runtime.CompilerServices;
+using Forms = System.Windows.Forms;
 
 namespace PullWatch;
 
 public sealed class SettingsViewModel : ObservableObject
 {
+    private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
+    private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(5);
+
     private readonly Func<
         PullWatchSettings,
         CancellationToken,
         Task<SettingsSaveResult>
     > _saveSettings;
     private readonly ISettingsDialogs _dialogs;
+    private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
     private PullWatchSettings _savedSettings;
     private bool _isLoading;
-    private bool _isEditingEnabled;
-    private bool _isDirty;
-    private string? _wowLogsDirectory;
-    private string? _recordingsDirectory;
-    private bool _recordMythicPlus;
-    private bool _recordRaidEncounters;
-    private string _bitrateMegabits = string.Empty;
-    private string _frameRate = string.Empty;
-    private bool _captureSystemAudio;
-    private bool _captureMicrophone;
-    private bool _captureCursor;
-    private bool _showCaptureBorder;
-    private string? _wowLogsDirectoryError;
-    private string? _recordingsDirectoryError;
-    private string? _bitrateError;
-    private string? _frameRateError;
-    private string? _saveMessage;
-    private bool _isSaveError;
 
     public SettingsViewModel(
         ApplicationStatus initialStatus,
         Func<PullWatchSettings, CancellationToken, Task<SettingsSaveResult>> saveSettings,
-        ISettingsDialogs dialogs
+        ISettingsDialogs dialogs,
+        Func<VideoCaptureSize>? getEstimateCaptureSize = null
     )
     {
         _saveSettings = saveSettings;
         _dialogs = dialogs;
+        _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
         SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave, HandleCommandFailure);
         PickWowLogsDirectoryCommand = new RelayCommand(
@@ -60,72 +48,84 @@ public sealed class SettingsViewModel : ObservableObject
 
     public RelayCommand PickRecordingsDirectoryCommand { get; }
 
+    public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
+    [
+        new(VideoQuality.Compact, "Compact"),
+        new(VideoQuality.Balanced, "Balanced"),
+        new(VideoQuality.High, "High"),
+    ];
+
+    public IReadOnlyList<FrameRateOption> FrameRateOptions { get; } =
+        VideoFrameRates
+            .Supported.Select(frameRate => new FrameRateOption(frameRate, $"{frameRate} FPS"))
+            .ToArray();
+
     public string? WowLogsDirectory
     {
-        get => _wowLogsDirectory;
-        set => SetEditableProperty(ref _wowLogsDirectory, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public string? RecordingsDirectory
     {
-        get => _recordingsDirectory;
-        set => SetEditableProperty(ref _recordingsDirectory, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool RecordMythicPlus
     {
-        get => _recordMythicPlus;
-        set => SetEditableProperty(ref _recordMythicPlus, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool RecordRaidEncounters
     {
-        get => _recordRaidEncounters;
-        set => SetEditableProperty(ref _recordRaidEncounters, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
-    public string BitrateMegabits
+    public VideoQuality SelectedVideoQuality
     {
-        get => _bitrateMegabits;
-        set => SetEditableProperty(ref _bitrateMegabits, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
-    public string FrameRate
+    public int SelectedFrameRate
     {
-        get => _frameRate;
-        set => SetEditableProperty(ref _frameRate, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool CaptureSystemAudio
     {
-        get => _captureSystemAudio;
-        set => SetEditableProperty(ref _captureSystemAudio, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool CaptureMicrophone
     {
-        get => _captureMicrophone;
-        set => SetEditableProperty(ref _captureMicrophone, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool CaptureCursor
     {
-        get => _captureCursor;
-        set => SetEditableProperty(ref _captureCursor, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool ShowCaptureBorder
     {
-        get => _showCaptureBorder;
-        set => SetEditableProperty(ref _showCaptureBorder, value);
+        get;
+        set => SetEditableProperty(ref field, value);
     }
 
     public bool IsEditingEnabled
     {
-        get => _isEditingEnabled;
+        get;
         private set
         {
-            if (SetProperty(ref _isEditingEnabled, value))
+            if (SetProperty(ref field, value))
             {
                 OnPropertyChanged(nameof(CanSave));
                 SaveCommand.NotifyCanExecuteChanged();
@@ -137,10 +137,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool IsDirty
     {
-        get => _isDirty;
+        get;
         private set
         {
-            if (SetProperty(ref _isDirty, value))
+            if (SetProperty(ref field, value))
             {
                 OnPropertyChanged(nameof(CanSave));
                 SaveCommand.NotifyCanExecuteChanged();
@@ -157,38 +157,56 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string? WowLogsDirectoryError
     {
-        get => _wowLogsDirectoryError;
-        private set => SetProperty(ref _wowLogsDirectoryError, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     public string? RecordingsDirectoryError
     {
-        get => _recordingsDirectoryError;
-        private set => SetProperty(ref _recordingsDirectoryError, value);
-    }
-
-    public string? BitrateError
-    {
-        get => _bitrateError;
-        private set => SetProperty(ref _bitrateError, value);
-    }
-
-    public string? FrameRateError
-    {
-        get => _frameRateError;
-        private set => SetProperty(ref _frameRateError, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     public string? SaveMessage
     {
-        get => _saveMessage;
-        private set => SetProperty(ref _saveMessage, value);
+        get;
+        private set => SetProperty(ref field, value);
     }
 
     public bool IsSaveError
     {
-        get => _isSaveError;
-        private set => SetProperty(ref _isSaveError, value);
+        get;
+        private set => SetProperty(ref field, value);
+    }
+
+    public string EstimatedRecordingSize
+    {
+        get
+        {
+            var captureSize = _getEstimateCaptureSize();
+            var bitrate = VideoBitrateCalculator.CalculateBitrate(
+                captureSize,
+                SelectedFrameRate,
+                SelectedVideoQuality
+            );
+            var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(
+                bitrate,
+                new AudioSettings
+                {
+                    CaptureSystemAudio = CaptureSystemAudio,
+                    CaptureMicrophone = CaptureMicrophone,
+                },
+                EstimateDuration
+            );
+
+            return string.Join(
+                " ",
+                $"About {FormatFileSize(megabytes)} per 5 minutes",
+                $"at full-screen {captureSize.Width}x{captureSize.Height},",
+                $"{SelectedFrameRate} FPS",
+                $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target)."
+            );
+        }
     }
 
     public void ApplyStatus(ApplicationStatus status)
@@ -280,38 +298,6 @@ public sealed class SettingsViewModel : ObservableObject
 
     private PullWatchSettings? BuildSettings()
     {
-        if (
-            !decimal.TryParse(
-                BitrateMegabits,
-                NumberStyles.Number,
-                CultureInfo.CurrentCulture,
-                out var bitrateMegabits
-            )
-            || bitrateMegabits <= 0
-            || bitrateMegabits * 1_000_000m > int.MaxValue
-            || decimal.Truncate(bitrateMegabits * 1_000_000m) != bitrateMegabits * 1_000_000m
-        )
-        {
-            BitrateError = "Enter a valid bitrate in Mbps.";
-        }
-
-        if (
-            !int.TryParse(
-                FrameRate,
-                NumberStyles.Integer,
-                CultureInfo.CurrentCulture,
-                out var frameRate
-            )
-        )
-        {
-            FrameRateError = "Enter a valid whole-number frame rate.";
-        }
-
-        if (BitrateError is not null || FrameRateError is not null)
-        {
-            return null;
-        }
-
         return _savedSettings with
         {
             WowLogsDirectory = NormalizeEmpty(WowLogsDirectory),
@@ -320,8 +306,8 @@ public sealed class SettingsViewModel : ObservableObject
             RecordRaidEncounters = RecordRaidEncounters,
             Video = _savedSettings.Video with
             {
-                Bitrate = (int)(bitrateMegabits * 1_000_000m),
-                FrameRate = frameRate,
+                Quality = SelectedVideoQuality,
+                FrameRate = SelectedFrameRate,
                 CaptureCursor = CaptureCursor,
                 ShowCaptureBorder = ShowCaptureBorder,
             },
@@ -361,14 +347,6 @@ public sealed class SettingsViewModel : ObservableObject
             {
                 RecordingsDirectoryError = error;
             }
-            else if (error.StartsWith("Video bitrate", StringComparison.Ordinal))
-            {
-                BitrateError = error;
-            }
-            else if (error.StartsWith("Video frame rate", StringComparison.Ordinal))
-            {
-                FrameRateError = error;
-            }
         }
     }
 
@@ -388,11 +366,8 @@ public sealed class SettingsViewModel : ObservableObject
             RecordingsDirectory = settings.RecordingsDirectory;
             RecordMythicPlus = settings.RecordMythicPlus;
             RecordRaidEncounters = settings.RecordRaidEncounters;
-            BitrateMegabits = (settings.Video.Bitrate / 1_000_000m).ToString(
-                "0.###",
-                CultureInfo.CurrentCulture
-            );
-            FrameRate = settings.Video.FrameRate.ToString(CultureInfo.CurrentCulture);
+            SelectedVideoQuality = settings.Video.Quality;
+            SelectedFrameRate = settings.Video.FrameRate;
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
             CaptureMicrophone = settings.Audio.CaptureMicrophone;
             CaptureCursor = settings.Video.CaptureCursor;
@@ -402,14 +377,14 @@ public sealed class SettingsViewModel : ObservableObject
         {
             _isLoading = false;
         }
+
+        OnPropertyChanged(nameof(EstimatedRecordingSize));
     }
 
     private void ClearErrors()
     {
         WowLogsDirectoryError = null;
         RecordingsDirectoryError = null;
-        BitrateError = null;
-        FrameRateError = null;
         SaveMessage = null;
         IsSaveError = false;
     }
@@ -430,10 +405,48 @@ public sealed class SettingsViewModel : ObservableObject
             IsDirty = true;
             SaveMessage = null;
         }
+
+        if (ShouldRefreshEstimate(propertyName))
+        {
+            OnPropertyChanged(nameof(EstimatedRecordingSize));
+        }
     }
 
     private static string? NormalizeEmpty(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
+
+    private static bool ShouldRefreshEstimate(string? propertyName)
+    {
+        return propertyName
+            is nameof(SelectedVideoQuality)
+                or nameof(SelectedFrameRate)
+                or nameof(CaptureSystemAudio)
+                or nameof(CaptureMicrophone);
+    }
+
+    private static string FormatFileSize(int megabytes)
+    {
+        if (megabytes >= 1_000)
+        {
+            return $"{megabytes / 1_000d:0.#} GB";
+        }
+
+        var roundedMegabytes = Math.Max(1, (int)Math.Round(megabytes / 10d) * 10);
+        return $"{roundedMegabytes} MB";
+    }
+
+    private static VideoCaptureSize GetPrimaryDisplayCaptureSize()
+    {
+        var bounds = Forms.Screen.PrimaryScreen?.Bounds;
+
+        return bounds is { Width: > 0, Height: > 0 }
+            ? new VideoCaptureSize(bounds.Value.Width, bounds.Value.Height)
+            : FallbackEstimateCaptureSize;
+    }
 }
+
+public sealed record VideoQualityOption(VideoQuality Value, string Label);
+
+public sealed record FrameRateOption(int Value, string Label);

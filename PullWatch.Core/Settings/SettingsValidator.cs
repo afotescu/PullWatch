@@ -10,11 +10,6 @@ public sealed record SettingsValidationResult(
 
 public static class SettingsValidator
 {
-    public const int MinimumFrameRate = 1;
-    public const int MaximumFrameRate = 240;
-    public const int MinimumBitrate = 1_000_000;
-    public const int MaximumBitrate = 200_000_000;
-
     public static SettingsValidationResult Validate(PullWatchSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -34,18 +29,16 @@ public static class SettingsValidator
         }
         else
         {
-            if (settings.Video.FrameRate is < MinimumFrameRate or > MaximumFrameRate)
+            if (!VideoFrameRates.IsSupported(settings.Video.FrameRate))
             {
                 errors.Add(
-                    $"Video frame rate must be between {MinimumFrameRate} and {MaximumFrameRate}."
+                    $"Video frame rate must be {VideoFrameRates.Standard} or {VideoFrameRates.High}."
                 );
             }
 
-            if (settings.Video.Bitrate is < MinimumBitrate or > MaximumBitrate)
+            if (!Enum.IsDefined(settings.Video.Quality))
             {
-                errors.Add(
-                    $"Video bitrate must be between {MinimumBitrate} and {MaximumBitrate} bits per second."
-                );
+                errors.Add("Video quality must be Compact, Balanced, or High.");
             }
         }
 

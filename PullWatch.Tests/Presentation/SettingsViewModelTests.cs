@@ -3,7 +3,7 @@ namespace PullWatch.Tests;
 public sealed class SettingsViewModelTests
 {
     [Fact]
-    public async Task DisplaysMbpsAndSavesBitsPerSecond()
+    public async Task DisplaysVideoOptionsAndSavesSelection()
     {
         PullWatchSettings? saved = null;
         var viewModel = CreateViewModel(
@@ -15,12 +15,16 @@ public sealed class SettingsViewModelTests
             }
         );
 
-        Assert.Equal("12", viewModel.BitrateMegabits);
+        Assert.Equal(VideoQuality.Balanced, viewModel.SelectedVideoQuality);
+        Assert.Equal(VideoFrameRates.High, viewModel.SelectedFrameRate);
+        Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
 
-        viewModel.BitrateMegabits = "18.5";
+        viewModel.SelectedVideoQuality = VideoQuality.High;
+        viewModel.SelectedFrameRate = VideoFrameRates.Standard;
         await viewModel.SaveChangesAsync();
 
-        Assert.Equal(18_500_000, saved!.Video.Bitrate);
+        Assert.Equal(VideoQuality.High, saved!.Video.Quality);
+        Assert.Equal(VideoFrameRates.Standard, saved.Video.FrameRate);
         Assert.False(viewModel.IsDirty);
         Assert.Equal("Settings saved and active.", viewModel.SaveMessage);
     }
@@ -39,25 +43,44 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
-    public async Task InvalidInputKeepsEditsAndShowsInlineError()
+    public async Task ValidationFailureKeepsEditsAndShowsSaveError()
     {
-        var saveCalled = false;
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            settings =>
-            {
-                saveCalled = true;
-                return Saved(settings);
-            }
+            _ =>
+                Task.FromResult(
+                    new SettingsSaveResult(
+                        SettingsSaveStatus.Invalid,
+                        null,
+                        ["Video quality must be Compact, Balanced, or High."]
+                    )
+                )
         );
-        viewModel.FrameRate = "not a number";
+        viewModel.SelectedVideoQuality = VideoQuality.High;
 
         var saved = await viewModel.SaveChangesAsync();
 
         Assert.False(saved);
-        Assert.False(saveCalled);
         Assert.True(viewModel.IsDirty);
-        Assert.NotNull(viewModel.FrameRateError);
+        Assert.True(viewModel.IsSaveError);
+        Assert.Equal("Fix the highlighted settings before saving.", viewModel.SaveMessage);
+    }
+
+    [Fact]
+    public void EstimateUpdatesWhenVideoOptionsChange()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            estimateCaptureSize: new VideoCaptureSize(2560, 1440)
+        );
+
+        Assert.Contains("910 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
+
+        viewModel.SelectedFrameRate = VideoFrameRates.Standard;
+
+        Assert.Contains("460 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("30 FPS", viewModel.EstimatedRecordingSize);
     }
 
     [Fact]
@@ -95,13 +118,15 @@ public sealed class SettingsViewModelTests
 
     private static SettingsViewModel CreateViewModel(
         ApplicationStatus status,
-        Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null
+        Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null,
+        VideoCaptureSize? estimateCaptureSize = null
     )
     {
         return new SettingsViewModel(
             status,
             (settings, _) => save?.Invoke(settings) ?? Saved(settings),
-            new FakeSettingsDialogs()
+            new FakeSettingsDialogs(),
+            () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080)
         );
     }
 

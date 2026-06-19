@@ -27,8 +27,8 @@ public sealed class SettingsStoreTests
             RecordMythicPlus = false,
             Video = new VideoSettings
             {
-                Bitrate = 20_000_000,
-                FrameRate = 120,
+                Quality = VideoQuality.High,
+                FrameRate = VideoFrameRates.Standard,
                 CaptureCursor = false,
                 ShowCaptureBorder = true,
             },

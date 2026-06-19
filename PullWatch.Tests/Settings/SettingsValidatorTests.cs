@@ -18,17 +18,25 @@ public sealed class SettingsValidatorTests
     }
 
     [Theory]
-    [InlineData(0, 12_000_000)]
-    [InlineData(241, 12_000_000)]
-    [InlineData(60, 999_999)]
-    [InlineData(60, 200_000_001)]
-    public void RejectsEntireSettingsObjectWhenAnyValueIsInvalid(int frameRate, int bitrate)
+    [InlineData(0)]
+    [InlineData(59)]
+    [InlineData(120)]
+    public void RejectsEntireSettingsObjectWhenFrameRateIsInvalid(int frameRate)
     {
         var result = SettingsValidator.Validate(
-            new PullWatchSettings
-            {
-                Video = new VideoSettings { FrameRate = frameRate, Bitrate = bitrate },
-            }
+            new PullWatchSettings { Video = new VideoSettings { FrameRate = frameRate } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.NotEmpty(result.Errors);
+    }
+
+    [Fact]
+    public void RejectsEntireSettingsObjectWhenQualityIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Video = new VideoSettings { Quality = (VideoQuality)999 } }
         );
 
         Assert.False(result.IsValid);

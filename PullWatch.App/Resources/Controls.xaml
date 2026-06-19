@@ -224,6 +224,158 @@
     <Setter Property="Padding" Value="10,8" />
   </Style>
 
+  <Style TargetType="ComboBox">
+    <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ComboBox">
+          <Grid x:Name="ComboBoxRoot">
+            <ToggleButton
+              x:Name="ToggleButton"
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="1"
+              ClickMode="Press"
+              Focusable="False"
+              Foreground="{TemplateBinding Foreground}"
+              IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+              Padding="{TemplateBinding Padding}"
+            >
+              <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                  <Border
+                    x:Name="ToggleBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="4"
+                  >
+                    <Grid>
+                      <TextBlock
+                        Margin="{TemplateBinding Padding}"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Foreground="{TemplateBinding Foreground}"
+                        Text="{Binding SelectionBoxItem.Label, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                        TextTrimming="CharacterEllipsis"
+                      />
+                      <Path
+                        Width="8"
+                        Height="5"
+                        Margin="0,0,10,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Data="M 0 0 L 4 4 L 8 0"
+                        Stroke="{StaticResource PrimaryTextBrush}"
+                        StrokeEndLineCap="Round"
+                        StrokeStartLineCap="Round"
+                        StrokeThickness="1.6"
+                      />
+                    </Grid>
+                  </Border>
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                      <Setter
+                        TargetName="ToggleBorder"
+                        Property="BorderBrush"
+                        Value="{StaticResource AccentBrush}"
+                      />
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                      <Setter
+                        TargetName="ToggleBorder"
+                        Property="BorderBrush"
+                        Value="{StaticResource FocusBrush}"
+                      />
+                    </Trigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </ToggleButton.Template>
+            </ToggleButton>
+
+            <Popup
+              x:Name="Popup"
+              AllowsTransparency="True"
+              Focusable="False"
+              IsOpen="{TemplateBinding IsDropDownOpen}"
+              Placement="Bottom"
+              PopupAnimation="Slide"
+            >
+              <Grid
+                MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                MaxHeight="{TemplateBinding MaxDropDownHeight}"
+              >
+                <Border
+                  Background="{StaticResource SurfaceRaisedBrush}"
+                  BorderBrush="{StaticResource BorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="4"
+                >
+                  <ScrollViewer Margin="1" CanContentScroll="True">
+                    <ItemsPresenter />
+                  </ScrollViewer>
+                </Border>
+              </Grid>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter
+                TargetName="ToggleButton"
+                Property="BorderBrush"
+                Value="{StaticResource FocusBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="ComboBoxRoot" Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="ComboBoxItem">
+    <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ComboBoxItem">
+          <Border
+            x:Name="ItemBorder"
+            Background="{TemplateBinding Background}"
+            Padding="{TemplateBinding Padding}"
+          >
+            <ContentPresenter />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource ListItemHoverBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SelectedSurfaceBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="CheckBox">
     <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />

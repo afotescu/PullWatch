@@ -219,13 +219,21 @@ public sealed class ApplicationControllerTests
             controller.Status.EffectiveSettings! with
             {
                 WowLogsDirectory = secondLogsDirectory,
-                Video = controller.Status.EffectiveSettings!.Video with { FrameRate = 120 },
+                Video = controller.Status.EffectiveSettings!.Video with
+                {
+                    Quality = VideoQuality.High,
+                    FrameRate = VideoFrameRates.Standard,
+                },
             },
             TestContext.Current.CancellationToken
         );
 
         Assert.Equal(SettingsSaveStatus.Saved, result.Status);
-        Assert.Equal(120, controller.Status.EffectiveSettings!.Video.FrameRate);
+        Assert.Equal(VideoQuality.High, controller.Status.EffectiveSettings!.Video.Quality);
+        Assert.Equal(
+            VideoFrameRates.Standard,
+            controller.Status.EffectiveSettings!.Video.FrameRate
+        );
         Assert.Equal(2, monitors.Count);
         Assert.Equal(firstLogsDirectory, monitors[0].Path);
         Assert.Equal(secondLogsDirectory, monitors[1].Path);

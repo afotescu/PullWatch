@@ -16,10 +16,30 @@ public sealed record PullWatchSettings
 
 public sealed record VideoSettings
 {
-    public int Bitrate { get; init; } = 12_000_000;
-    public int FrameRate { get; init; } = 60;
+    public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
+    public int FrameRate { get; init; } = VideoFrameRates.High;
     public bool CaptureCursor { get; init; } = true;
     public bool ShowCaptureBorder { get; init; }
+}
+
+public enum VideoQuality
+{
+    Compact,
+    Balanced,
+    High,
+}
+
+public static class VideoFrameRates
+{
+    public const int Standard = 30;
+    public const int High = 60;
+
+    public static readonly IReadOnlyList<int> Supported = [Standard, High];
+
+    public static bool IsSupported(int frameRate)
+    {
+        return frameRate is Standard or High;
+    }
 }
 
 public sealed record AudioSettings

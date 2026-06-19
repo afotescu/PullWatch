@@ -19,6 +19,19 @@ Videos/PullWatch
 
 You can change this at any time in settings.
 
+## Recording Settings
+
+PullWatch records with H.264 and uses simple video presets instead of exposing
+raw bitrate controls:
+
+- `Compact` for smaller files
+- `Balanced` for the default quality and size tradeoff
+- `High` for cleaner motion and larger files
+
+Frame rate is selectable as `30 FPS` or `60 FPS`. The settings screen shows an
+approximate recording size per 5 minutes based on the primary display; actual
+recordings use the captured World of Warcraft window size.
+
 ## Requirements
 
 - Windows x64
