@@ -31,6 +31,12 @@ public sealed class RecordingsViewModelTests
             combatLogPath: @"C:\WoW\Logs\WoWCombatLog-current.txt"));
 
         Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                "WoW is running.",
+                "Manual and automatic recording are ready."),
+            viewModel.ReadinessDetail);
         Assert.Equal("Ready", viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
@@ -46,6 +52,12 @@ public sealed class RecordingsViewModelTests
             combatLogState: combatLogState));
 
         Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.StartsWith(
+            string.Join(
+                Environment.NewLine,
+                "WoW is running.",
+                "Manual recording is ready."),
+            viewModel.ReadinessDetail);
         Assert.Equal("Manual only", viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
@@ -60,6 +72,12 @@ public sealed class RecordingsViewModelTests
             combatLogError: new IOException("Access denied.")));
 
         Assert.Equal("Ready", viewModel.StateTitle);
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                "WoW is running.",
+                "Manual recording is ready, but automatic recording cannot read combat logs: Access denied."),
+            viewModel.ReadinessDetail);
         Assert.Equal("Attention needed", viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }

@@ -2,6 +2,7 @@ namespace PullWatch;
 
 public enum CombatLogReaderState
 {
+    WaitingForWow,
     WaitingForLogsDirectory,
     WaitingForCombatLog,
     ReadingCombatLog,

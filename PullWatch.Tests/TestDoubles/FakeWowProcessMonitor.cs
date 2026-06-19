@@ -2,12 +2,22 @@ namespace PullWatch.Tests.TestDoubles;
 
 internal sealed class FakeWowProcessMonitor : IWowProcessMonitor
 {
-    private WowProcessStatus _status = new(
-        WowProcessState.WaitingForProcess,
-        null,
-        null,
-        null);
+    private WowProcessStatus _status;
     private TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public FakeWowProcessMonitor()
+        : this(new WowProcessStatus(
+            WowProcessState.WaitingForProcess,
+            null,
+            null,
+            null))
+    {
+    }
+
+    public FakeWowProcessMonitor(WowProcessStatus status)
+    {
+        _status = status;
+    }
 
     public event Action<WowProcessStatus>? StatusChanged;
 

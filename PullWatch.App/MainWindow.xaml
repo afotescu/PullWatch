@@ -30,10 +30,28 @@
 
                     <Border Margin="0,0,0,22"
                             Background="{StaticResource SurfaceBrush}"
-                            BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
-                            Padding="14">
+                            Padding="14"
+                            ToolTip="{Binding Recordings.ReadinessDetail}"
+                            ToolTipService.InitialShowDelay="250"
+                            ToolTipService.ShowDuration="12000">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Active">
+                                        <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Ready">
+                                        <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Recordings.StatusHealth}" Value="Attention needed">
+                                        <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>

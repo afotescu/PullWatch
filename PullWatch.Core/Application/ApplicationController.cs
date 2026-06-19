@@ -15,7 +15,7 @@ public sealed class ApplicationController : IAsyncDisposable
         null);
 
     private static readonly CombatLogReaderStatus InitialCombatLogStatus = new(
-        CombatLogReaderState.WaitingForLogsDirectory,
+        CombatLogReaderState.WaitingForWow,
         null,
         null,
         null);
@@ -120,14 +120,10 @@ public sealed class ApplicationController : IAsyncDisposable
             UpdateStatus(status => new ApplicationStatus(
                 settings,
                 recordingCoordinator.Status,
-                InitialCombatLogStatus,
+                GetInactiveCombatLogStatus(settings, status.WowProcess),
                 status.WowProcess));
             StartWowProcessMonitoring();
-
-            if (settings.WowLogsDirectory is not null)
-            {
-                StartCombatLogMonitoring(settings.WowLogsDirectory, settingsProvider);
-            }
+            await ApplyCombatLogMonitoringForCurrentStateAsync();
         }
         finally
         {
@@ -191,12 +187,11 @@ public sealed class ApplicationController : IAsyncDisposable
             try
             {
                 await StopCombatLogMonitoringAsync();
-                UpdateStatus(status => status with { CombatLog = InitialCombatLogStatus });
-
-                if (savedSettings.WowLogsDirectory is not null)
+                UpdateStatus(status => status with
                 {
-                    StartCombatLogMonitoring(savedSettings.WowLogsDirectory, GetSettingsProvider());
-                }
+                    CombatLog = GetInactiveCombatLogStatus(savedSettings, status.WowProcess)
+                });
+                await ApplyCombatLogMonitoringForCurrentStateAsync();
 
                 return result;
             }
@@ -473,6 +468,76 @@ public sealed class ApplicationController : IAsyncDisposable
     private void OnWowProcessStatusChanged(WowProcessStatus status)
     {
         UpdateStatus(current => current with { WowProcess = status });
+        _ = ApplyCombatLogMonitoringForWowChangeAsync();
+    }
+
+    private async Task ApplyCombatLogMonitoringForWowChangeAsync()
+    {
+        await _lifetimeLock.WaitAsync(CancellationToken.None);
+
+        try
+        {
+            if (_disposed || _recordingCoordinator is null)
+            {
+                return;
+            }
+
+            await ApplyCombatLogMonitoringForCurrentStateAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Could not apply WoW-gated combat-log monitoring state");
+            UpdateStatus(status => status with
+            {
+                CombatLog = GetInactiveCombatLogStatus(
+                    status.EffectiveSettings,
+                    status.WowProcess) with
+                {
+                    LastFileSystemError = exception
+                }
+            });
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
+    private async Task ApplyCombatLogMonitoringForCurrentStateAsync()
+    {
+        var status = Status;
+        var settings = status.EffectiveSettings;
+
+        if (settings is null || !status.WowProcess.IsWindowAvailable || settings.WowLogsDirectory is null)
+        {
+            await StopCombatLogMonitoringAsync();
+            UpdateStatus(current => current with
+            {
+                CombatLog = GetInactiveCombatLogStatus(settings, current.WowProcess)
+            });
+            return;
+        }
+
+        if (_combatLogMonitor is not null)
+        {
+            return;
+        }
+
+        StartCombatLogMonitoring(settings.WowLogsDirectory, GetSettingsProvider());
+    }
+
+    private static CombatLogReaderStatus GetInactiveCombatLogStatus(
+        PullWatchSettings? settings,
+        WowProcessStatus wowProcess)
+    {
+        return InitialCombatLogStatus with
+        {
+            State = !wowProcess.IsWindowAvailable
+                ? CombatLogReaderState.WaitingForWow
+                : settings?.WowLogsDirectory is null
+                    ? CombatLogReaderState.WaitingForLogsDirectory
+                    : CombatLogReaderState.WaitingForCombatLog
+        };
     }
 
     private void UpdateStatus(Func<ApplicationStatus, ApplicationStatus> update)

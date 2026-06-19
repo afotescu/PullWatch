@@ -286,25 +286,33 @@ public sealed class RecordingsViewModel : ObservableObject
     {
         if (recording.State == RecordingCoordinatorState.Starting)
         {
-            return "Opening the WoW window capture.";
+            return JoinSentences(
+                "WoW is running.",
+                "Starting recording.");
         }
 
         if (recording.State == RecordingCoordinatorState.Recording)
         {
             return recording.Owner == RecordingOwner.Manual
-                ? "Manual recording is active."
-                : "Automatic recording is active.";
+                ? JoinSentences(
+                    "WoW is running.",
+                    "Manual recording is active.")
+                : JoinSentences(
+                    "WoW is running.",
+                    "Automatic recording is active.");
         }
 
         if (recording.State == RecordingCoordinatorState.Stopping)
         {
-            return "Saving the recording.";
+            return "WoW recording is being saved.";
         }
 
         if (!wowProcess.IsWindowAvailable)
         {
             return wowProcess.State == WowProcessState.WaitingForWindow
-                ? "World of Warcraft is running, but no game window is available yet."
+                ? JoinSentences(
+                    "World of Warcraft is running.",
+                    "No game window is available yet.")
                 : "Start World of Warcraft to enable manual and automatic recording.";
         }
 
@@ -313,20 +321,37 @@ public sealed class RecordingsViewModel : ObservableObject
             var message = string.IsNullOrWhiteSpace(combatLog.LastFileSystemError.Message)
                 ? combatLog.LastFileSystemError.GetType().Name
                 : combatLog.LastFileSystemError.Message.TrimEnd('.', ' ', '\t', '\r', '\n');
-            return $"Automatic recording cannot read combat logs: {message}. Manual recording is ready.";
+            return JoinSentences(
+                "WoW is running.",
+                $"Manual recording is ready, but automatic recording cannot read combat logs: {message}.");
         }
 
         return combatLog.State switch
         {
+            CombatLogReaderState.WaitingForWow =>
+                "Start World of Warcraft to enable manual and automatic recording.",
             CombatLogReaderState.WaitingForLogsDirectory =>
-                "Manual recording is ready. Automatic recording is waiting for the WoW logs folder.",
+                JoinSentences(
+                    "WoW is running.",
+                    "Manual recording is ready.",
+                    "Automatic recording is waiting for the WoW logs folder."),
             CombatLogReaderState.WaitingForCombatLog =>
-                "Manual recording is ready. Enable combat logging in WoW for automatic recording.",
+                JoinSentences(
+                    "WoW is running.",
+                    "Manual recording is ready.",
+                    "Enable combat logging in WoW for automatic recording."),
             CombatLogReaderState.SwitchingCombatLog =>
-                "Automatic recording is switching combat logs. Manual recording is ready.",
+                JoinSentences(
+                    "WoW is running.",
+                    "Automatic recording is switching combat logs.",
+                    "Manual recording is ready."),
             CombatLogReaderState.ReadingCombatLog =>
-                "Automatic recording is watching combat logs. Manual recording is ready.",
-            _ => "Manual recording is ready."
+                JoinSentences(
+                    "WoW is running.",
+                    "Manual and automatic recording are ready."),
+            _ => JoinSentences(
+                "WoW is running.",
+                "Manual recording is ready.")
         };
     }
 
@@ -365,6 +390,11 @@ public sealed class RecordingsViewModel : ObservableObject
     {
         return combatLog.State == CombatLogReaderState.ReadingCombatLog &&
                combatLog.LastFileSystemError is null;
+    }
+
+    private static string JoinSentences(params string[] sentences)
+    {
+        return string.Join(Environment.NewLine, sentences);
     }
 
     private static string? GetCommandMessage(

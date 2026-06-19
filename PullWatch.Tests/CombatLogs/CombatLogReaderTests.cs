@@ -194,6 +194,34 @@ public sealed class CombatLogReaderTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
     }
 
+    [Fact]
+    public async Task ReopenedLogClearsTransientFileSystemErrorWithoutNewBytes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(path, "", cancellationToken);
+        await using var exclusiveLock = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var reader = CreateReader(directory.Path);
+        var readTask = reader.ReadAsync(
+            (_, _) => Task.CompletedTask,
+            readerCancellation.Token);
+
+        await WaitForAsync(() => reader.Status.LastFileSystemError is not null);
+        await exclusiveLock.DisposeAsync();
+        await WaitForAsync(() =>
+            reader.Status.State == CombatLogReaderState.ReadingCombatLog &&
+            reader.Status.LastFileSystemError is null);
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+    }
+
     private static CombatLogReader CreateReader(string logsDirectory)
     {
         return new CombatLogReader(

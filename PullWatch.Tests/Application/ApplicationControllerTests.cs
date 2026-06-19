@@ -24,7 +24,7 @@ public sealed class ApplicationControllerTests
         Assert.NotNull(controller.Status.EffectiveSettings);
         Assert.False(controller.StartedWithCreatedSettingsFile);
         Assert.Equal(
-            CombatLogReaderState.WaitingForLogsDirectory,
+            CombatLogReaderState.WaitingForWow,
             controller.Status.CombatLog.State);
         Assert.False(monitorCreated);
     }
@@ -57,11 +57,13 @@ public sealed class ApplicationControllerTests
         var logsDirectory = Directory.CreateDirectory(
             Path.Combine(directory.Path, "Logs")).FullName;
         var monitor = new FakeCombatLogMonitor();
+        var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
             directory.Path,
             logsDirectory,
             new FakeRecordingService(),
-            _ => monitor);
+            _ => monitor,
+            () => wowMonitor);
         var status = new CombatLogReaderStatus(
             CombatLogReaderState.ReadingCombatLog,
             Path.Combine(logsDirectory, "WoWCombatLog-test.txt"),
@@ -98,6 +100,31 @@ public sealed class ApplicationControllerTests
         await WaitForAsync(() => controller.Status.WowProcess == status);
 
         Assert.Equal(status, controller.Status.WowProcess);
+    }
+
+    [Fact]
+    public async Task CombatLogMonitoringStopsWhenWowWindowBecomesUnavailable()
+    {
+        using var directory = new TemporaryDirectory();
+        var logsDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "Logs")).FullName;
+        var monitor = new FakeCombatLogMonitor();
+        var wowMonitor = AvailableWowMonitor();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            logsDirectory,
+            new FakeRecordingService(),
+            _ => monitor,
+            () => wowMonitor);
+
+        await WaitForAsync(() => monitor.Started);
+        wowMonitor.Publish(new WowProcessStatus(
+            WowProcessState.WaitingForProcess,
+            null,
+            null,
+            null));
+        await WaitForAsync(() => monitor.Stopped);
+        await WaitForAsync(() => controller.Status.CombatLog.State == CombatLogReaderState.WaitingForWow);
     }
 
     [Fact]
@@ -158,6 +185,7 @@ public sealed class ApplicationControllerTests
         var secondLogsDirectory = Directory.CreateDirectory(
             Path.Combine(directory.Path, "SecondLogs")).FullName;
         var monitors = new List<(string Path, FakeCombatLogMonitor Monitor)>();
+        var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
             directory.Path,
             firstLogsDirectory,
@@ -167,7 +195,8 @@ public sealed class ApplicationControllerTests
                 var monitor = new FakeCombatLogMonitor();
                 monitors.Add((path, monitor));
                 return monitor;
-            });
+            },
+            () => wowMonitor);
 
         var result = await controller.SaveSettingsAsync(
             controller.Status.EffectiveSettings! with
@@ -192,11 +221,13 @@ public sealed class ApplicationControllerTests
         using var directory = new TemporaryDirectory();
         var logsDirectory = Directory.CreateDirectory(Path.Combine(directory.Path, "Logs")).FullName;
         var monitor = new FakeCombatLogMonitor();
+        var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
             directory.Path,
             logsDirectory,
             new FakeRecordingService(),
-            _ => monitor);
+            _ => monitor,
+            () => wowMonitor);
 
         var result = await controller.SaveSettingsAsync(
             controller.Status.EffectiveSettings! with { WowLogsDirectory = null },
@@ -279,11 +310,13 @@ public sealed class ApplicationControllerTests
     {
         using var directory = new TemporaryDirectory();
         var monitor = new FakeCombatLogMonitor();
+        var wowMonitor = AvailableWowMonitor();
         await using var controller = await CreateControllerAsync(
             directory.Path,
             Directory.CreateDirectory(Path.Combine(directory.Path, "Logs")).FullName,
             new FakeRecordingService(),
-            _ => monitor);
+            _ => monitor,
+            () => wowMonitor);
         var publisherContext = new SynchronizationContext();
         var callbackContext = new TaskCompletionSource<SynchronizationContext?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -338,6 +371,15 @@ public sealed class ApplicationControllerTests
             createWowProcessMonitor);
         await controller.StartAsync(TestContext.Current.CancellationToken);
         return controller;
+    }
+
+    private static FakeWowProcessMonitor AvailableWowMonitor()
+    {
+        return new FakeWowProcessMonitor(new WowProcessStatus(
+            WowProcessState.WindowAvailable,
+            1234,
+            "World of Warcraft",
+            null));
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

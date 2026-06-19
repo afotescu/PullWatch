@@ -90,7 +90,7 @@ public sealed class CombatLogReader : ICombatLogMonitor
         CancellationToken cancellationToken)
     {
         await using var stream = OpenSessionStream(session);
-        PublishStatus(CombatLogReaderState.ReadingCombatLog, session.Candidate.FullName);
+        PublishReadableStatus(session.Candidate.FullName);
 
         var buffer = new byte[4096];
 
@@ -275,6 +275,31 @@ public sealed class CombatLogReader : ICombatLogMonitor
             LastSuccessfulReadTime = DateTimeOffset.UtcNow,
             LastFileSystemError = null
         });
+    }
+
+    private void PublishReadableStatus(string path)
+    {
+        var current = Status;
+        if (_hasPublishedState &&
+            current.State == CombatLogReaderState.ReadingCombatLog &&
+            PathComparer.Equals(current.CurrentPath, path) &&
+            current.LastFileSystemError is null)
+        {
+            return;
+        }
+
+        _hasPublishedState = true;
+        SetStatus(current with
+        {
+            State = CombatLogReaderState.ReadingCombatLog,
+            CurrentPath = path,
+            LastFileSystemError = null
+        });
+
+        _logger.LogInformation(
+            "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}",
+            CombatLogReaderState.ReadingCombatLog,
+            path);
     }
 
     private void PublishError(Exception exception, string? currentPath)
