@@ -44,9 +44,9 @@
 
     <Grid Grid.Row="1">
       <Grid.RowDefinitions>
-        <RowDefinition Height="3*" MinHeight="320" />
+        <RowDefinition Height="*" MinHeight="320" />
         <RowDefinition Height="18" />
-        <RowDefinition Height="2*" MinHeight="190" />
+        <RowDefinition Height="190" MinHeight="190" />
       </Grid.RowDefinitions>
 
       <Grid Grid.Row="0">
