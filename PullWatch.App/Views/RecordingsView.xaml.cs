@@ -8,15 +8,15 @@ using System.Windows.Threading;
 
 namespace PullWatch;
 
-public partial class DashboardView : UserControl
+public partial class RecordingsView : UserControl
 {
     private readonly DispatcherTimer _positionTimer;
-    private DashboardViewModel? _viewModel;
+    private RecordingsViewModel? _viewModel;
     private bool _hasMedia;
     private bool _isPlaying;
     private bool _isSeeking;
 
-    public DashboardView()
+    public RecordingsView()
     {
         InitializeComponent();
         _positionTimer = new DispatcherTimer(
@@ -37,7 +37,7 @@ public partial class DashboardView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
-        AttachViewModel(DataContext as DashboardViewModel);
+        AttachViewModel(DataContext as RecordingsViewModel);
         LoadSelectedRecording();
     }
 
@@ -50,10 +50,10 @@ public partial class DashboardView : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs eventArgs)
     {
-        AttachViewModel(eventArgs.NewValue as DashboardViewModel);
+        AttachViewModel(eventArgs.NewValue as RecordingsViewModel);
     }
 
-    private void AttachViewModel(DashboardViewModel? viewModel)
+    private void AttachViewModel(RecordingsViewModel? viewModel)
     {
         if (ReferenceEquals(_viewModel, viewModel))
         {
@@ -77,7 +77,7 @@ public partial class DashboardView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
-        if (eventArgs.PropertyName == nameof(DashboardViewModel.SelectedRecording))
+        if (eventArgs.PropertyName == nameof(RecordingsViewModel.SelectedRecording))
         {
             LoadSelectedRecording();
         }

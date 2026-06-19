@@ -203,8 +203,8 @@
             </Setter>
         </Style>
 
-        <DataTemplate DataType="{x:Type local:DashboardViewModel}">
-            <local:DashboardView />
+        <DataTemplate DataType="{x:Type local:RecordingsViewModel}">
+            <local:RecordingsView />
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type local:PlaceholderViewModel}">

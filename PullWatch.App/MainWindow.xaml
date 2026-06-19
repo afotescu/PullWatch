@@ -49,10 +49,10 @@
                                         <Style TargetType="Ellipse">
                                             <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Dashboard.RecorderHealth}" Value="Active">
+                                                <DataTrigger Binding="{Binding Recordings.RecorderHealth}" Value="Active">
                                                     <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding Dashboard.RecorderHealth}" Value="Attention needed">
+                                                <DataTrigger Binding="{Binding Recordings.RecorderHealth}" Value="Attention needed">
                                                     <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -62,25 +62,25 @@
                                 <StackPanel Grid.Column="1">
                                     <TextBlock FontSize="13"
                                                FontWeight="SemiBold"
-                                               Text="{Binding Dashboard.StateTitle}"
+                                               Text="{Binding Recordings.StateTitle}"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Margin="0,4,0,0"
                                                FontFamily="Consolas"
                                                FontSize="22"
                                                FontWeight="SemiBold"
-                                               Text="{Binding Dashboard.Duration}" />
+                                               Text="{Binding Recordings.Duration}" />
                                 </StackPanel>
                             </Grid>
 
                             <Button Margin="0,16,0,0"
                                     HorizontalAlignment="Stretch"
-                                    Command="{Binding Dashboard.ManualRecordingCommand}"
-                                    Content="{Binding Dashboard.ManualRecordingButtonText}">
+                                    Command="{Binding Recordings.ManualRecordingCommand}"
+                                    Content="{Binding Recordings.ManualRecordingButtonText}">
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
                                         <Setter Property="Padding" Value="10,8" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Dashboard.IsManualStopMode}" Value="True">
+                                            <DataTrigger Binding="{Binding Recordings.IsManualStopMode}" Value="True">
                                                 <Setter Property="Background" Value="{StaticResource FailureBrush}" />
                                                 <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
                                             </DataTrigger>

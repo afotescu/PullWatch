@@ -1,6 +1,6 @@
 namespace PullWatch.Tests;
 
-public sealed class DashboardViewModelTests
+public sealed class RecordingsViewModelTests
 {
     [Theory]
     [InlineData(RecordingCoordinatorState.Idle, "Ready to record", true, false, "Manual start")]
@@ -253,12 +253,12 @@ public sealed class DashboardViewModelTests
         Assert.Equal(expected, viewModel.Duration);
     }
 
-    private static DashboardViewModel CreateViewModel(
+    private static RecordingsViewModel CreateViewModel(
         ApplicationStatus status,
         Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null,
         Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null)
     {
-        return new DashboardViewModel(
+        return new RecordingsViewModel(
             status,
             startManual ?? (_ => Task.FromResult(RecordingCommandResult.Started)),
             stopManual ?? (_ => Task.FromResult(RecordingCommandResult.Stopped)),

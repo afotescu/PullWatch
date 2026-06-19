@@ -3,7 +3,7 @@ using System.IO;
 
 namespace PullWatch;
 
-public sealed class DashboardViewModel : ObservableObject
+public sealed class RecordingsViewModel : ObservableObject
 {
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string NoRecordingsDirectoryMessage = "Choose a recordings directory in settings to review videos here.";
@@ -22,7 +22,7 @@ public sealed class DashboardViewModel : ObservableObject
     private RecordingListItem? _selectedRecording;
     private int _knownSavedCount;
 
-    public DashboardViewModel(
+    public RecordingsViewModel(
         ApplicationStatus initialStatus,
         Func<CancellationToken, Task<RecordingCommandResult>> startManual,
         Func<CancellationToken, Task<RecordingCommandResult>> stopManual,

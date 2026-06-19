@@ -20,7 +20,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _dispatcher = dispatcher;
         _settingsDialogs = settingsDialogs;
         _logs = logs;
-        Dashboard = new DashboardViewModel(
+        Recordings = new RecordingsViewModel(
             controller.Status,
             controller.StartManualRecordingAsync,
             controller.StopManualRecordingAsync,
@@ -32,7 +32,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
         [
-            new NavigationItemViewModel("Recordings", "\uE80F", Dashboard),
+            new NavigationItemViewModel("Recordings", "\uE80F", Recordings),
             new NavigationItemViewModel("Settings", "\uE713", Settings),
             new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics)
         ];
@@ -45,7 +45,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public string AppVersionLabel { get; } = $"Version {ApplicationVersion.Current}";
 
-    public DashboardViewModel Dashboard { get; }
+    public RecordingsViewModel Recordings { get; }
 
     public SettingsViewModel Settings { get; }
 
@@ -93,7 +93,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         _dispatcher.Post(() =>
         {
-            Dashboard.ApplyStatus(status);
+            Recordings.ApplyStatus(status);
             Settings.ApplyStatus(status);
             Diagnostics.ApplyStatus(status);
         });

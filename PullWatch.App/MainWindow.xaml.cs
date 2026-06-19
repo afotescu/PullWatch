@@ -49,7 +49,7 @@ public partial class MainWindow : Window
 
     private void OnTimerTick(object? sender, EventArgs eventArgs)
     {
-        _viewModel.Dashboard.UpdateDuration();
+        _viewModel.Recordings.UpdateDuration();
     }
 
     private void OnClosed(object? sender, EventArgs eventArgs)
