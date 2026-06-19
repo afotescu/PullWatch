@@ -376,7 +376,10 @@ public sealed class RecordingCoordinatorTests
         var recorder = new FakeRecordingService
         {
             StartException = new InvalidOperationException(
-                "Could not find a running World of Warcraft window."
+                "Recorder startup failed.",
+                new CaptureTargetUnavailableException(
+                    "Could not find a running World of Warcraft window."
+                )
             ),
         };
         await using var coordinator = CreateCoordinator(recorder);

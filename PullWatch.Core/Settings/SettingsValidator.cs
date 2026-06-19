@@ -65,8 +65,6 @@ public static class SettingsValidator
             NormalizeOptionalPath(settings.RecordingsDirectory, "Recordings directory", errors)
             ?? GetDefaultRecordingsDirectory();
 
-        ValidateRecordingsDirectory(recordingsDirectory, errors);
-
         return errors.Count == 0
             ? new SettingsValidationResult(
                 settings with
@@ -77,6 +75,25 @@ public static class SettingsValidator
                 errors
             )
             : new SettingsValidationResult(null, errors);
+    }
+
+    public static IReadOnlyList<string> ValidateRecordingsDirectoryWritable(
+        PullWatchSettings settings
+    )
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var errors = new List<string>();
+        var recordingsDirectory =
+            NormalizeOptionalPath(settings.RecordingsDirectory, "Recordings directory", errors)
+            ?? GetDefaultRecordingsDirectory();
+
+        if (errors.Count == 0)
+        {
+            ProbeRecordingsDirectory(recordingsDirectory, errors);
+        }
+
+        return errors;
     }
 
     private static string GetDefaultRecordingsDirectory()
@@ -116,7 +133,7 @@ public static class SettingsValidator
         }
     }
 
-    private static void ValidateRecordingsDirectory(string path, ICollection<string> errors)
+    private static void ProbeRecordingsDirectory(string path, ICollection<string> errors)
     {
         var probePath = Path.Combine(path, $".pullwatch-write-test-{Guid.NewGuid():N}.tmp");
 

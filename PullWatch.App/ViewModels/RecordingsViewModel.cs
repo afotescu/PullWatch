@@ -437,14 +437,7 @@ public sealed class RecordingsViewModel : ObservableObject
 
     private static bool IsTargetUnavailableFailure(Exception? exception)
     {
-        if (exception is null)
-        {
-            return false;
-        }
-
-        var text = exception.ToString();
-        return text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase)
-            && text.Contains("window", StringComparison.OrdinalIgnoreCase);
+        return RecordingFailureClassifier.IsTargetUnavailable(exception);
     }
 
     private static bool PathsEqual(string? left, string? right)

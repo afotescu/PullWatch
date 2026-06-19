@@ -84,6 +84,21 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public void OptionLabelsRemainStable()
+    {
+        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
+
+        Assert.Equal(
+            ["Compact", "Balanced", "High"],
+            viewModel.VideoQualityOptions.Select(option => option.Label)
+        );
+        Assert.Equal(
+            ["30 FPS", "60 FPS"],
+            viewModel.FrameRateOptions.Select(option => option.Label)
+        );
+    }
+
+    [Fact]
     public void DiscardRestoresLastSavedSettings()
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));

@@ -36,6 +36,15 @@ public sealed class ApplicationSettingsService(SettingsStore store, SettingsProv
             return new SettingsSaveResult(SettingsSaveStatus.Invalid, null, validation.Errors);
         }
 
+        var directoryErrors = SettingsValidator.ValidateRecordingsDirectoryWritable(
+            validation.Settings
+        );
+
+        if (directoryErrors.Count > 0)
+        {
+            return new SettingsSaveResult(SettingsSaveStatus.Invalid, null, directoryErrors);
+        }
+
         try
         {
             await store.SaveAsync(validation.Settings, cancellationToken);
@@ -50,7 +59,7 @@ public sealed class ApplicationSettingsService(SettingsStore store, SettingsProv
             );
         }
 
-        provider.TryUpdate(validation.Settings);
+        provider.UpdateValidated(validation.Settings);
         return new SettingsSaveResult(SettingsSaveStatus.Saved, validation.Settings, []);
     }
 }

@@ -282,7 +282,9 @@ public sealed class ScreenRecordingService(
             process.Dispose();
         }
 
-        throw new InvalidOperationException("Could not find a running World of Warcraft window.");
+        throw new CaptureTargetUnavailableException(
+            "Could not find a running World of Warcraft window."
+        );
     }
 
     private static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
@@ -484,7 +486,7 @@ public sealed class ScreenRecordingService(
             return windowSize;
         }
 
-        throw new InvalidOperationException(
+        throw new CaptureTargetUnavailableException(
             "Could not determine the World of Warcraft window size."
         );
     }

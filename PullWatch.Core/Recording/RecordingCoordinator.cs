@@ -217,7 +217,8 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 );
                 return RecordingCommandResult.Started;
             }
-            catch (Exception exception) when (IsTargetUnavailableException(exception))
+            catch (Exception exception)
+                when (RecordingFailureClassifier.IsTargetUnavailable(exception))
             {
                 _expectedCount--;
                 PublishStatus(
@@ -582,21 +583,5 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 _logger.LogError(exception, "Recording coordinator status subscriber failed");
             }
         }
-    }
-
-    private static bool IsTargetUnavailableException(Exception exception)
-    {
-        var text = exception.ToString();
-
-        if (
-            text.Contains("World of Warcraft", StringComparison.OrdinalIgnoreCase)
-            && text.Contains("window", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return true;
-        }
-
-        return exception.InnerException is not null
-            && IsTargetUnavailableException(exception.InnerException);
     }
 }

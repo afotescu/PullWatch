@@ -254,15 +254,22 @@
                     CornerRadius="4"
                   >
                     <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+
                       <TextBlock
+                        Grid.Column="0"
                         Margin="{TemplateBinding Padding}"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         Foreground="{TemplateBinding Foreground}"
-                        Text="{Binding SelectionBoxItem.Label, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                        Text="{Binding Text, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                         TextTrimming="CharacterEllipsis"
                       />
                       <Path
+                        Grid.Column="1"
                         Width="8"
                         Height="5"
                         Margin="0,0,10,0"

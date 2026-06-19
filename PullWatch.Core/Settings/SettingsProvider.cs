@@ -22,4 +22,11 @@ public sealed class SettingsProvider
 
         return result;
     }
+
+    public void UpdateValidated(PullWatchSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        Volatile.Write(ref _current, settings);
+    }
 }

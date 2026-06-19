@@ -242,7 +242,10 @@ public sealed class RecordingsViewModelTests
             Status(
                 RecordingCoordinatorState.Idle,
                 lastFailure: new InvalidOperationException(
-                    "Could not find a running World of Warcraft window."
+                    "Recorder startup failed.",
+                    new CaptureTargetUnavailableException(
+                        "Could not find a running World of Warcraft window."
+                    )
                 )
             ),
             _ => Task.FromResult(RecordingCommandResult.Failed)

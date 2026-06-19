@@ -1,6 +1,6 @@
 namespace PullWatch;
 
-internal static class RecordingFailureClassifier
+public static class RecordingFailureClassifier
 {
     private const string VisualCRuntimeMessage =
         "Screen recording cannot start because a native recording dependency could not be loaded. "
@@ -16,6 +16,11 @@ internal static class RecordingFailureClassifier
 
     public static Exception Classify(Exception exception)
     {
+        if (IsTargetUnavailable(exception))
+        {
+            return exception;
+        }
+
         if (ContainsBadImageFormat(exception))
         {
             return new InvalidOperationException(NativeArchitectureMessage, exception);
@@ -32,6 +37,26 @@ internal static class RecordingFailureClassifier
         }
 
         return exception;
+    }
+
+    public static bool IsTargetUnavailable(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return false;
+        }
+
+        if (exception is CaptureTargetUnavailableException)
+        {
+            return true;
+        }
+
+        if (exception is AggregateException aggregateException)
+        {
+            return aggregateException.InnerExceptions.Any(IsTargetUnavailable);
+        }
+
+        return IsTargetUnavailable(exception.InnerException);
     }
 
     private static bool ContainsBadImageFormat(Exception exception)
