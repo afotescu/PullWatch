@@ -17,6 +17,8 @@ internal sealed class FakeCombatLogMonitor : ICombatLogMonitor
 
     public bool Stopped { get; private set; }
 
+    public Exception? ReadException { get; set; }
+
     public async Task ReadAsync(
         Func<CombatLogEvent, CancellationToken, Task> handleEventAsync,
         CancellationToken cancellationToken
@@ -26,6 +28,11 @@ internal sealed class FakeCombatLogMonitor : ICombatLogMonitor
 
         try
         {
+            if (ReadException is not null)
+            {
+                throw ReadException;
+            }
+
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
         finally

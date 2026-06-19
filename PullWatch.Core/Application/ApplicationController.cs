@@ -393,6 +393,24 @@ public sealed class ApplicationController : IAsyncDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Combat-log monitoring stopped unexpectedly");
+
+            if (!ReferenceEquals(_combatLogMonitor, monitor))
+            {
+                return;
+            }
+
+            UpdateStatus(status =>
+                status with
+                {
+                    CombatLog = GetInactiveCombatLogStatus(
+                        status.EffectiveSettings,
+                        status.WowProcess
+                    ) with
+                    {
+                        LastFileSystemError = exception,
+                    },
+                }
+            );
         }
     }
 

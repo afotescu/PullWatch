@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
@@ -28,10 +29,25 @@ public sealed class CombatLogEventHandler(
                     break;
                 }
 
+                if (
+                    !CombatLogEventMetadataParser.TryParseChallengeStart(
+                        combatLogEvent,
+                        receivedAt,
+                        out var challengeContext
+                    )
+                )
+                {
+                    LogMalformedKnownEvent(
+                        combatLogEvent,
+                        "Challenge start is missing a dungeon name or valid level"
+                    );
+                    break;
+                }
+
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
-                    CombatLogEventMetadataParser.ParseChallengeStart(combatLogEvent, receivedAt),
+                    challengeContext,
                     cancellationToken
                 );
                 break;
@@ -41,10 +57,25 @@ public sealed class CombatLogEventHandler(
                     break;
                 }
 
+                if (
+                    !CombatLogEventMetadataParser.TryParseEncounterStart(
+                        combatLogEvent,
+                        receivedAt,
+                        out var encounterContext
+                    )
+                )
+                {
+                    LogMalformedKnownEvent(
+                        combatLogEvent,
+                        "Encounter start is missing an encounter id, encounter name, or valid difficulty id"
+                    );
+                    break;
+                }
+
                 await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
-                    CombatLogEventMetadataParser.ParseEncounterStart(combatLogEvent, receivedAt),
+                    encounterContext,
                     cancellationToken
                 );
                 break;
@@ -58,11 +89,33 @@ public sealed class CombatLogEventHandler(
                 );
                 break;
             case WowEvents.EncounterEnd:
+                var hasEncounterIdentity = TryGetEncounterIdentity(
+                    combatLogEvent,
+                    out var encounterIdentity
+                );
+
+                if (!hasEncounterIdentity)
+                {
+                    LogMalformedKnownEvent(
+                        combatLogEvent,
+                        "Encounter end is missing a valid encounter id"
+                    );
+
+                    if (
+                        recordingCoordinator.Status.Owner
+                        is RecordingOwner.ChallengeMode
+                            or RecordingOwner.Manual
+                    )
+                    {
+                        break;
+                    }
+                }
+
                 await HandleEndAsync(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.Encounter,
-                    GetEncounterIdentity(combatLogEvent),
+                    encounterIdentity,
                     cancellationToken
                 );
                 break;
@@ -109,9 +162,29 @@ public sealed class CombatLogEventHandler(
         );
     }
 
-    private static string? GetEncounterIdentity(CombatLogEvent combatLogEvent)
+    private static bool TryGetEncounterIdentity(
+        CombatLogEvent combatLogEvent,
+        out string? encounterIdentity
+    )
     {
-        return combatLogEvent.Arguments.Count > 0 ? combatLogEvent.Arguments[0] : null;
+        encounterIdentity = null;
+        var arguments = combatLogEvent.Arguments;
+
+        if (
+            arguments.Count == 0
+            || !int.TryParse(
+                arguments[0],
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var encounterId
+            )
+        )
+        {
+            return false;
+        }
+
+        encounterIdentity = encounterId.ToString(CultureInfo.InvariantCulture);
+        return true;
     }
 
     private void LogEventHandled(string eventName, long eventTimestamp)
@@ -120,6 +193,16 @@ public sealed class CombatLogEventHandler(
             "Handled {EventName} in {ElapsedMilliseconds:F1} ms",
             eventName,
             Stopwatch.GetElapsedTime(eventTimestamp).TotalMilliseconds
+        );
+    }
+
+    private void LogMalformedKnownEvent(CombatLogEvent combatLogEvent, string reason)
+    {
+        logger.LogWarning(
+            "Malformed {EventName}: {Reason}. Combat log event: {CombatLogLine}",
+            combatLogEvent.Name,
+            reason,
+            combatLogEvent.RawLine
         );
     }
 

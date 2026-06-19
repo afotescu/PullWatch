@@ -4,33 +4,69 @@ namespace PullWatch;
 
 internal static class CombatLogEventMetadataParser
 {
-    public static ChallengeRecordingContext ParseChallengeStart(
+    private const int ChallengeDungeonNameIndex = 0;
+    private const int ChallengeLevelIndex = 3;
+    private const int EncounterIdIndex = 0;
+    private const int EncounterNameIndex = 1;
+    private const int EncounterDifficultyIdIndex = 2;
+
+    public static bool TryParseChallengeStart(
         CombatLogEvent combatLogEvent,
-        DateTimeOffset startedAt
+        DateTimeOffset startedAt,
+        out ChallengeRecordingContext context
     )
     {
         var arguments = combatLogEvent.Arguments;
+        context = null!;
 
-        return new ChallengeRecordingContext(startedAt, arguments[0], ParseInt(arguments[3]));
-    }
+        if (
+            arguments.Count <= ChallengeDungeonNameIndex
+            || arguments.Count <= ChallengeLevelIndex
+            || !TryParseInt(arguments[ChallengeLevelIndex], out var level)
+        )
+        {
+            return false;
+        }
 
-    public static EncounterRecordingContext ParseEncounterStart(
-        CombatLogEvent combatLogEvent,
-        DateTimeOffset startedAt
-    )
-    {
-        var arguments = combatLogEvent.Arguments;
-
-        return new EncounterRecordingContext(
+        context = new ChallengeRecordingContext(
             startedAt,
-            ParseInt(arguments[0]),
-            arguments[1],
-            ParseInt(arguments[2])
+            arguments[ChallengeDungeonNameIndex],
+            level
         );
+        return true;
     }
 
-    private static int ParseInt(string value)
+    public static bool TryParseEncounterStart(
+        CombatLogEvent combatLogEvent,
+        DateTimeOffset startedAt,
+        out EncounterRecordingContext context
+    )
     {
-        return int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+        var arguments = combatLogEvent.Arguments;
+        context = null!;
+
+        if (
+            arguments.Count <= EncounterIdIndex
+            || arguments.Count <= EncounterNameIndex
+            || arguments.Count <= EncounterDifficultyIdIndex
+            || !TryParseInt(arguments[EncounterIdIndex], out var encounterId)
+            || !TryParseInt(arguments[EncounterDifficultyIdIndex], out var difficultyId)
+        )
+        {
+            return false;
+        }
+
+        context = new EncounterRecordingContext(
+            startedAt,
+            encounterId,
+            arguments[EncounterNameIndex],
+            difficultyId
+        );
+        return true;
+    }
+
+    private static bool TryParseInt(string value, out int result)
+    {
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
     }
 }

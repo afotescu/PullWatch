@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging.Abstractions;
+using PullWatch.Tests.TestDoubles;
 
 namespace PullWatch.Tests;
 
@@ -9,6 +10,10 @@ public sealed class CombatLogReaderTests
         "6/15/2026 00:15:10.0373  ENCOUNTER_START,3129,\"Plexus Sentinel\",14,10,2810";
     private const string SecondLine =
         "6/15/2026 00:16:10.0373  ENCOUNTER_END,3129,\"Plexus Sentinel\",14,10,1";
+    private const string MalformedChallengeStartLine =
+        "6/15/2026 00:17:10.0373  CHALLENGE_MODE_START,\"Magisters' Terrace\",2811,558";
+    private const string ValidChallengeStartLine =
+        "6/15/2026 00:18:10.0373  CHALLENGE_MODE_START,\"Magisters' Terrace\",2811,558,22,[9,10,147]";
 
     [Fact]
     public async Task ExistingLogStartsAtEnd()
@@ -181,6 +186,39 @@ public sealed class CombatLogReaderTests
     }
 
     [Fact]
+    public async Task MalformedKnownEventDoesNotStopReader()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(path, "", cancellationToken);
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
+        var reader = CreateReader(directory.Path);
+
+        var readTask = reader.ReadAsync(handler.HandleAsync, readerCancellation.Token);
+        await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
+        await File.AppendAllTextAsync(
+            path,
+            MalformedChallengeStartLine
+                + Environment.NewLine
+                + ValidChallengeStartLine
+                + Environment.NewLine,
+            cancellationToken
+        );
+        await WaitForAsync(() => recorder.Calls.Count >= 1 || readTask.IsCompleted);
+
+        Assert.Equal(["start"], recorder.Calls);
+        Assert.False(readTask.IsCompleted, readTask.Exception?.ToString());
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+    }
+
+    [Fact]
     public async Task SuccessfulReadClearsTransientFileSystemError()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -255,6 +293,20 @@ public sealed class CombatLogReaderTests
             NullLogger<CombatLogReader>.Instance,
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromMilliseconds(40)
+        );
+    }
+
+    private static CombatLogEventHandler CreateHandler(IRecordingService recordingService)
+    {
+        var coordinator = new RecordingCoordinator(
+            recordingService,
+            NullLogger<RecordingCoordinator>.Instance
+        );
+
+        return new CombatLogEventHandler(
+            coordinator,
+            new SettingsProvider(new PullWatchSettings()),
+            NullLogger<CombatLogEventHandler>.Instance
         );
     }
 

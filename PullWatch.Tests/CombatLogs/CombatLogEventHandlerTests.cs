@@ -81,6 +81,52 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
+    public async Task MalformedChallengeModeStartDoesNotCallRecorder()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.ChallengeModeStart,
+            "\"Magisters' Terrace\",2811,558"
+        );
+
+        Assert.Empty(recorder.Calls);
+    }
+
+    [Fact]
+    public async Task MalformedEncounterStartDoesNotCallRecorder()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.EncounterStart,
+            "3129,\"Plexus Sentinel\""
+        );
+
+        Assert.Empty(recorder.Calls);
+    }
+
+    [Fact]
+    public async Task ValidStartAfterMalformedStartIsHandled()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.ChallengeModeStart,
+            "\"Magisters' Terrace\",2811,558"
+        );
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
     public async Task EncounterEndMustMatchActiveEncounterIdentity()
     {
         var recorder = new FakeRecordingService();
@@ -90,6 +136,34 @@ public sealed class CombatLogEventHandlerTests
         await HandleAsync(handler, WowEvents.EncounterEnd, "456");
         await HandleAsync(handler, WowEvents.EncounterEnd, "123");
 
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("invalid,\"Plexus Sentinel\",16,20,1,70964")]
+    public async Task MalformedEncounterEndStopsActiveEncounter(string arguments)
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleAsync(handler, WowEvents.EncounterStart, "123");
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, arguments);
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task MalformedEncounterEndDoesNotStopChallengeModeRecording()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, "");
+        Assert.Equal(["start"], recorder.Calls);
+
+        await HandleAsync(handler, WowEvents.ChallengeModeEnd);
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
 
@@ -169,6 +243,20 @@ public sealed class CombatLogEventHandlerTests
             WowEvents.EncounterEnd => $"{firstArgument},\"Plexus Sentinel\",16,20,1,70964",
             _ => firstArgument,
         };
+        var rawLine = $"{eventName},{arguments}";
+
+        return handler.HandleAsync(
+            new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
+            CancellationToken.None
+        );
+    }
+
+    private static Task HandleWithArgumentsAsync(
+        CombatLogEventHandler handler,
+        string eventName,
+        string arguments
+    )
+    {
         var rawLine = $"{eventName},{arguments}";
 
         return handler.HandleAsync(

@@ -83,6 +83,38 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task UnexpectedCombatLogMonitoringFailureReportsInactiveError()
+    {
+        using var directory = new TemporaryDirectory();
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
+        var exception = new InvalidOperationException("Reader failed.");
+        var monitor = new FakeCombatLogMonitor { ReadException = exception };
+        monitor.Publish(
+            new CombatLogReaderStatus(
+                CombatLogReaderState.ReadingCombatLog,
+                Path.Combine(logsDirectory, "WoWCombatLog-test.txt"),
+                DateTimeOffset.UtcNow,
+                null
+            )
+        );
+        var wowMonitor = AvailableWowMonitor();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            logsDirectory,
+            new FakeRecordingService(),
+            _ => monitor,
+            () => wowMonitor
+        );
+
+        await WaitForAsync(() => controller.Status.CombatLog.LastFileSystemError == exception);
+
+        Assert.Equal(CombatLogReaderState.WaitingForCombatLog, controller.Status.CombatLog.State);
+        Assert.Same(exception, controller.Status.CombatLog.LastFileSystemError);
+    }
+
+    [Fact]
     public async Task StartupStartsWowProcessMonitoringAndAggregatesStatus()
     {
         using var directory = new TemporaryDirectory();
