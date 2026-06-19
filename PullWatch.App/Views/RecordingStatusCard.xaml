@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:PullWatch">
     <UserControl.Resources>
         <Style x:Key="StatusBorderStyle" TargetType="Border">
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource StatusNeutralBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Active}">
                     <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
@@ -19,7 +19,7 @@
         </Style>
 
         <Style x:Key="StatusIndicatorStyle" TargetType="Ellipse">
-            <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Fill" Value="{StaticResource StatusNeutralBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Active}">
                     <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />

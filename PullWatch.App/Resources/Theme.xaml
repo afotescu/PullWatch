@@ -10,11 +10,14 @@
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F4F7" />
     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#AAB2BD" />
     <SolidColorBrush x:Key="AccentBrush" Color="#D59B45" />
+    <SolidColorBrush x:Key="StatusNeutralBrush" Color="#7D8794" />
     <SolidColorBrush x:Key="HealthyBrush" Color="#66B58A" />
     <SolidColorBrush x:Key="FailureBrush" Color="#E06C75" />
 
     <SolidColorBrush x:Key="ButtonHoverOverlayBrush" Color="#24FFFFFF" />
     <SolidColorBrush x:Key="ButtonPressedOverlayBrush" Color="#22000000" />
+    <SolidColorBrush x:Key="FilledButtonHoverOverlayBrush" Color="#14000000" />
+    <SolidColorBrush x:Key="FilledButtonPressedOverlayBrush" Color="#26000000" />
     <SolidColorBrush x:Key="SelectedSurfaceBrush" Color="#3A3024" />
     <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#392226" />
     <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="#111318" />

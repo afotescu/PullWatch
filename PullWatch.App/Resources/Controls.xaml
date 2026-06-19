@@ -125,19 +125,74 @@
 
     <Style BasedOn="{StaticResource BaseButtonStyle}" TargetType="Button" />
 
-    <Style x:Key="AccentButtonStyle"
-           BasedOn="{StaticResource BaseButtonStyle}"
-           TargetType="Button">
+    <Style x:Key="FilledButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource AccentBrush}" />
         <Setter Property="Foreground" Value="#171A1F" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16,9" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="ButtonRoot">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <Border x:Name="InteractionOverlay"
+                                Background="{StaticResource FilledButtonHoverOverlayBrush}"
+                                CornerRadius="6"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        <Border x:Name="FocusBorder"
+                                BorderBrush="{StaticResource PrimaryTextBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="InteractionOverlay" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="InteractionOverlay"
+                                    Property="Background"
+                                    Value="{StaticResource FilledButtonPressedOverlayBrush}" />
+                            <Setter TargetName="InteractionOverlay" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusBorder" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="ButtonRoot" Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="AccentButtonStyle"
+           BasedOn="{StaticResource FilledButtonStyle}"
+           TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
     </Style>
 
     <Style x:Key="StopButtonStyle"
-           BasedOn="{StaticResource BaseButtonStyle}"
+           BasedOn="{StaticResource FilledButtonStyle}"
            TargetType="Button">
         <Setter Property="Background" Value="{StaticResource FailureBrush}" />
-        <Setter Property="Foreground" Value="#171A1F" />
         <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
     </Style>
 
@@ -209,11 +264,62 @@
     </Style>
 
     <Style x:Key="NavigationItemStyle"
-           BasedOn="{StaticResource SelectableListItemStyle}"
            TargetType="ListBoxItem">
         <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
         <Setter Property="Padding" Value="12,10" />
         <Setter Property="Margin" Value="0,2" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="ItemBorder"
+                                Background="Transparent"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Border x:Name="SelectionIndicator"
+                                        Width="3"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Stretch"
+                                        Background="{StaticResource AccentBrush}"
+                                        CornerRadius="2"
+                                        Opacity="0" />
+                                <ContentPresenter Margin="10,0,0,0" />
+                            </Grid>
+                        </Border>
+                        <Border x:Name="ItemFocusBorder"
+                                BorderBrush="{StaticResource AccentBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ItemBorder"
+                                    Property="Background"
+                                    Value="{StaticResource SurfaceRaisedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="ItemBorder"
+                                    Property="Background"
+                                    Value="{StaticResource SurfaceRaisedBrush}" />
+                            <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
+                            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="ItemFocusBorder" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="SplitterGripStyle" TargetType="GridSplitter">
