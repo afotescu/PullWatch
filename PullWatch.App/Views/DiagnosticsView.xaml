@@ -19,39 +19,39 @@
                 <Border Grid.Column="0" Margin="0,0,9,0" Style="{StaticResource CardStyle}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Combat log reader" />
-                        <TextBlock Margin="0,15,0,4" Style="{StaticResource SecondaryTextStyle}" Text="State" />
+                        <TextBlock Margin="0,15,0,4" Style="{StaticResource DiagnosticLabelStyle}" Text="State" />
                         <TextBlock Text="{Binding CombatLogState}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Active path" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Active path" />
                         <TextBlock Text="{Binding CombatLogPath}" TextWrapping="Wrap" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Last successful read" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last successful read" />
                         <TextBlock Text="{Binding LastSuccessfulRead}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Last filesystem error" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last filesystem error" />
                         <TextBlock Text="{Binding LastFileSystemError}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
                 <Border Grid.Column="1" Margin="9,0,9,0" Style="{StaticResource CardStyle}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="World of Warcraft" />
-                        <TextBlock Margin="0,15,0,4" Style="{StaticResource SecondaryTextStyle}" Text="State" />
+                        <TextBlock Margin="0,15,0,4" Style="{StaticResource DiagnosticLabelStyle}" Text="State" />
                         <TextBlock Text="{Binding WowProcessState}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Process id" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Process id" />
                         <TextBlock Text="{Binding WowProcessId}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Window title" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Window title" />
                         <TextBlock Text="{Binding WowWindowTitle}" TextWrapping="Wrap" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Last process error" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last process error" />
                         <TextBlock Text="{Binding WowProcessError}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
                 <Border Grid.Column="2" Margin="9,0,0,0" Style="{StaticResource CardStyle}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recorder" />
-                        <TextBlock Margin="0,15,0,4" Style="{StaticResource SecondaryTextStyle}" Text="State" />
+                        <TextBlock Margin="0,15,0,4" Style="{StaticResource DiagnosticLabelStyle}" Text="State" />
                         <TextBlock Text="{Binding RecordingState}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Owner" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Owner" />
                         <TextBlock Text="{Binding RecordingOwner}" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Active output path" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Active output path" />
                         <TextBlock Text="{Binding ActiveOutputPath}" TextWrapping="Wrap" />
-                        <TextBlock Margin="0,12,0,4" Style="{StaticResource SecondaryTextStyle}" Text="Last failure" />
+                        <TextBlock Style="{StaticResource DiagnosticLabelStyle}" Text="Last failure" />
                         <TextBlock Text="{Binding LastRecorderFailure}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>

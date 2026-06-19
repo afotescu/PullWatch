@@ -37,7 +37,7 @@ public sealed class RecordingsViewModelTests
                 "WoW is running.",
                 "Manual and automatic recording are ready."),
             viewModel.ReadinessDetail);
-        Assert.Equal("Ready", viewModel.StatusHealth);
+        Assert.Equal(RecordingStatusHealth.Ready, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -58,7 +58,7 @@ public sealed class RecordingsViewModelTests
                 "WoW is running.",
                 "Manual recording is ready."),
             viewModel.ReadinessDetail);
-        Assert.Equal("Manual only", viewModel.StatusHealth);
+        Assert.Equal(RecordingStatusHealth.ManualOnly, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -78,7 +78,7 @@ public sealed class RecordingsViewModelTests
                 "WoW is running.",
                 "Manual recording is ready, but automatic recording cannot read combat logs: Access denied."),
             viewModel.ReadinessDetail);
-        Assert.Equal("Attention needed", viewModel.StatusHealth);
+        Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -92,7 +92,7 @@ public sealed class RecordingsViewModelTests
             wowProcessState: WowProcessState.WaitingForProcess));
 
         Assert.Equal("Waiting", viewModel.StateTitle);
-        Assert.Equal("Waiting", viewModel.StatusHealth);
+        Assert.Equal(RecordingStatusHealth.Waiting, viewModel.StatusHealth);
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -206,7 +206,7 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
 
-        Assert.Equal("Idle", viewModel.RecorderHealth);
+        Assert.Equal(RecordingStatusHealth.Idle, viewModel.RecorderHealth);
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public sealed class RecordingsViewModelTests
         await viewModel.ManualRecordingCommand.ExecuteAsync();
 
         Assert.Equal("World of Warcraft is not running.", viewModel.CommandMessage);
-        Assert.Equal("Idle", viewModel.RecorderHealth);
+        Assert.Equal(RecordingStatusHealth.Idle, viewModel.RecorderHealth);
         Assert.False(viewModel.IsFailureVisible);
         Assert.Null(viewModel.FailureMessage);
     }

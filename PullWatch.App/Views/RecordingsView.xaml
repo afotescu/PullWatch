@@ -9,7 +9,7 @@
 
         <Border Grid.Row="0"
                 Margin="0,0,0,18"
-                Background="#392226"
+                Background="{StaticResource WarningSurfaceBrush}"
                 BorderBrush="{StaticResource FailureBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
@@ -52,7 +52,7 @@
                     </Grid.RowDefinitions>
 
                     <Border Grid.Row="0"
-                            Background="#111318"
+                            Background="{StaticResource PlayerSurfaceBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8">
@@ -117,23 +117,7 @@
                               Margin="0,10,0,0"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
-                              Background="Transparent"
-                              Cursor="SizeNS"
-                              ResizeBehavior="PreviousAndNext"
-                              ResizeDirection="Rows">
-                    <GridSplitter.Template>
-                        <ControlTemplate TargetType="GridSplitter">
-                            <Grid Background="Transparent">
-                                <Border Width="50"
-                                        Height="10"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Background="{StaticResource SecondaryTextBrush}"
-                                        CornerRadius="5" />
-                            </Grid>
-                        </ControlTemplate>
-                    </GridSplitter.Template>
-                </GridSplitter>
+                              Style="{StaticResource SplitterGripStyle}" />
 
                 <Grid Grid.Row="2">
                     <Grid.RowDefinitions>
@@ -187,35 +171,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                         <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="8" />
-                                <Setter Property="Margin" Value="3" />
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="ItemBorder"
-                                                    Background="Transparent"
-                                                    CornerRadius="6"
-                                                    Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter />
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="ItemBorder"
-                                                            Property="Background"
-                                                            Value="#343B45" />
-                                                </Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter TargetName="ItemBorder"
-                                                            Property="Background"
-                                                            Value="#3A3024" />
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
+                            <StaticResource ResourceKey="SelectableListItemStyle" />
                         </ListBox.ItemContainerStyle>
                     </ListBox>
                 </Grid>

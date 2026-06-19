@@ -1,0 +1,89 @@
+<UserControl x:Class="PullWatch.RecordingStatusCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PullWatch">
+    <UserControl.Resources>
+        <Style x:Key="StatusBorderStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Active}">
+                    <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Ready}">
+                    <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}">
+                    <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="StatusIndicatorStyle" TargetType="Ellipse">
+            <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Active}">
+                    <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.Ready}">
+                    <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusHealth}" Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}">
+                    <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Background="{StaticResource SurfaceBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="14"
+            Style="{StaticResource StatusBorderStyle}"
+            ToolTip="{Binding ReadinessDetail}"
+            ToolTipService.InitialShowDelay="250"
+            ToolTipService.ShowDuration="12000">
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Ellipse Grid.Column="0"
+                         Width="9"
+                         Height="9"
+                         Margin="0,5,8,0"
+                         Style="{StaticResource StatusIndicatorStyle}" />
+
+                <StackPanel Grid.Column="1">
+                    <TextBlock FontSize="13"
+                               FontWeight="SemiBold"
+                               Text="{Binding StateTitle}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Margin="0,4,0,0"
+                               FontFamily="Consolas"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               Text="{Binding Duration}" />
+                </StackPanel>
+            </Grid>
+
+            <Button Margin="0,16,0,0"
+                    HorizontalAlignment="Stretch"
+                    Command="{Binding ManualRecordingCommand}"
+                    Content="{Binding ManualRecordingButtonText}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                        <Setter Property="Padding" Value="10,8" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsManualStopMode}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource FailureBrush}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>

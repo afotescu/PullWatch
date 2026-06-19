@@ -16,7 +16,7 @@
                         <TextBlock Style="{StaticResource SectionTitleStyle}"
                                    Text="Folders and automatic recording" />
 
-                        <TextBlock Margin="0,18,0,6" Text="WoW logs directory" />
+                        <TextBlock Style="{StaticResource InputLabelStyle}" Text="WoW logs directory" />
                         <DockPanel>
                             <Button DockPanel.Dock="Right"
                                     Margin="10,0,0,0"
@@ -24,14 +24,13 @@
                                     Content="Browse" />
                             <TextBox Text="{Binding WowLogsDirectory, UpdateSourceTrigger=PropertyChanged}" />
                         </DockPanel>
-                        <TextBlock Margin="0,5,0,0"
-                                   Foreground="{StaticResource FailureBrush}"
+                        <TextBlock Style="{StaticResource ValidationTextStyle}"
                                    Text="{Binding WowLogsDirectoryError}" />
                         <TextBlock Margin="0,5,0,0"
                                    Style="{StaticResource SecondaryTextStyle}"
                                    Text="Clear this field to stop automatic combat-log monitoring." />
 
-                        <TextBlock Margin="0,18,0,6" Text="Recordings directory" />
+                        <TextBlock Style="{StaticResource InputLabelStyle}" Text="Recordings directory" />
                         <DockPanel>
                             <Button DockPanel.Dock="Right"
                                     Margin="10,0,0,0"
@@ -39,8 +38,7 @@
                                     Content="Browse" />
                             <TextBox Text="{Binding RecordingsDirectory, UpdateSourceTrigger=PropertyChanged}" />
                         </DockPanel>
-                        <TextBlock Margin="0,5,0,0"
-                                   Foreground="{StaticResource FailureBrush}"
+                        <TextBlock Style="{StaticResource ValidationTextStyle}"
                                    Text="{Binding RecordingsDirectoryError}" />
 
                         <CheckBox Margin="0,18,0,0"
@@ -61,15 +59,13 @@
 
                         <StackPanel Grid.Column="0" Margin="0,0,18,0">
                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Video" />
-                            <TextBlock Margin="0,18,0,6" Text="Bitrate (Mbps)" />
+                            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Bitrate (Mbps)" />
                             <TextBox Text="{Binding BitrateMegabits, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Margin="0,5,0,0"
-                                       Foreground="{StaticResource FailureBrush}"
+                            <TextBlock Style="{StaticResource ValidationTextStyle}"
                                        Text="{Binding BitrateError}" />
-                            <TextBlock Margin="0,18,0,6" Text="Frame rate" />
+                            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Frame rate" />
                             <TextBox Text="{Binding FrameRate, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Margin="0,5,0,0"
-                                       Foreground="{StaticResource FailureBrush}"
+                            <TextBlock Style="{StaticResource ValidationTextStyle}"
                                        Text="{Binding FrameRateError}" />
                             <CheckBox Margin="0,18,0,0"
                                       IsChecked="{Binding CaptureCursor}"

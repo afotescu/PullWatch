@@ -61,7 +61,7 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public string ReadinessDetail => GetReadinessDetail(_recording, _combatLog, _wowProcess);
 
-    public string StatusHealth => GetStatusHealth(_recording, _combatLog, _wowProcess);
+    public RecordingStatusHealth StatusHealth => GetStatusHealth(_recording, _combatLog, _wowProcess);
 
     public string Duration
     {
@@ -89,12 +89,12 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
 
-    public string RecorderHealth => _recording.LastFailure is not null &&
+    public RecordingStatusHealth RecorderHealth => _recording.LastFailure is not null &&
                                     !IsTargetUnavailableFailure(_recording.LastFailure)
-        ? "Attention needed"
+        ? RecordingStatusHealth.AttentionNeeded
         : _recording.State == RecordingCoordinatorState.Idle
-            ? "Idle"
-            : "Active";
+            ? RecordingStatusHealth.Idle
+            : RecordingStatusHealth.Active;
 
     public string? FailureMessage => IsTargetUnavailableFailure(_recording.LastFailure)
         ? null
@@ -355,7 +355,7 @@ public sealed class RecordingsViewModel : ObservableObject
         };
     }
 
-    private static string GetStatusHealth(
+    private static RecordingStatusHealth GetStatusHealth(
         RecordingCoordinatorStatus recording,
         CombatLogReaderStatus combatLog,
         WowProcessStatus wowProcess)
@@ -363,27 +363,27 @@ public sealed class RecordingsViewModel : ObservableObject
         if (recording.LastFailure is not null &&
             !IsTargetUnavailableFailure(recording.LastFailure))
         {
-            return "Attention needed";
+            return RecordingStatusHealth.AttentionNeeded;
         }
 
         if (recording.State != RecordingCoordinatorState.Idle)
         {
-            return "Active";
+            return RecordingStatusHealth.Active;
         }
 
         if (!wowProcess.IsWindowAvailable)
         {
-            return "Waiting";
+            return RecordingStatusHealth.Waiting;
         }
 
         if (combatLog.LastFileSystemError is not null)
         {
-            return "Attention needed";
+            return RecordingStatusHealth.AttentionNeeded;
         }
 
         return IsAutomaticRecordingReady(combatLog)
-            ? "Ready"
-            : "Manual only";
+            ? RecordingStatusHealth.Ready
+            : RecordingStatusHealth.ManualOnly;
     }
 
     private static bool IsAutomaticRecordingReady(CombatLogReaderStatus combatLog)
