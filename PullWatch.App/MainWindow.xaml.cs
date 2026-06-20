@@ -28,6 +28,7 @@ public partial class MainWindow : Window
             new WpfSettingsDialogs(),
             logs,
             new WpfDiagnosticsDialogs(),
+            new WpfRecordingDialogs(),
             showSettingsOnStartup
         );
         DataContext = _viewModel;

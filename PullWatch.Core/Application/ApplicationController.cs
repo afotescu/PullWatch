@@ -229,6 +229,33 @@ public sealed class ApplicationController : IAsyncDisposable
             : _recordingCatalog.ListAvailableFilesAsync(recordingsDirectory, cancellationToken);
     }
 
+    public Task DeleteRecordingAsync(Guid recordingId)
+    {
+        return DeleteRecordingAsync(recordingId, CancellationToken.None);
+    }
+
+    public async Task DeleteRecordingAsync(Guid recordingId, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        await _lifetimeLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+            if (_recordingCatalog is null)
+            {
+                return;
+            }
+
+            await _recordingCatalog.DeleteAvailableRecordingAsync(recordingId, cancellationToken);
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
     public Task OpenRecordingsFolderAsync()
     {
         return OpenRecordingsFolderAsync(CancellationToken.None);

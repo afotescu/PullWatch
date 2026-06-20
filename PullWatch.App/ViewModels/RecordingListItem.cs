@@ -1,6 +1,7 @@
 namespace PullWatch;
 
 public sealed record RecordingListItem(
+    Guid Id,
     string Path,
     string DisplayName,
     DateTimeOffset ModifiedAt,

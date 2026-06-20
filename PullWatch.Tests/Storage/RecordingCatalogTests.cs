@@ -113,6 +113,72 @@ public sealed class RecordingCatalogTests
         );
     }
 
+    [Fact]
+    public async Task DeleteAvailableRecordingRemovesFileAndCatalogRow()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var id = Guid.Parse("5884C48E-B6CD-4F9A-B0B5-E0572AB54A6B");
+        var path = WriteFile(directory.FullName, "deleted.mp4", "deleted");
+        await database.Repository.AddAsync(CreateSave(id, path), cancellationToken);
+
+        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+
+        Assert.False(File.Exists(path));
+        Assert.Null(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    [Fact]
+    public async Task DeleteAvailableRecordingRemovesCatalogRowWhenFileIsMissing()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var id = Guid.Parse("5F0CFB5C-A5A9-4652-BA4B-21956E7D8BE5");
+        await database.Repository.AddAsync(
+            CreateSave(id, Path.Combine(directory.FullName, "missing.mp4")),
+            cancellationToken
+        );
+
+        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+
+        Assert.Null(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    [Fact]
+    public async Task DeleteAvailableRecordingRejectsActiveRecording()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var id = Guid.Parse("59C6BFC0-372A-4776-A1A9-1F0F75EE5A5C");
+        var path = WriteFile(directory.FullName, "active.mp4", "active");
+        await database.Repository.AddAsync(
+            CreateSave(id, path) with
+            {
+                Status = RecordingCatalogStatus.Recording,
+            },
+            cancellationToken
+        );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.DeleteAvailableRecordingAsync(id, cancellationToken)
+        );
+
+        Assert.True(File.Exists(path));
+        Assert.NotNull(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
     private static RecordingCatalogSave CreateSave(Guid id, string filePath)
     {
         var startedAt = new DateTimeOffset(2026, 6, 20, 10, 0, 0, TimeSpan.Zero);

@@ -77,6 +77,31 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         await _repository.DeleteAsync(id, cancellationToken);
     }
 
+    public async Task DeleteAvailableRecordingAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var entry = await _repository.GetByIdAsync(id, cancellationToken);
+
+        if (entry is null)
+        {
+            return;
+        }
+
+        if (entry.Status != RecordingCatalogStatus.Available)
+        {
+            throw new InvalidOperationException("Only finished recordings can be deleted.");
+        }
+
+        var normalizedFilePath = TryNormalizeFilePath(entry.FilePath);
+
+        if (normalizedFilePath is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Delete(normalizedFilePath);
+        }
+
+        await _repository.DeleteAsync(id, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<RecordingCatalogFile>> ListAvailableFilesAsync(
         string recordingsDirectory,
         CancellationToken cancellationToken

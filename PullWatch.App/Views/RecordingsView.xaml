@@ -146,19 +146,43 @@
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
 
-          <TextBlock
-            Grid.Column="0"
-            VerticalAlignment="Center"
-            FontWeight="SemiBold"
-            Text="Saved recordings"
-          />
+          <StackPanel Grid.Column="0" VerticalAlignment="Center">
+            <TextBlock FontWeight="SemiBold" Text="Saved recordings" />
+            <TextBlock
+              Margin="0,3,12,0"
+              Style="{StaticResource SecondaryTextStyle}"
+              Text="{Binding CommandMessage}"
+              Visibility="{Binding IsCommandMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+            />
+          </StackPanel>
           <Button
             Grid.Column="1"
             Command="{Binding OpenRecordingsFolderCommand}"
             Content="Open folder"
           />
+          <Button
+            Grid.Column="2"
+            Margin="8,0,0,0"
+            Command="{Binding DeleteSelectedRecordingCommand}"
+            Style="{StaticResource StopButtonStyle}"
+            ToolTip="Delete selected recording"
+          >
+            <StackPanel Orientation="Horizontal">
+              <TextBlock
+                Margin="0,0,7,0"
+                FontFamily="Segoe MDL2 Assets"
+                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                Text="&#xE74D;"
+              />
+              <TextBlock
+                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                Text="Delete"
+              />
+            </StackPanel>
+          </Button>
         </Grid>
 
         <ListBox

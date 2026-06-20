@@ -13,6 +13,8 @@ public sealed class RecordingsViewModel : ObservableObject
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
     private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
+    private readonly Func<Guid, Task> _deleteRecording;
+    private readonly Func<RecordingListItem, bool> _confirmPermanentDelete;
     private readonly Func<Task> _openRecordingsFolder;
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
@@ -30,6 +32,8 @@ public sealed class RecordingsViewModel : ObservableObject
         Func<Task<RecordingCommandResult>> startManual,
         Func<Task<RecordingCommandResult>> stopManual,
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
+        Func<Guid, Task> deleteRecording,
+        Func<RecordingListItem, bool> confirmPermanentDelete,
         Func<Task> openRecordingsFolder
     )
     {
@@ -41,6 +45,8 @@ public sealed class RecordingsViewModel : ObservableObject
         _startManual = startManual;
         _stopManual = stopManual;
         _loadRecordings = loadRecordings;
+        _deleteRecording = deleteRecording;
+        _confirmPermanentDelete = confirmPermanentDelete;
         _openRecordingsFolder = openRecordingsFolder;
         ManualRecordingCommand = new AsyncRelayCommand(
             ToggleManualRecordingAsync,
@@ -50,6 +56,11 @@ public sealed class RecordingsViewModel : ObservableObject
         OpenRecordingsFolderCommand = new AsyncRelayCommand(
             OpenRecordingsFolderAsync,
             onException: HandleCommandFailure
+        );
+        DeleteSelectedRecordingCommand = new AsyncRelayCommand(
+            DeleteSelectedRecordingAsync,
+            () => SelectedRecording is not null,
+            HandleCommandFailure
         );
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
@@ -61,6 +72,8 @@ public sealed class RecordingsViewModel : ObservableObject
     public AsyncRelayCommand ManualRecordingCommand { get; }
 
     public AsyncRelayCommand OpenRecordingsFolderCommand { get; }
+
+    public AsyncRelayCommand DeleteSelectedRecordingCommand { get; }
 
     public RelayCommand DismissFailureCommand { get; }
 
@@ -85,6 +98,7 @@ public sealed class RecordingsViewModel : ObservableObject
             if (SetProperty(ref _selectedRecording, value))
             {
                 OnPropertyChanged(nameof(IsPlayerPlaceholderVisible));
+                DeleteSelectedRecordingCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -109,8 +123,16 @@ public sealed class RecordingsViewModel : ObservableObject
     public string? CommandMessage
     {
         get => _commandMessage;
-        private set => SetProperty(ref _commandMessage, value);
+        private set
+        {
+            if (SetProperty(ref _commandMessage, value))
+            {
+                OnPropertyChanged(nameof(IsCommandMessageVisible));
+            }
+        }
     }
+
+    public bool IsCommandMessageVisible => !string.IsNullOrWhiteSpace(CommandMessage);
 
     public bool IsFailureVisible =>
         _recording.LastFailure is not null
@@ -152,6 +174,7 @@ public sealed class RecordingsViewModel : ObservableObject
 
         OnAllPropertiesChanged();
         ManualRecordingCommand.NotifyCanExecuteChanged();
+        DeleteSelectedRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
     }
 
@@ -220,12 +243,37 @@ public sealed class RecordingsViewModel : ObservableObject
     {
         return recordings
             .Select(file => new RecordingListItem(
+                file.Id,
                 file.FilePath,
                 Path.GetFileNameWithoutExtension(file.FilePath),
                 file.ModifiedAtUtc.ToLocalTime(),
                 file.SizeBytes
             ))
             .ToList();
+    }
+
+    private async Task DeleteSelectedRecordingAsync()
+    {
+        var recording = SelectedRecording;
+
+        if (recording is null || !_confirmPermanentDelete(recording))
+        {
+            return;
+        }
+
+        SelectedRecording = null;
+
+        try
+        {
+            await _deleteRecording(recording.Id);
+            CommandMessage = "Recording deleted.";
+            await RefreshRecordingsAsync();
+        }
+        catch (Exception exception)
+        {
+            SelectedRecording = recording;
+            CommandMessage = $"Could not delete recording: {exception.Message}";
+        }
     }
 
     private Task ToggleManualRecordingAsync()

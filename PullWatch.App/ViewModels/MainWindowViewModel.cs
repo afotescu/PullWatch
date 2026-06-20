@@ -13,6 +13,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ISettingsDialogs settingsDialogs,
         InMemoryLogProvider logs,
         IDiagnosticsDialogs diagnosticsDialogs,
+        IRecordingDialogs recordingDialogs,
         bool showSettingsOnStartup = false
     )
     {
@@ -24,6 +25,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             controller.StartManualRecordingAsync,
             controller.StopManualRecordingAsync,
             controller.ListRecordingsAsync,
+            controller.DeleteRecordingAsync,
+            recordingDialogs.ConfirmPermanentDelete,
             OpenRecordingsFolderAsync
         );
         Settings = new SettingsViewModel(

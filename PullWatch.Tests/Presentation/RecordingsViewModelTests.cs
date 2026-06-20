@@ -305,6 +305,7 @@ public sealed class RecordingsViewModelTests
                 viewModel.Recordings,
                 first =>
                 {
+                    Assert.Equal(recordings[0].Id, first.Id);
                     Assert.Equal(newer, first.Path);
                     Assert.Equal("newer", first.DisplayName);
                 },
@@ -324,12 +325,131 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public async Task DeleteSelectedRecordingConfirmsDeletesAndRefreshesList()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var deletedIds = new List<Guid>();
+            var firstId = Guid.Parse("5290C068-36C1-47BB-8B8C-60A6AE506695");
+            var secondId = Guid.Parse("4443274B-22F2-471C-8676-46F63F8A7B87");
+            var first = CatalogFile(
+                Path.Combine(directory, "first.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                id: firstId
+            );
+            var second = CatalogFile(
+                Path.Combine(directory, "second.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                id: secondId
+            );
+            var recordings = new List<RecordingCatalogFile> { first, second };
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings.ToList()),
+                deleteRecording: id =>
+                {
+                    deletedIds.Add(id);
+                    recordings.RemoveAll(recording => recording.Id == id);
+                    return Task.CompletedTask;
+                },
+                confirmPermanentDelete: _ => true
+            );
+
+            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+
+            Assert.Equal([firstId], deletedIds);
+            var remaining = Assert.Single(viewModel.Recordings);
+            Assert.Equal(secondId, remaining.Id);
+            Assert.Equal(secondId, viewModel.SelectedRecording?.Id);
+            Assert.Equal("Recording deleted.", viewModel.CommandMessage);
+            Assert.True(viewModel.IsCommandMessageVisible);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteSelectedRecordingDoesNothingWhenConfirmationIsDeclined()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var deleteCalls = 0;
+            var recording = CatalogFile(
+                Path.Combine(directory, "kept.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording]),
+                deleteRecording: _ =>
+                {
+                    deleteCalls++;
+                    return Task.CompletedTask;
+                },
+                confirmPermanentDelete: _ => false
+            );
+
+            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+
+            Assert.Equal(0, deleteCalls);
+            Assert.Equal(recording.Id, viewModel.SelectedRecording?.Id);
+            Assert.Null(viewModel.CommandMessage);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteSelectedRecordingFailureKeepsVisibleSelectionAndReportsError()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var recording = CatalogFile(
+                Path.Combine(directory, "locked.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording]),
+                deleteRecording: _ => Task.FromException(new IOException("file is locked")),
+                confirmPermanentDelete: _ => true
+            );
+
+            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+
+            var visibleRecording = Assert.Single(viewModel.Recordings);
+            Assert.Equal(recording.Id, visibleRecording.Id);
+            Assert.Equal(recording.Id, viewModel.SelectedRecording?.Id);
+            Assert.Equal("Could not delete recording: file is locked", viewModel.CommandMessage);
+            Assert.True(viewModel.IsCommandMessageVisible);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void ReportsMissingRecordingsDirectory()
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
 
         Assert.Empty(viewModel.Recordings);
         Assert.Null(viewModel.SelectedRecording);
+        Assert.False(viewModel.DeleteSelectedRecordingCommand.CanExecute(null));
         Assert.Equal(
             "Choose a recordings directory in settings to review videos here.",
             viewModel.RecordingLibraryStatus
@@ -432,7 +552,9 @@ public sealed class RecordingsViewModelTests
         ApplicationStatus status,
         Func<Task<RecordingCommandResult>>? startManual = null,
         Func<Task<RecordingCommandResult>>? stopManual = null,
-        Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null
+        Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null,
+        Func<Guid, Task>? deleteRecording = null,
+        Func<RecordingListItem, bool>? confirmPermanentDelete = null
     )
     {
         return new RecordingsViewModel(
@@ -440,6 +562,8 @@ public sealed class RecordingsViewModelTests
             startManual ?? (() => Task.FromResult(RecordingCommandResult.Started)),
             stopManual ?? (() => Task.FromResult(RecordingCommandResult.Stopped)),
             loadRecordings ?? (_ => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
+            deleteRecording ?? (_ => Task.CompletedTask),
+            confirmPermanentDelete ?? (_ => true),
             () => Task.CompletedTask
         );
     }
@@ -503,11 +627,12 @@ public sealed class RecordingsViewModelTests
     private static RecordingCatalogFile CatalogFile(
         string path,
         DateTimeOffset modifiedAtUtc,
-        long sizeBytes = 1024
+        long sizeBytes = 1024,
+        Guid? id = null
     )
     {
         return new RecordingCatalogFile(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             path,
             RecordingCatalogKind.Manual,
             null,
