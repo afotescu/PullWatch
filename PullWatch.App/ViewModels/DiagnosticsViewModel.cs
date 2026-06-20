@@ -126,7 +126,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
                 return;
             }
 
-            await _dialogs.WriteTextAsync(path, BuildReport(), CancellationToken.None);
+            await _dialogs.WriteTextAsync(path, BuildReport());
             ActionMessage = $"Diagnostics exported to {path}";
         }
         catch (Exception exception)

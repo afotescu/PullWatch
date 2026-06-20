@@ -123,13 +123,7 @@ public partial class MainWindow : Window
         try
         {
             Task.Run(() =>
-                    _controller.SaveUiSettingsAsync(
-                        currentUi with
-                        {
-                            WindowPlacement = placement,
-                        },
-                        CancellationToken.None
-                    )
+                    _controller.SaveUiSettingsAsync(currentUi with { WindowPlacement = placement })
                 )
                 .GetAwaiter()
                 .GetResult();

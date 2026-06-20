@@ -341,7 +341,7 @@ public sealed class SettingsViewModelTests
     {
         return new SettingsViewModel(
             status,
-            (settings, _) => save?.Invoke(settings) ?? Saved(settings),
+            settings => save?.Invoke(settings) ?? Saved(settings),
             dialogs ?? new FakeSettingsDialogs(),
             () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080)
         );

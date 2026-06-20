@@ -20,8 +20,8 @@ public sealed class WpfDiagnosticsDialogs : IDiagnosticsDialogs
         return Task.FromResult(dialog.ShowDialog() == true ? dialog.FileName : null);
     }
 
-    public Task WriteTextAsync(string path, string text, CancellationToken cancellationToken)
+    public Task WriteTextAsync(string path, string text)
     {
-        return System.IO.File.WriteAllTextAsync(path, text, cancellationToken);
+        return System.IO.File.WriteAllTextAsync(path, text);
     }
 }

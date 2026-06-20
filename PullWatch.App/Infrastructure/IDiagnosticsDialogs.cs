@@ -6,5 +6,5 @@ public interface IDiagnosticsDialogs
 
     Task<string?> PickDiagnosticsExportPathAsync(string suggestedFileName);
 
-    Task WriteTextAsync(string path, string text, CancellationToken cancellationToken);
+    Task WriteTextAsync(string path, string text);
 }

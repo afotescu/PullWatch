@@ -184,6 +184,11 @@ public sealed class ApplicationController : IAsyncDisposable
         );
     }
 
+    public Task<RecordingCommandResult> StartManualRecordingAsync()
+    {
+        return StartManualRecordingAsync(CancellationToken.None);
+    }
+
     public async Task<RecordingCommandResult> StopManualRecordingAsync(
         CancellationToken cancellationToken
     )
@@ -192,6 +197,11 @@ public sealed class ApplicationController : IAsyncDisposable
             coordinator => coordinator.StopManualAsync(cancellationToken),
             cancellationToken
         );
+    }
+
+    public Task<RecordingCommandResult> StopManualRecordingAsync()
+    {
+        return StopManualRecordingAsync(CancellationToken.None);
     }
 
     public async Task<RecordingCommandResult> FinalizeRecordingForExitAsync(
@@ -204,6 +214,11 @@ public sealed class ApplicationController : IAsyncDisposable
         );
     }
 
+    public Task<IReadOnlyList<RecordingCatalogFile>> ListRecordingsAsync(string recordingsDirectory)
+    {
+        return ListRecordingsAsync(recordingsDirectory, CancellationToken.None);
+    }
+
     public Task<IReadOnlyList<RecordingCatalogFile>> ListRecordingsAsync(
         string recordingsDirectory,
         CancellationToken cancellationToken
@@ -212,6 +227,11 @@ public sealed class ApplicationController : IAsyncDisposable
         return _recordingCatalog is null
             ? Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])
             : _recordingCatalog.ListAvailableFilesAsync(recordingsDirectory, cancellationToken);
+    }
+
+    public Task OpenRecordingsFolderAsync()
+    {
+        return OpenRecordingsFolderAsync(CancellationToken.None);
     }
 
     public Task OpenRecordingsFolderAsync(CancellationToken cancellationToken)
@@ -231,6 +251,11 @@ public sealed class ApplicationController : IAsyncDisposable
         Directory.CreateDirectory(path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
         return Task.CompletedTask;
+    }
+
+    public Task<SettingsSaveResult> SaveSettingsAsync(PullWatchSettings settings)
+    {
+        return SaveSettingsAsync(settings, CancellationToken.None);
     }
 
     public async Task<SettingsSaveResult> SaveSettingsAsync(
@@ -304,6 +329,11 @@ public sealed class ApplicationController : IAsyncDisposable
         {
             _lifetimeLock.Release();
         }
+    }
+
+    public Task<SettingsSaveResult> SaveUiSettingsAsync(UiSettings uiSettings)
+    {
+        return SaveUiSettingsAsync(uiSettings, CancellationToken.None);
     }
 
     public async Task<SettingsSaveResult> SaveUiSettingsAsync(

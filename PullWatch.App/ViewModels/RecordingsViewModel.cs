@@ -10,13 +10,9 @@ public sealed class RecordingsViewModel : ObservableObject
         "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
 
-    private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
-    private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;
-    private readonly Func<
-        string,
-        CancellationToken,
-        Task<IReadOnlyList<RecordingCatalogFile>>
-    > _loadRecordings;
+    private readonly Func<Task<RecordingCommandResult>> _startManual;
+    private readonly Func<Task<RecordingCommandResult>> _stopManual;
+    private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
     private readonly Func<Task> _openRecordingsFolder;
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
@@ -31,9 +27,9 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public RecordingsViewModel(
         ApplicationStatus initialStatus,
-        Func<CancellationToken, Task<RecordingCommandResult>> startManual,
-        Func<CancellationToken, Task<RecordingCommandResult>> stopManual,
-        Func<string, CancellationToken, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
+        Func<Task<RecordingCommandResult>> startManual,
+        Func<Task<RecordingCommandResult>> stopManual,
+        Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
         Func<Task> openRecordingsFolder
     )
     {
@@ -190,7 +186,7 @@ public sealed class RecordingsViewModel : ObservableObject
 
         try
         {
-            var recordings = await _loadRecordings(_recordingsDirectory, CancellationToken.None);
+            var recordings = await _loadRecordings(_recordingsDirectory);
 
             foreach (var recording in CreateRecordingListItems(recordings))
             {
@@ -242,7 +238,7 @@ public sealed class RecordingsViewModel : ObservableObject
     private async Task StartManualAsync()
     {
         CommandMessage = GetCommandMessage(
-            await _startManual(CancellationToken.None),
+            await _startManual(),
             "Manual recording started.",
             _recording.LastFailure
         );
@@ -251,7 +247,7 @@ public sealed class RecordingsViewModel : ObservableObject
     private async Task StopManualAsync()
     {
         CommandMessage = GetCommandMessage(
-            await _stopManual(CancellationToken.None),
+            await _stopManual(),
             "Recording stopped.",
             _recording.LastFailure
         );

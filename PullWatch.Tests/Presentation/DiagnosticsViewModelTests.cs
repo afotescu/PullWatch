@@ -111,7 +111,7 @@ public sealed class DiagnosticsViewModelTests
             return Task.FromResult<string?>(@"C:\Temp\diagnostics.txt");
         }
 
-        public Task WriteTextAsync(string path, string text, CancellationToken cancellationToken)
+        public Task WriteTextAsync(string path, string text)
         {
             WrittenPath = path;
             WrittenText = text;

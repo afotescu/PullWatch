@@ -130,7 +130,7 @@ public sealed class RecordingsViewModelTests
         );
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => pendingStart.Task
+            () => pendingStart.Task
         );
 
         var execution = viewModel.ManualRecordingCommand.ExecuteAsync();
@@ -156,7 +156,7 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromResult(result)
+            () => Task.FromResult(result)
         );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
@@ -169,7 +169,7 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ =>
+            () =>
                 Task.FromException<RecordingCommandResult>(
                     new InvalidOperationException("controller unavailable")
                 )
@@ -185,7 +185,7 @@ public sealed class RecordingsViewModelTests
     {
         var viewModel = CreateViewModel(
             Status(RecordingCoordinatorState.Idle),
-            _ => Task.FromResult(RecordingCommandResult.Failed)
+            () => Task.FromResult(RecordingCommandResult.Failed)
         );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
@@ -248,7 +248,7 @@ public sealed class RecordingsViewModelTests
                     )
                 )
             ),
-            _ => Task.FromResult(RecordingCommandResult.Failed)
+            () => Task.FromResult(RecordingCommandResult.Failed)
         );
 
         await viewModel.ManualRecordingCommand.ExecuteAsync();
@@ -268,7 +268,7 @@ public sealed class RecordingsViewModelTests
                 RecordingCoordinatorState.Recording,
                 new ManualRecordingContext(DateTimeOffset.Now)
             ),
-            stopManual: _ =>
+            stopManual: () =>
             {
                 stopCalls++;
                 return Task.FromResult(RecordingCommandResult.Stopped);
@@ -297,7 +297,7 @@ public sealed class RecordingsViewModelTests
             };
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
-                loadRecordings: (_, _) =>
+                loadRecordings: _ =>
                     Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
 
@@ -366,7 +366,7 @@ public sealed class RecordingsViewModelTests
             var completedPath = Path.Combine(directory, "completed.mp4");
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
-                loadRecordings: (_, _) =>
+                loadRecordings: _ =>
                     Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
             viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
@@ -430,17 +430,16 @@ public sealed class RecordingsViewModelTests
 
     private static RecordingsViewModel CreateViewModel(
         ApplicationStatus status,
-        Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null,
-        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null,
-        Func<string, CancellationToken, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings =
-            null
+        Func<Task<RecordingCommandResult>>? startManual = null,
+        Func<Task<RecordingCommandResult>>? stopManual = null,
+        Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null
     )
     {
         return new RecordingsViewModel(
             status,
-            startManual ?? (_ => Task.FromResult(RecordingCommandResult.Started)),
-            stopManual ?? (_ => Task.FromResult(RecordingCommandResult.Stopped)),
-            loadRecordings ?? ((_, _) => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
+            startManual ?? (() => Task.FromResult(RecordingCommandResult.Started)),
+            stopManual ?? (() => Task.FromResult(RecordingCommandResult.Stopped)),
+            loadRecordings ?? (_ => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
             () => Task.CompletedTask
         );
     }

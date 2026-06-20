@@ -67,11 +67,11 @@ public sealed class TrayIconManager : IDisposable
         {
             if (_controller.Status.Recording.State == RecordingCoordinatorState.Idle)
             {
-                await _controller.StartManualRecordingAsync(CancellationToken.None);
+                await _controller.StartManualRecordingAsync();
             }
             else if (_controller.Status.Recording.State == RecordingCoordinatorState.Recording)
             {
-                await _controller.StopManualRecordingAsync(CancellationToken.None);
+                await _controller.StopManualRecordingAsync();
             }
         });
     }
@@ -80,7 +80,7 @@ public sealed class TrayIconManager : IDisposable
     {
         await RunCommandAsync(async () =>
         {
-            await _controller.OpenRecordingsFolderAsync(CancellationToken.None);
+            await _controller.OpenRecordingsFolderAsync();
         });
     }
 

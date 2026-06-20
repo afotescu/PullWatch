@@ -75,7 +75,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private Task OpenRecordingsFolderAsync()
     {
-        return _controller.OpenRecordingsFolderAsync(CancellationToken.None);
+        return _controller.OpenRecordingsFolderAsync();
     }
 
     private void OnStatusChanged(ApplicationStatus status)

@@ -13,11 +13,7 @@ public sealed class SettingsViewModel : ObservableObject
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(5);
 
-    private readonly Func<
-        PullWatchSettings,
-        CancellationToken,
-        Task<SettingsSaveResult>
-    > _saveSettings;
+    private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
     private readonly ISettingsDialogs _dialogs;
     private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
     private readonly object _autosaveSync = new();
@@ -32,7 +28,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     public SettingsViewModel(
         ApplicationStatus initialStatus,
-        Func<PullWatchSettings, CancellationToken, Task<SettingsSaveResult>> saveSettings,
+        Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings,
         ISettingsDialogs dialogs,
         Func<VideoCaptureSize>? getEstimateCaptureSize = null
     )
@@ -408,7 +404,7 @@ public sealed class SettingsViewModel : ObservableObject
 
         try
         {
-            var result = await _saveSettings(settings, CancellationToken.None);
+            var result = await _saveSettings(settings);
 
             if (!result.IsSaved)
             {
