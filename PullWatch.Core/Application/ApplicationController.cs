@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
@@ -39,7 +40,7 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly SettingsBootstrapper _settingsBootstrapper;
     private readonly Func<SettingsProvider, IRecordingService> _createRecordingService;
     private readonly Func<string, ICombatLogMonitor> _createCombatLogMonitor;
-    private readonly Func<IWowProcessMonitor>? _createWowProcessMonitor;
+    private readonly Func<IWowProcessMonitor> _createWowProcessMonitor;
     private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly RecordingCatalog? _recordingCatalog;
     private readonly ILoggerFactory _loggerFactory;
@@ -74,7 +75,7 @@ public sealed class ApplicationController : IAsyncDisposable
         Func<SettingsProvider, IRecordingService> createRecordingService,
         Func<string, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
-        Func<IWowProcessMonitor>? createWowProcessMonitor = null,
+        Func<IWowProcessMonitor> createWowProcessMonitor,
         IRecordingStorageInitializer? storageInitializer = null,
         RecordingCatalog? recordingCatalog = null
     )
@@ -82,7 +83,9 @@ public sealed class ApplicationController : IAsyncDisposable
         _settingsBootstrapper = settingsBootstrapper;
         _createRecordingService = createRecordingService;
         _createCombatLogMonitor = createCombatLogMonitor;
-        _createWowProcessMonitor = createWowProcessMonitor;
+        _createWowProcessMonitor =
+            createWowProcessMonitor
+            ?? throw new ArgumentNullException(nameof(createWowProcessMonitor));
         _storageInitializer = storageInitializer ?? NoOpRecordingStorageInitializer.Instance;
         _recordingCatalog = recordingCatalog;
         _loggerFactory = loggerFactory;
@@ -102,8 +105,6 @@ public sealed class ApplicationController : IAsyncDisposable
     public ApplicationStatus Status => _statusPublisher.Status;
 
     public bool StartedWithCreatedSettingsFile { get; private set; }
-
-    public IOperatingSystemActions? OperatingSystemActions { get; private set; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -150,7 +151,6 @@ public sealed class ApplicationController : IAsyncDisposable
                 _settingsService = settingsService;
                 _monitoringSupervisor = monitoringSupervisor;
                 StartedWithCreatedSettingsFile = bootstrapResult.CreatedSettingsFile;
-                OperatingSystemActions = new OperatingSystemActions(settingsProvider);
                 UpdateStatus(status => new ApplicationStatus(
                     settings,
                     recordingCoordinator.Status,
@@ -212,6 +212,25 @@ public sealed class ApplicationController : IAsyncDisposable
         return _recordingCatalog is null
             ? Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])
             : _recordingCatalog.ListAvailableFilesAsync(recordingsDirectory, cancellationToken);
+    }
+
+    public Task OpenRecordingsFolderAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var settingsService =
+            _settingsService
+            ?? throw new InvalidOperationException(
+                "The application controller has not been started."
+            );
+        var path =
+            settingsService.Current.RecordingsDirectory
+            ?? throw new InvalidOperationException("Recordings directory was not configured.");
+
+        Directory.CreateDirectory(path);
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        return Task.CompletedTask;
     }
 
     public async Task<SettingsSaveResult> SaveSettingsAsync(
@@ -466,7 +485,6 @@ public sealed class ApplicationController : IAsyncDisposable
         _recordingCoordinator = null;
         _settingsService = null;
         _monitoringSupervisor = null;
-        OperatingSystemActions = null;
         StartedWithCreatedSettingsFile = false;
         recordingCoordinator.StatusChanged -= OnRecordingStatusChanged;
 

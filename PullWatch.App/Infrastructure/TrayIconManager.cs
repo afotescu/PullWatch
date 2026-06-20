@@ -80,12 +80,7 @@ public sealed class TrayIconManager : IDisposable
     {
         await RunCommandAsync(async () =>
         {
-            if (_controller.OperatingSystemActions is not null)
-            {
-                await _controller.OperatingSystemActions.OpenRecordingsFolderAsync(
-                    CancellationToken.None
-                );
-            }
+            await _controller.OpenRecordingsFolderAsync(CancellationToken.None);
         });
     }
 

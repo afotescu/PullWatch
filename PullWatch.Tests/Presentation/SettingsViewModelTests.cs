@@ -106,28 +106,6 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
-    public void DiscardRestoresPendingPathToLastSavedSettings()
-    {
-        var settings = new PullWatchSettings
-        {
-            RecordingsDirectory = Path.Combine(Path.GetTempPath(), "PullWatchSavedRecordings"),
-        };
-        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle, settings));
-
-        viewModel.RecordingsDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "PullWatchPendingRecordings"
-        );
-
-        Assert.True(viewModel.IsRecordingsDirectoryPending);
-
-        viewModel.DiscardChanges();
-
-        Assert.Equal(settings.RecordingsDirectory, viewModel.RecordingsDirectory);
-        Assert.False(viewModel.IsRecordingsDirectoryPending);
-    }
-
-    [Fact]
     public async Task UnexpectedSaveFailureIsDisplayed()
     {
         var viewModel = CreateViewModel(

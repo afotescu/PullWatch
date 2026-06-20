@@ -19,7 +19,8 @@ public sealed class ApplicationControllerTests
             {
                 monitorCreated = true;
                 return new FakeCombatLogMonitor();
-            }
+            },
+            UnavailableWowMonitor
         );
 
         Assert.NotNull(controller.Status.EffectiveSettings);
@@ -42,7 +43,8 @@ public sealed class ApplicationControllerTests
             bootstrapper,
             _ => new FakeRecordingService(),
             _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance
+            NullLoggerFactory.Instance,
+            UnavailableWowMonitor
         );
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
@@ -78,6 +80,7 @@ public sealed class ApplicationControllerTests
             },
             _ => new FakeCombatLogMonitor(),
             NullLoggerFactory.Instance,
+            UnavailableWowMonitor,
             storageInitializer: initializer
         );
 
@@ -273,7 +276,8 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             recorder,
-            _ => new FakeCombatLogMonitor()
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
         );
 
         Assert.Equal(
@@ -306,7 +310,8 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             recorder,
-            _ => new FakeCombatLogMonitor()
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
         );
 
         await controller.StartManualRecordingAsync(CancellationToken.None);
@@ -325,7 +330,8 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             recorder,
-            _ => new FakeCombatLogMonitor()
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
         );
 
         var startTask = Task.Run(() =>
@@ -456,7 +462,8 @@ public sealed class ApplicationControllerTests
             directory.Path,
             null,
             new FakeRecordingService(),
-            _ => new FakeCombatLogMonitor()
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
         );
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
         var original = controller.Status.EffectiveSettings!;
@@ -494,7 +501,8 @@ public sealed class ApplicationControllerTests
             bootstrapper,
             _ => new FakeRecordingService(),
             _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance
+            NullLoggerFactory.Instance,
+            UnavailableWowMonitor
         );
         await controller.StartAsync(TestContext.Current.CancellationToken);
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
@@ -573,7 +581,7 @@ public sealed class ApplicationControllerTests
         string? logsDirectory,
         IRecordingService recorder,
         Func<string, ICombatLogMonitor> createMonitor,
-        Func<IWowProcessMonitor>? createWowProcessMonitor = null
+        Func<IWowProcessMonitor> createWowProcessMonitor
     )
     {
         var store = new SettingsStore(Path.Combine(rootDirectory, "settings.json"));
@@ -606,6 +614,11 @@ public sealed class ApplicationControllerTests
         return new FakeWowProcessMonitor(
             new WowProcessStatus(WowProcessState.WindowAvailable, 1234, "World of Warcraft", null)
         );
+    }
+
+    private static FakeWowProcessMonitor UnavailableWowMonitor()
+    {
+        return new FakeWowProcessMonitor();
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

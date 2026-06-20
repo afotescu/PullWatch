@@ -4,7 +4,7 @@ namespace PullWatch;
 
 internal sealed class ApplicationMonitoringSupervisor(
     Func<string, ICombatLogMonitor> createCombatLogMonitor,
-    Func<IWowProcessMonitor>? createWowProcessMonitor,
+    Func<IWowProcessMonitor> createWowProcessMonitor,
     RecordingCoordinator recordingCoordinator,
     SettingsProvider settingsProvider,
     ApplicationStatusPublisher statusPublisher,
@@ -120,11 +120,6 @@ internal sealed class ApplicationMonitoringSupervisor(
 
     private void StartWowProcessMonitoring()
     {
-        if (createWowProcessMonitor is null)
-        {
-            return;
-        }
-
         var monitor = createWowProcessMonitor();
         var cancellation = new CancellationTokenSource();
 

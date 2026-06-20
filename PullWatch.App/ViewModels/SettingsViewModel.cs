@@ -266,18 +266,6 @@ public sealed class SettingsViewModel : ObservableObject
         return CommitPathAsync(includeWowLogsDirectory: false, includeRecordingsDirectory: true);
     }
 
-    public void DiscardChanges()
-    {
-        IsWowLogsDirectoryPending = false;
-        IsRecordingsDirectoryPending = false;
-        _retryWowLogsDirectoryOnNextAutosave = false;
-        _retryRecordingsDirectoryOnNextAutosave = false;
-        LoadSettings(_savedSettings);
-        ClearErrors();
-        SaveMessage = null;
-        IsSaveError = false;
-    }
-
     private async Task PickWowLogsDirectoryAsync()
     {
         var selected = _dialogs.PickFolder(

@@ -26,11 +26,6 @@ public sealed class SettingsBootstrapper
 
     internal SettingsStore Store => _store;
 
-    public async Task<PullWatchSettings?> LoadEffectiveAsync(CancellationToken cancellationToken)
-    {
-        return (await LoadEffectiveWithMetadataAsync(cancellationToken))?.Settings;
-    }
-
     public async Task<SettingsBootstrapResult?> LoadEffectiveWithMetadataAsync(
         CancellationToken cancellationToken
     )
