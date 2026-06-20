@@ -23,6 +23,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             controller.Status,
             controller.StartManualRecordingAsync,
             controller.StopManualRecordingAsync,
+            controller.ListRecordingsAsync,
             OpenRecordingsFolderAsync
         );
         Settings = new SettingsViewModel(

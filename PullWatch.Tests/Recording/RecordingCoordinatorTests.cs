@@ -341,6 +341,89 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
+    public async Task CatalogRowTracksSuccessfulRecordingLifecycle()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var outputPath = Path.Combine(database.DirectoryPath, "manual.mp4");
+        var recorder = new FakeRecordingService { ActiveOutputPath = outputPath };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            recordingCatalog: database.Catalog
+        );
+
+        Assert.Equal(
+            RecordingCommandResult.Started,
+            await coordinator.StartManualAsync(cancellationToken)
+        );
+        var started = Assert.Single(await database.Repository.ListAsync(cancellationToken));
+
+        File.WriteAllText(outputPath, "recording");
+        Assert.Equal(
+            RecordingCommandResult.Stopped,
+            await coordinator.StopManualAsync(cancellationToken)
+        );
+        var completed = await database.Repository.GetByIdAsync(started.Id, cancellationToken);
+
+        Assert.Equal(RecordingCatalogStatus.Recording, started.Status);
+        Assert.Equal(RecordingCatalogKind.Manual, started.Kind);
+        Assert.NotNull(completed);
+        Assert.Equal(RecordingCatalogStatus.Available, completed.Status);
+        Assert.Equal(9, completed.FileSizeBytes);
+        Assert.NotNull(completed.EndedAtUtc);
+    }
+
+    [Fact]
+    public async Task CatalogRowIsRemovedWhenStartupFails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var recorder = new FakeRecordingService
+        {
+            ActiveOutputPath = Path.Combine(database.DirectoryPath, "failed.mp4"),
+            StartException = new InvalidOperationException("capture failed"),
+        };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            recordingCatalog: database.Catalog
+        );
+
+        Assert.Equal(
+            RecordingCommandResult.Failed,
+            await coordinator.StartManualAsync(cancellationToken)
+        );
+
+        Assert.Empty(await database.Repository.ListAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task CatalogRowIsRemovedWhenFinalizationFails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var outputPath = Path.Combine(database.DirectoryPath, "failed.mp4");
+        var recorder = new FakeRecordingService
+        {
+            ActiveOutputPath = outputPath,
+            StopException = new InvalidOperationException("finalization failed"),
+        };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            recordingCatalog: database.Catalog
+        );
+
+        await coordinator.StartManualAsync(cancellationToken);
+        var started = Assert.Single(await database.Repository.ListAsync(cancellationToken));
+
+        Assert.Equal(
+            RecordingCommandResult.Failed,
+            await coordinator.StopManualAsync(cancellationToken)
+        );
+
+        Assert.Null(await database.Repository.GetByIdAsync(started.Id, cancellationToken));
+    }
+
+    [Fact]
     public async Task StatisticsCountAcceptedRequestsAndSuccessfulFinalizations()
     {
         var recorder = new FakeRecordingService();
@@ -395,7 +478,8 @@ public sealed class RecordingCoordinatorTests
         FakeRecordingService recorder,
         TimeSpan? startTimeout = null,
         TimeSpan? stopTimeout = null,
-        TimeSpan? disposeTimeout = null
+        TimeSpan? disposeTimeout = null,
+        RecordingCatalog? recordingCatalog = null
     )
     {
         return new RecordingCoordinator(
@@ -403,7 +487,8 @@ public sealed class RecordingCoordinatorTests
             NullLogger<RecordingCoordinator>.Instance,
             startTimeout ?? TimeSpan.FromSeconds(2),
             stopTimeout ?? TimeSpan.FromSeconds(2),
-            disposeTimeout ?? TimeSpan.FromSeconds(2)
+            disposeTimeout ?? TimeSpan.FromSeconds(2),
+            recordingCatalog
         );
     }
 
@@ -436,6 +521,70 @@ public sealed class RecordingCoordinatorTests
                 $"Coordinator did not reach state {expectedState}."
             );
             await Task.Delay(10);
+        }
+    }
+
+    private sealed class TemporaryRecordingDatabase : IDisposable
+    {
+        private readonly TemporaryDirectory _directory;
+
+        private TemporaryRecordingDatabase(
+            TemporaryDirectory directory,
+            SqliteConnectionFactory connectionFactory
+        )
+        {
+            _directory = directory;
+            Repository = new RecordingCatalogRepository(connectionFactory);
+            Catalog = new RecordingCatalog(Repository);
+        }
+
+        public string DirectoryPath => _directory.Path;
+
+        public RecordingCatalogRepository Repository { get; }
+
+        public RecordingCatalog Catalog { get; }
+
+        public static async Task<TemporaryRecordingDatabase> CreateAsync(
+            CancellationToken cancellationToken
+        )
+        {
+            var directory = new TemporaryDirectory();
+            var databasePath = Path.Combine(directory.Path, "pullwatch.db");
+            var factory = new SqliteConnectionFactory(
+                new RecordingDatabasePathProvider(databasePath)
+            );
+            var initializer = new RecordingStorageInitializer(factory, NullLoggerFactory.Instance);
+
+            try
+            {
+                await initializer.InitializeAsync(cancellationToken);
+                return new TemporaryRecordingDatabase(directory, factory);
+            }
+            catch
+            {
+                directory.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            _directory.Dispose();
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = Directory.CreateTempSubdirectory("PullWatchCoordinatorTests-").FullName;
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            Directory.Delete(Path, true);
         }
     }
 }

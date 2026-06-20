@@ -12,6 +12,11 @@ public sealed class RecordingsViewModel : ObservableObject
 
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _startManual;
     private readonly Func<CancellationToken, Task<RecordingCommandResult>> _stopManual;
+    private readonly Func<
+        string,
+        CancellationToken,
+        Task<IReadOnlyList<RecordingCatalogFile>>
+    > _loadRecordings;
     private readonly Func<Task> _openRecordingsFolder;
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
@@ -28,6 +33,7 @@ public sealed class RecordingsViewModel : ObservableObject
         ApplicationStatus initialStatus,
         Func<CancellationToken, Task<RecordingCommandResult>> startManual,
         Func<CancellationToken, Task<RecordingCommandResult>> stopManual,
+        Func<string, CancellationToken, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
         Func<Task> openRecordingsFolder
     )
     {
@@ -38,6 +44,7 @@ public sealed class RecordingsViewModel : ObservableObject
         _knownSavedCount = initialStatus.Recording.Statistics.SavedCount;
         _startManual = startManual;
         _stopManual = stopManual;
+        _loadRecordings = loadRecordings;
         _openRecordingsFolder = openRecordingsFolder;
         ManualRecordingCommand = new AsyncRelayCommand(
             ToggleManualRecordingAsync,
@@ -50,7 +57,7 @@ public sealed class RecordingsViewModel : ObservableObject
         );
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
-        RefreshRecordings();
+        _ = RefreshRecordingsAsync();
     }
 
     public ObservableCollection<RecordingListItem> Recordings { get; } = new();
@@ -141,7 +148,7 @@ public sealed class RecordingsViewModel : ObservableObject
         )
         {
             var savedRecordingCompleted = _knownSavedCount > previousSavedCount;
-            RefreshRecordings(
+            _ = RefreshRecordingsAsync(
                 savedRecordingCompleted ? previousActiveOutputPath : null,
                 savedRecordingCompleted
             );
@@ -166,7 +173,7 @@ public sealed class RecordingsViewModel : ObservableObject
         _recording.State == RecordingCoordinatorState.Recording
         || (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
 
-    internal void RefreshRecordings(
+    internal async Task RefreshRecordingsAsync(
         string? preferredSelectionPath = null,
         bool preferMostRecent = false
     )
@@ -183,7 +190,9 @@ public sealed class RecordingsViewModel : ObservableObject
 
         try
         {
-            foreach (var recording in DiscoverRecordings(_recordingsDirectory))
+            var recordings = await _loadRecordings(_recordingsDirectory, CancellationToken.None);
+
+            foreach (var recording in CreateRecordingListItems(recordings))
             {
                 Recordings.Add(recording);
             }
@@ -202,29 +211,23 @@ public sealed class RecordingsViewModel : ObservableObject
                 preferredRecording ?? existingSelection ?? Recordings.FirstOrDefault();
             RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
             SelectedRecording = null;
-            RecordingLibraryStatus = $"Could not read recordings folder: {exception.Message}";
+            RecordingLibraryStatus = $"Could not read recordings catalog: {exception.Message}";
         }
     }
 
-    internal static IReadOnlyList<RecordingListItem> DiscoverRecordings(string recordingsDirectory)
+    internal static IReadOnlyList<RecordingListItem> CreateRecordingListItems(
+        IReadOnlyList<RecordingCatalogFile> recordings
+    )
     {
-        if (!Directory.Exists(recordingsDirectory))
-        {
-            return [];
-        }
-
-        return new DirectoryInfo(recordingsDirectory)
-            .EnumerateFiles("*.mp4", SearchOption.TopDirectoryOnly)
-            .OrderByDescending(file => file.LastWriteTimeUtc)
-            .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+        return recordings
             .Select(file => new RecordingListItem(
-                file.FullName,
-                System.IO.Path.GetFileNameWithoutExtension(file.Name),
-                file.LastWriteTime,
-                file.Length
+                file.FilePath,
+                Path.GetFileNameWithoutExtension(file.FilePath),
+                file.ModifiedAtUtc.ToLocalTime(),
+                file.SizeBytes
             ))
             .ToList();
     }

@@ -2,9 +2,8 @@ namespace PullWatch;
 
 public enum RecordingCatalogStatus
 {
+    Recording,
     Available,
-    Missing,
-    Deleted,
 }
 
 public enum RecordingCatalogKind
@@ -37,4 +36,14 @@ public sealed record RecordingCatalogSave(
     DateTimeOffset? EndedAtUtc,
     long? FileSizeBytes,
     DateTimeOffset? FileModifiedAtUtc
+);
+
+public sealed record RecordingCatalogFile(
+    Guid Id,
+    string FilePath,
+    RecordingCatalogKind Kind,
+    DateTimeOffset? StartedAtUtc,
+    DateTimeOffset? EndedAtUtc,
+    long SizeBytes,
+    DateTimeOffset ModifiedAtUtc
 );

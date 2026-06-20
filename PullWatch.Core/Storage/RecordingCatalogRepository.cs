@@ -206,6 +206,25 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         return rows.Select(FromRow).ToList();
     }
 
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var affectedRows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                DELETE FROM Recordings
+                WHERE Id = @Id;
+                """,
+                new { Id = FormatId(id) },
+                cancellationToken: cancellationToken
+            )
+        );
+
+        return affectedRows > 0;
+    }
+
     private static void Validate(RecordingCatalogSave recording)
     {
         ArgumentNullException.ThrowIfNull(recording);

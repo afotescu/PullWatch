@@ -62,7 +62,7 @@ public sealed class RecordingCatalogRepositoryTests
         var updated = recording with
         {
             FilePath = @"D:\Recordings\renamed.mp4",
-            Status = RecordingCatalogStatus.Missing,
+            Status = RecordingCatalogStatus.Recording,
             FileSizeBytes = null,
             FileModifiedAtUtc = null,
         };
@@ -95,7 +95,7 @@ public sealed class RecordingCatalogRepositoryTests
         var updated = recording with
         {
             FilePath = @"D:\Recordings\second.mp4",
-            Status = RecordingCatalogStatus.Deleted,
+            Status = RecordingCatalogStatus.Recording,
         };
 
         await repository.UpsertAsync(recording, cancellationToken);
@@ -105,6 +105,29 @@ public sealed class RecordingCatalogRepositoryTests
 
         var loaded = Assert.Single(recordings);
         AssertMatches(updated, loaded);
+    }
+
+    [Fact]
+    public async Task DeleteRemovesExistingRecording()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var repository = new RecordingCatalogRepository(database.ConnectionFactory);
+        var id = Guid.Parse("9D8366BC-3501-42D7-8E45-84C65285E3F3");
+        await repository.AddAsync(
+            CreateRecording(id, @"D:\Recordings\deleted.mp4"),
+            cancellationToken
+        );
+
+        var deletedExisting = await repository.DeleteAsync(id, cancellationToken);
+        var deletedMissing = await repository.DeleteAsync(
+            Guid.Parse("6B230E56-29C7-4D2F-B189-3FF91259E51D"),
+            cancellationToken
+        );
+
+        Assert.True(deletedExisting);
+        Assert.False(deletedMissing);
+        Assert.Null(await repository.GetByIdAsync(id, cancellationToken));
     }
 
     private static RecordingCatalogSave CreateRecording(Guid id, string filePath)

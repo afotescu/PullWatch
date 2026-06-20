@@ -9,6 +9,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private static readonly TimeSpan DefaultDisposeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IRecordingService _recordingService;
+    private readonly RecordingCatalog? _recordingCatalog;
     private readonly ILogger<RecordingCoordinator> _logger;
     private readonly TimeSpan _startTimeout;
     private readonly TimeSpan _stopTimeout;
@@ -28,6 +29,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         null,
         null
     );
+    private Guid? _activeCatalogRecordingId;
     private bool _disposed;
 
     private enum StopRequestKind
@@ -42,10 +44,12 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         ILogger<RecordingCoordinator> logger,
         TimeSpan? startTimeout = null,
         TimeSpan? stopTimeout = null,
-        TimeSpan? disposeTimeout = null
+        TimeSpan? disposeTimeout = null,
+        RecordingCatalog? recordingCatalog = null
     )
     {
         _recordingService = recordingService;
+        _recordingCatalog = recordingCatalog;
         _logger = logger;
         _startTimeout = startTimeout ?? DefaultStartTimeout;
         _stopTimeout = stopTimeout ?? DefaultStopTimeout;
@@ -195,11 +199,16 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             }
 
             Task? startTask = null;
+            Guid? catalogRecordingId = null;
+            var shouldStopAfterCatalogStartupFailure = false;
             _expectedCount++;
 
             try
             {
                 startTask = _recordingService.StartAsync(context, CancellationToken.None);
+                shouldStopAfterCatalogStartupFailure = _recordingCatalog is not null;
+                catalogRecordingId = await BeginCatalogRecordingAsync(context);
+                shouldStopAfterCatalogStartupFailure = false;
                 PublishStatus(
                     RecordingCoordinatorState.Starting,
                     owner,
@@ -221,6 +230,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 when (RecordingFailureClassifier.IsTargetUnavailable(exception))
             {
                 _expectedCount--;
+                await RemoveCatalogRecordingAsync(catalogRecordingId);
                 PublishStatus(
                     RecordingCoordinatorState.Idle,
                     null,
@@ -237,6 +247,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             }
             catch (TimeoutException exception)
             {
+                await RemoveCatalogRecordingAsync(catalogRecordingId);
                 var failure = new TimeoutException(
                     $"Recording start timed out after {_startTimeout}.",
                     exception
@@ -256,7 +267,11 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     );
                 }
 
-                _ = ObserveCleanupAsync(_recordingService.StopAsync(CancellationToken.None));
+                _ = ObserveCleanupAsync(
+                    _recordingService.StopAsync(CancellationToken.None),
+                    null,
+                    countAsSaved: false
+                );
                 _logger.LogError(
                     exception,
                     "Recording start timed out for {RecordingOwner}",
@@ -266,7 +281,17 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             }
             catch (Exception exception)
             {
+                await RemoveCatalogRecordingAsync(catalogRecordingId);
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null, exception);
+                if (startTask is not null && shouldStopAfterCatalogStartupFailure)
+                {
+                    _ = ObserveCleanupAsync(
+                        _recordingService.StopAsync(CancellationToken.None),
+                        null,
+                        countAsSaved: false
+                    );
+                }
+
                 _logger.LogError(exception, "Could not start {RecordingOwner} recording", owner);
                 return RecordingCommandResult.Failed;
             }
@@ -330,11 +355,13 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 status.Identity,
                 status.Context
             );
+            var catalogRecordingId = _activeCatalogRecordingId;
             var stopTask = _recordingService.StopAsync(CancellationToken.None);
 
             try
             {
                 await stopTask.WaitAsync(_stopTimeout);
+                await CompleteCatalogRecordingAsync(catalogRecordingId);
                 _savedCount++;
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
                 return RecordingCommandResult.Stopped;
@@ -352,7 +379,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                     status.Context,
                     failure
                 );
-                _ = ObserveCleanupAsync(stopTask);
+                _ = ObserveCleanupAsync(stopTask, catalogRecordingId, countAsSaved: true);
                 _logger.LogError(
                     exception,
                     "Recording stop timed out for {RecordingOwner}",
@@ -362,6 +389,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             }
             catch (Exception exception)
             {
+                await RemoveCatalogRecordingAsync(catalogRecordingId);
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null, exception);
                 _logger.LogError(
                     exception,
@@ -377,6 +405,75 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
     }
 
+    private async Task<Guid?> BeginCatalogRecordingAsync(RecordingContext context)
+    {
+        if (_recordingCatalog is null)
+        {
+            return null;
+        }
+
+        var activeOutputPath = _recordingService.ActiveOutputPath;
+
+        if (string.IsNullOrWhiteSpace(activeOutputPath))
+        {
+            throw new InvalidOperationException("Recorder did not report an output path.");
+        }
+
+        var recordingId = await _recordingCatalog.BeginRecordingAsync(
+            context,
+            activeOutputPath,
+            CancellationToken.None
+        );
+        _activeCatalogRecordingId = recordingId;
+        return recordingId;
+    }
+
+    private async Task CompleteCatalogRecordingAsync(Guid? recordingId)
+    {
+        if (_recordingCatalog is null || recordingId is null)
+        {
+            return;
+        }
+
+        await _recordingCatalog.CompleteRecordingAsync(
+            recordingId.Value,
+            DateTimeOffset.UtcNow,
+            CancellationToken.None
+        );
+        ClearActiveCatalogRecording(recordingId);
+    }
+
+    private async Task RemoveCatalogRecordingAsync(Guid? recordingId)
+    {
+        if (_recordingCatalog is null || recordingId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _recordingCatalog.RemoveRecordingAsync(recordingId.Value, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Could not remove catalog row for failed recording {RecordingId}",
+                recordingId
+            );
+        }
+
+        ClearActiveCatalogRecording(recordingId);
+    }
+
+    private void ClearActiveCatalogRecording(Guid? recordingId)
+    {
+        if (_activeCatalogRecordingId == recordingId)
+        {
+            _activeCatalogRecordingId = null;
+        }
+    }
+
     private async Task ObserveBackgroundTaskAsync(Task task, string errorMessage)
     {
         try
@@ -389,7 +486,11 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
     }
 
-    private async Task ObserveCleanupAsync(Task cleanupTask)
+    private async Task ObserveCleanupAsync(
+        Task cleanupTask,
+        Guid? catalogRecordingId,
+        bool countAsSaved
+    )
     {
         try
         {
@@ -397,6 +498,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
         catch (Exception exception)
         {
+            await RemoveCatalogRecordingAsync(catalogRecordingId);
             _logger.LogError(exception, "Recorder cleanup failed after an operation timeout");
             return;
         }
@@ -407,8 +509,25 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         {
             if (Status.State == RecordingCoordinatorState.Stopping)
             {
-                _savedCount++;
-                PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
+                try
+                {
+                    if (countAsSaved)
+                    {
+                        await CompleteCatalogRecordingAsync(catalogRecordingId);
+                        _savedCount++;
+                    }
+
+                    PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
+                }
+                catch (Exception exception)
+                {
+                    await RemoveCatalogRecordingAsync(catalogRecordingId);
+                    PublishStatus(RecordingCoordinatorState.Idle, null, null, null, exception);
+                    _logger.LogError(
+                        exception,
+                        "Recording cleanup completed, but catalog finalization failed"
+                    );
+                }
             }
         }
         finally
@@ -449,6 +568,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         {
             if (Status.State != RecordingCoordinatorState.Idle)
             {
+                await RemoveCatalogRecordingAsync(_activeCatalogRecordingId);
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null, exception);
             }
         }

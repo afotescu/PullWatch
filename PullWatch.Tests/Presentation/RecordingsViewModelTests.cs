@@ -282,28 +282,23 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
-    public void ListsSavedMp4RecordingsFromConfiguredDirectory()
+    public void ListsCatalogRecordingsFromConfiguredDirectory()
     {
         var directory = CreateTempDirectory();
 
         try
         {
-            var older = WriteRecording(
-                directory,
-                "older.mp4",
-                "older",
-                new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc)
-            );
-            var newer = WriteRecording(
-                directory,
-                "newer.mp4",
-                "newer",
-                new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)
-            );
-            File.WriteAllText(Path.Combine(directory, "notes.txt"), "ignored");
-
+            var older = Path.Combine(directory, "older.mp4");
+            var newer = Path.Combine(directory, "newer.mp4");
+            var recordings = new[]
+            {
+                CatalogFile(newer, new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)),
+                CatalogFile(older, new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)),
+            };
             var viewModel = CreateViewModel(
-                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory)
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: (_, _) =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
 
             Assert.Collection(
@@ -360,9 +355,19 @@ public sealed class RecordingsViewModelTests
                 "newer",
                 new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)
             );
+            var recordings = new List<RecordingCatalogFile>
+            {
+                CatalogFile(
+                    Path.Combine(directory, "newer.mp4"),
+                    new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+                ),
+                CatalogFile(older, new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)),
+            };
             var completedPath = Path.Combine(directory, "completed.mp4");
             var viewModel = CreateViewModel(
-                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory)
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: (_, _) =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
             viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
                 recording.Path == older
@@ -381,6 +386,13 @@ public sealed class RecordingsViewModelTests
                 "completed.mp4",
                 "completed",
                 new DateTime(2026, 6, 15, 10, 30, 0, DateTimeKind.Utc)
+            );
+            recordings.Insert(
+                1,
+                CatalogFile(
+                    completedPath,
+                    new DateTimeOffset(2026, 6, 15, 10, 30, 0, TimeSpan.Zero)
+                )
             );
             viewModel.ApplyStatus(
                 Status(
@@ -419,13 +431,16 @@ public sealed class RecordingsViewModelTests
     private static RecordingsViewModel CreateViewModel(
         ApplicationStatus status,
         Func<CancellationToken, Task<RecordingCommandResult>>? startManual = null,
-        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null
+        Func<CancellationToken, Task<RecordingCommandResult>>? stopManual = null,
+        Func<string, CancellationToken, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings =
+            null
     )
     {
         return new RecordingsViewModel(
             status,
             startManual ?? (_ => Task.FromResult(RecordingCommandResult.Started)),
             stopManual ?? (_ => Task.FromResult(RecordingCommandResult.Stopped)),
+            loadRecordings ?? ((_, _) => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
             () => Task.CompletedTask
         );
     }
@@ -484,6 +499,23 @@ public sealed class RecordingsViewModelTests
         );
         Directory.CreateDirectory(directory);
         return directory;
+    }
+
+    private static RecordingCatalogFile CatalogFile(
+        string path,
+        DateTimeOffset modifiedAtUtc,
+        long sizeBytes = 1024
+    )
+    {
+        return new RecordingCatalogFile(
+            Guid.NewGuid(),
+            path,
+            RecordingCatalogKind.Manual,
+            null,
+            null,
+            sizeBytes,
+            modifiedAtUtc
+        );
     }
 
     private static string WriteRecording(

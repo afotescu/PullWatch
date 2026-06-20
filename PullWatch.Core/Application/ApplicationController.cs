@@ -41,6 +41,7 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly Func<string, ICombatLogMonitor> _createCombatLogMonitor;
     private readonly Func<IWowProcessMonitor>? _createWowProcessMonitor;
     private readonly IRecordingStorageInitializer _storageInitializer;
+    private readonly RecordingCatalog? _recordingCatalog;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ApplicationController> _logger;
     private readonly ApplicationStatusPublisher _statusPublisher;
@@ -64,10 +65,8 @@ public sealed class ApplicationController : IAsyncDisposable
             path => new CombatLogReader(path, loggerFactory.CreateLogger<CombatLogReader>()),
             loggerFactory,
             () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>()),
-            new RecordingStorageInitializer(
-                new SqliteConnectionFactory(new RecordingDatabasePathProvider()),
-                loggerFactory
-            )
+            CreateDefaultStorageInitializer(loggerFactory),
+            CreateDefaultRecordingCatalog()
         ) { }
 
     internal ApplicationController(
@@ -76,7 +75,8 @@ public sealed class ApplicationController : IAsyncDisposable
         Func<string, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
         Func<IWowProcessMonitor>? createWowProcessMonitor = null,
-        IRecordingStorageInitializer? storageInitializer = null
+        IRecordingStorageInitializer? storageInitializer = null,
+        RecordingCatalog? recordingCatalog = null
     )
     {
         _settingsBootstrapper = settingsBootstrapper;
@@ -84,6 +84,7 @@ public sealed class ApplicationController : IAsyncDisposable
         _createCombatLogMonitor = createCombatLogMonitor;
         _createWowProcessMonitor = createWowProcessMonitor;
         _storageInitializer = storageInitializer ?? NoOpRecordingStorageInitializer.Instance;
+        _recordingCatalog = recordingCatalog;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<ApplicationController>();
         _statusPublisher = new ApplicationStatusPublisher(
@@ -130,7 +131,8 @@ public sealed class ApplicationController : IAsyncDisposable
             );
             var recordingCoordinator = new RecordingCoordinator(
                 _createRecordingService(settingsProvider),
-                _loggerFactory.CreateLogger<RecordingCoordinator>()
+                _loggerFactory.CreateLogger<RecordingCoordinator>(),
+                recordingCatalog: _recordingCatalog
             );
             var monitoringSupervisor = new ApplicationMonitoringSupervisor(
                 _createCombatLogMonitor,
@@ -200,6 +202,16 @@ public sealed class ApplicationController : IAsyncDisposable
             coordinator => coordinator.ShutdownAsync(cancellationToken),
             cancellationToken
         );
+    }
+
+    public Task<IReadOnlyList<RecordingCatalogFile>> ListRecordingsAsync(
+        string recordingsDirectory,
+        CancellationToken cancellationToken
+    )
+    {
+        return _recordingCatalog is null
+            ? Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])
+            : _recordingCatalog.ListAvailableFilesAsync(recordingsDirectory, cancellationToken);
     }
 
     public async Task<SettingsSaveResult> SaveSettingsAsync(
@@ -361,6 +373,25 @@ public sealed class ApplicationController : IAsyncDisposable
     }
 
     private bool IsDisposed => Volatile.Read(ref _disposed);
+
+    private static RecordingStorageInitializer CreateDefaultStorageInitializer(
+        ILoggerFactory loggerFactory
+    )
+    {
+        return new RecordingStorageInitializer(
+            new SqliteConnectionFactory(new RecordingDatabasePathProvider()),
+            loggerFactory
+        );
+    }
+
+    private static RecordingCatalog CreateDefaultRecordingCatalog()
+    {
+        return new RecordingCatalog(
+            new RecordingCatalogRepository(
+                new SqliteConnectionFactory(new RecordingDatabasePathProvider())
+            )
+        );
+    }
 
     private RecordingCoordinator GetRecordingCoordinator()
     {
