@@ -9,6 +9,7 @@ public sealed class SettingsBootstrapper
     private readonly SettingsStore _store;
     private readonly ILogger<SettingsBootstrapper> _logger;
     private readonly Func<string?> _detectWowLogsDirectory;
+    private readonly Func<PullWatchSettings> _createDefaultSettings;
 
     public SettingsBootstrapper(SettingsStore store, ILogger<SettingsBootstrapper> logger)
         : this(store, logger, WowLogsDirectoryDetector.Detect) { }
@@ -18,10 +19,19 @@ public sealed class SettingsBootstrapper
         ILogger<SettingsBootstrapper> logger,
         Func<string?> detectWowLogsDirectory
     )
+        : this(store, logger, detectWowLogsDirectory, static () => new PullWatchSettings()) { }
+
+    internal SettingsBootstrapper(
+        SettingsStore store,
+        ILogger<SettingsBootstrapper> logger,
+        Func<string?> detectWowLogsDirectory,
+        Func<PullWatchSettings> createDefaultSettings
+    )
     {
         _store = store;
         _logger = logger;
         _detectWowLogsDirectory = detectWowLogsDirectory;
+        _createDefaultSettings = createDefaultSettings;
     }
 
     internal SettingsStore Store => _store;
@@ -46,7 +56,7 @@ public sealed class SettingsBootstrapper
                     _store.SettingsPath,
                     string.Join(" ", persistedValidation.Errors)
                 );
-                settings = new PullWatchSettings();
+                settings = _createDefaultSettings();
             }
             else
             {
@@ -71,7 +81,7 @@ public sealed class SettingsBootstrapper
                 );
             }
 
-            settings = new PullWatchSettings();
+            settings = _createDefaultSettings();
         }
 
         if (settings.WowLogsDirectory is null)

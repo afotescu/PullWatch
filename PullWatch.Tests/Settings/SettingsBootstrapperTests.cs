@@ -15,7 +15,8 @@ public sealed class SettingsBootstrapperTests
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => detectedLogsDirectory
+            () => detectedLogsDirectory,
+            () => CreateTestDefaults(directory.Path)
         );
 
         var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
@@ -40,7 +41,8 @@ public sealed class SettingsBootstrapperTests
         var bootstrapper = new SettingsBootstrapper(
             new SettingsStore(path),
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null
+            () => null,
+            () => CreateTestDefaults(directory.Path)
         );
 
         var result = await bootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken);
@@ -48,6 +50,14 @@ public sealed class SettingsBootstrapperTests
         Assert.NotNull(result);
         Assert.False(result.CreatedSettingsFile);
         Assert.Equal(invalidJson, await File.ReadAllTextAsync(path, cancellationToken));
+    }
+
+    private static PullWatchSettings CreateTestDefaults(string rootDirectory)
+    {
+        return new PullWatchSettings
+        {
+            RecordingsDirectory = Path.Combine(rootDirectory, "Recordings"),
+        };
     }
 
     private sealed class TemporaryDirectory : IDisposable

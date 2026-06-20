@@ -37,7 +37,8 @@ public sealed class ApplicationControllerTests
         var bootstrapper = new SettingsBootstrapper(
             store,
             NullLogger<SettingsBootstrapper>.Instance,
-            () => null
+            () => null,
+            () => CreateTestDefaults(directory.Path)
         );
         await using var controller = new ApplicationController(
             bootstrapper,
@@ -607,6 +608,14 @@ public sealed class ApplicationControllerTests
         );
         await controller.StartAsync(TestContext.Current.CancellationToken);
         return controller;
+    }
+
+    private static PullWatchSettings CreateTestDefaults(string rootDirectory)
+    {
+        return new PullWatchSettings
+        {
+            RecordingsDirectory = Path.Combine(rootDirectory, "Recordings"),
+        };
     }
 
     private static FakeWowProcessMonitor AvailableWowMonitor()
