@@ -51,7 +51,7 @@ public sealed class SettingsStore
                 FileAccess.Read,
                 FileShare.Read
             );
-            var settings = await JsonSerializer.DeserializeAsync<PullWatchSettings>(
+            var settings = await JsonSerializer.DeserializeAsync<PersistedPullWatchSettings>(
                 stream,
                 SerializerOptions,
                 cancellationToken
@@ -63,7 +63,7 @@ public sealed class SettingsStore
                     null,
                     new JsonException("The settings file contained no settings object.")
                 )
-                : new SettingsLoadResult(SettingsLoadStatus.Loaded, settings);
+                : new SettingsLoadResult(SettingsLoadStatus.Loaded, settings.ToSettings());
         }
         catch (Exception exception)
             when (exception is JsonException or IOException or UnauthorizedAccessException)
@@ -137,5 +137,47 @@ public sealed class SettingsStore
         }
 
         File.Move(sourcePath, destinationPath);
+    }
+
+    private sealed record PersistedPullWatchSettings
+    {
+        public int Version { get; init; } = PullWatchSettings.CurrentVersion;
+        public string? WowLogsDirectory { get; init; }
+        public string? RecordingsDirectory { get; init; }
+        public bool RecordMythicPlus { get; init; } = true;
+        public bool RecordRaidEncounters { get; init; } = true;
+        public VideoSettings? Video { get; init; } = new();
+        public AudioSettings? Audio { get; init; } = new();
+        public PersistedUiSettings? Ui { get; init; } = new();
+
+        public PullWatchSettings ToSettings()
+        {
+            return new PullWatchSettings
+            {
+                Version = Version,
+                WowLogsDirectory = WowLogsDirectory,
+                RecordingsDirectory = RecordingsDirectory,
+                RecordMythicPlus = RecordMythicPlus,
+                RecordRaidEncounters = RecordRaidEncounters,
+                Video = Video ?? throw new JsonException("Video settings are required."),
+                Audio = Audio ?? throw new JsonException("Audio settings are required."),
+                Ui = Ui?.ToSettings() ?? throw new JsonException("UI settings are required."),
+            };
+        }
+    }
+
+    private sealed record PersistedUiSettings
+    {
+        public WindowPlacementSettings? WindowPlacement { get; init; } = new();
+
+        public UiSettings ToSettings()
+        {
+            return new UiSettings
+            {
+                WindowPlacement =
+                    WindowPlacement
+                    ?? throw new JsonException("Window placement settings are required."),
+            };
+        }
     }
 }

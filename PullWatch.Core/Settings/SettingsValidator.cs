@@ -23,37 +23,16 @@ public static class SettingsValidator
             );
         }
 
-        if (settings.Video is null)
+        if (!VideoFrameRates.IsSupported(settings.Video.FrameRate))
         {
-            errors.Add("Video settings are required.");
-        }
-        else
-        {
-            if (!VideoFrameRates.IsSupported(settings.Video.FrameRate))
-            {
-                errors.Add(
-                    $"Video frame rate must be {VideoFrameRates.Standard} or {VideoFrameRates.High}."
-                );
-            }
-
-            if (!Enum.IsDefined(settings.Video.Quality))
-            {
-                errors.Add("Video quality must be Compact, Balanced, or High.");
-            }
+            errors.Add(
+                $"Video frame rate must be {VideoFrameRates.Standard} or {VideoFrameRates.High}."
+            );
         }
 
-        if (settings.Audio is null)
+        if (!Enum.IsDefined(settings.Video.Quality))
         {
-            errors.Add("Audio settings are required.");
-        }
-
-        if (settings.Ui is null)
-        {
-            errors.Add("UI settings are required.");
-        }
-        else if (settings.Ui.WindowPlacement is null)
-        {
-            errors.Add("Window placement settings are required.");
+            errors.Add("Video quality must be Compact, Balanced, or High.");
         }
 
         var wowLogsDirectory = NormalizeOptionalPath(

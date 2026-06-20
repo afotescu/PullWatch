@@ -76,6 +76,29 @@ public sealed class SettingsStoreTests
 
         Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
         Assert.NotNull(result.Settings);
+        Assert.Equal(new VideoSettings(), result.Settings.Video);
+        Assert.Equal(new AudioSettings(), result.Settings.Audio);
+        Assert.Equal(new UiSettings(), result.Settings.Ui);
+    }
+
+    [Theory]
+    [InlineData("""{ "Version": 1, "Video": null }""")]
+    [InlineData("""{ "Version": 1, "Audio": null }""")]
+    [InlineData("""{ "Version": 1, "Ui": null }""")]
+    [InlineData("""{ "Version": 1, "Ui": { "WindowPlacement": null } }""")]
+    public async Task ExplicitNullRequiredSettingsSectionsAreRejected(string json)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(path, json, cancellationToken);
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Invalid, result.Status);
+        Assert.Null(result.Settings);
+        Assert.NotNull(result.Error);
     }
 
     [Fact]
