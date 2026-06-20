@@ -87,6 +87,65 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task FailedStartupRollsBackPartialStateAndAllowsRestart()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        var recorders = new List<FakeRecordingService>();
+        var failure = new InvalidOperationException("Monitor failed.");
+        var wowMonitorCalls = 0;
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ =>
+            {
+                var recorder = new FakeRecordingService();
+                recorders.Add(recorder);
+                return recorder;
+            },
+            _ => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance,
+            () =>
+            {
+                wowMonitorCalls++;
+
+                if (wowMonitorCalls == 1)
+                {
+                    throw failure;
+                }
+
+                return new FakeWowProcessMonitor();
+            }
+        );
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.StartAsync(TestContext.Current.CancellationToken)
+        );
+
+        Assert.Same(failure, exception);
+        Assert.Single(recorders);
+        Assert.Equal(1, recorders[0].DisposeCalls);
+        Assert.Null(controller.Status.EffectiveSettings);
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, wowMonitorCalls);
+        Assert.Equal(2, recorders.Count);
+        Assert.NotNull(controller.Status.EffectiveSettings);
+    }
+
+    [Fact]
     public async Task StartupWithLogsDirectoryStartsMonitoringAndAggregatesStatus()
     {
         using var directory = new TemporaryDirectory();
@@ -255,6 +314,53 @@ public sealed class ApplicationControllerTests
         await controller.ShutdownAsync(CancellationToken.None);
 
         Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task SettingsSaveWaitsForManualRecordingStartInProgress()
+    {
+        using var directory = new TemporaryDirectory();
+        var recorder = new BlockingStartRecordingService();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            recorder,
+            _ => new FakeCombatLogMonitor()
+        );
+
+        var startTask = Task.Run(() =>
+            controller.StartManualRecordingAsync(CancellationToken.None)
+        );
+        await recorder
+            .WaitForStartEnteredAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        var saveTask = controller.SaveSettingsAsync(
+            controller.Status.EffectiveSettings! with
+            {
+                RecordMythicPlus = false,
+            },
+            TestContext.Current.CancellationToken
+        );
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        Assert.False(saveTask.IsCompleted);
+
+        recorder.AllowStart();
+
+        Assert.Equal(
+            RecordingCommandResult.Started,
+            await startTask.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        var result = await saveTask.WaitAsync(
+            TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(SettingsSaveStatus.RecordingActive, result.Status);
     }
 
     [Fact]
@@ -465,7 +571,7 @@ public sealed class ApplicationControllerTests
     private static async Task<ApplicationController> CreateControllerAsync(
         string rootDirectory,
         string? logsDirectory,
-        FakeRecordingService recorder,
+        IRecordingService recorder,
         Func<string, ICombatLogMonitor> createMonitor,
         Func<IWowProcessMonitor>? createWowProcessMonitor = null
     )
@@ -537,6 +643,57 @@ public sealed class ApplicationControllerTests
             cancellationToken.ThrowIfCancellationRequested();
             Calls++;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingStartRecordingService : IRecordingService
+    {
+        private readonly TaskCompletionSource _startEntered = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private readonly TaskCompletionSource _allowStart = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        public event EventHandler<RecordingServiceFailedEventArgs>? Failed
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler? CaptureTargetExited
+        {
+            add { }
+            remove { }
+        }
+
+        public string? ActiveOutputPath { get; } = @"C:\Recordings\active.mp4";
+
+        public Task StartAsync(RecordingContext context, CancellationToken cancellationToken)
+        {
+            _startEntered.TrySetResult();
+            _allowStart.Task.GetAwaiter().GetResult();
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        public Task WaitForStartEnteredAsync()
+        {
+            return _startEntered.Task;
+        }
+
+        public void AllowStart()
+        {
+            _allowStart.TrySetResult();
         }
     }
 }

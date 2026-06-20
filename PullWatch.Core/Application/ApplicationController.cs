@@ -29,6 +29,13 @@ public sealed class ApplicationController : IAsyncDisposable
         null
     );
 
+    private static readonly ApplicationStatus InitialStatus = new(
+        null,
+        InitialRecordingStatus,
+        InitialCombatLogStatus,
+        InitialWowProcessStatus
+    );
+
     private readonly SettingsBootstrapper _settingsBootstrapper;
     private readonly Func<SettingsProvider, IRecordingService> _createRecordingService;
     private readonly Func<string, ICombatLogMonitor> _createCombatLogMonitor;
@@ -36,25 +43,13 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ApplicationController> _logger;
+    private readonly ApplicationStatusPublisher _statusPublisher;
     private readonly SemaphoreSlim _lifetimeLock = new(1, 1);
-    private readonly object _notificationLock = new();
-    private Task _notificationQueue = Task.CompletedTask;
-    private ApplicationStatus _status = new(
-        null,
-        InitialRecordingStatus,
-        InitialCombatLogStatus,
-        InitialWowProcessStatus
-    );
     private RecordingCoordinator? _recordingCoordinator;
     private ApplicationSettingsService? _settingsService;
-    private SettingsProvider? _settingsProvider;
-    private ICombatLogMonitor? _combatLogMonitor;
-    private IWowProcessMonitor? _wowProcessMonitor;
-    private CancellationTokenSource? _monitorCancellation;
-    private CancellationTokenSource? _wowProcessCancellation;
-    private Task? _monitorTask;
-    private Task? _wowProcessTask;
+    private ApplicationMonitoringSupervisor? _monitoringSupervisor;
     private bool _disposed;
+    private int _disposeStarted;
 
     public ApplicationController(ILoggerFactory loggerFactory)
         : this(
@@ -91,11 +86,19 @@ public sealed class ApplicationController : IAsyncDisposable
         _storageInitializer = storageInitializer ?? NoOpRecordingStorageInitializer.Instance;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<ApplicationController>();
+        _statusPublisher = new ApplicationStatusPublisher(
+            InitialStatus,
+            loggerFactory.CreateLogger<ApplicationStatusPublisher>()
+        );
     }
 
-    public event Action<ApplicationStatus>? StatusChanged;
+    public event Action<ApplicationStatus>? StatusChanged
+    {
+        add => _statusPublisher.StatusChanged += value;
+        remove => _statusPublisher.StatusChanged -= value;
+    }
 
-    public ApplicationStatus Status => Volatile.Read(ref _status);
+    public ApplicationStatus Status => _statusPublisher.Status;
 
     public bool StartedWithCreatedSettingsFile { get; private set; }
 
@@ -103,11 +106,12 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         await _lifetimeLock.WaitAsync(cancellationToken);
 
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
 
             if (_recordingCoordinator is not null)
             {
@@ -128,21 +132,39 @@ public sealed class ApplicationController : IAsyncDisposable
                 _createRecordingService(settingsProvider),
                 _loggerFactory.CreateLogger<RecordingCoordinator>()
             );
+            var monitoringSupervisor = new ApplicationMonitoringSupervisor(
+                _createCombatLogMonitor,
+                _createWowProcessMonitor,
+                recordingCoordinator,
+                settingsProvider,
+                _statusPublisher,
+                _loggerFactory
+            );
             recordingCoordinator.StatusChanged += OnRecordingStatusChanged;
 
-            _recordingCoordinator = recordingCoordinator;
-            _settingsProvider = settingsProvider;
-            _settingsService = settingsService;
-            StartedWithCreatedSettingsFile = bootstrapResult.CreatedSettingsFile;
-            OperatingSystemActions = new OperatingSystemActions(settingsProvider);
-            UpdateStatus(status => new ApplicationStatus(
-                settings,
-                recordingCoordinator.Status,
-                GetInactiveCombatLogStatus(settings, status.WowProcess),
-                status.WowProcess
-            ));
-            StartWowProcessMonitoring();
-            await ApplyCombatLogMonitoringForCurrentStateAsync();
+            try
+            {
+                _recordingCoordinator = recordingCoordinator;
+                _settingsService = settingsService;
+                _monitoringSupervisor = monitoringSupervisor;
+                StartedWithCreatedSettingsFile = bootstrapResult.CreatedSettingsFile;
+                OperatingSystemActions = new OperatingSystemActions(settingsProvider);
+                UpdateStatus(status => new ApplicationStatus(
+                    settings,
+                    recordingCoordinator.Status,
+                    ApplicationMonitoringSupervisor.GetInactiveCombatLogStatus(
+                        settings,
+                        status.WowProcess
+                    ),
+                    status.WowProcess
+                ));
+                await monitoringSupervisor.StartAsync(cancellationToken);
+            }
+            catch
+            {
+                await RollBackFailedStartAsync(recordingCoordinator, monitoringSupervisor);
+                throw;
+            }
         }
         finally
         {
@@ -150,25 +172,34 @@ public sealed class ApplicationController : IAsyncDisposable
         }
     }
 
-    public Task<RecordingCommandResult> StartManualRecordingAsync(
+    public async Task<RecordingCommandResult> StartManualRecordingAsync(
         CancellationToken cancellationToken
     )
     {
-        return GetRecordingCoordinator().StartManualAsync(cancellationToken);
+        return await RunRecordingCommandAsync(
+            coordinator => coordinator.StartManualAsync(cancellationToken),
+            cancellationToken
+        );
     }
 
-    public Task<RecordingCommandResult> StopManualRecordingAsync(
+    public async Task<RecordingCommandResult> StopManualRecordingAsync(
         CancellationToken cancellationToken
     )
     {
-        return GetRecordingCoordinator().StopManualAsync(cancellationToken);
+        return await RunRecordingCommandAsync(
+            coordinator => coordinator.StopManualAsync(cancellationToken),
+            cancellationToken
+        );
     }
 
-    public Task<RecordingCommandResult> FinalizeRecordingForExitAsync(
+    public async Task<RecordingCommandResult> FinalizeRecordingForExitAsync(
         CancellationToken cancellationToken
     )
     {
-        return GetRecordingCoordinator().ShutdownAsync(cancellationToken);
+        return await RunRecordingCommandAsync(
+            coordinator => coordinator.ShutdownAsync(cancellationToken),
+            cancellationToken
+        );
     }
 
     public async Task<SettingsSaveResult> SaveSettingsAsync(
@@ -176,11 +207,12 @@ public sealed class ApplicationController : IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         await _lifetimeLock.WaitAsync(cancellationToken);
 
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
 
             var coordinator = GetRecordingCoordinator();
             var settingsService =
@@ -212,15 +244,7 @@ public sealed class ApplicationController : IAsyncDisposable
 
             try
             {
-                await StopCombatLogMonitoringAsync();
-                UpdateStatus(status =>
-                    status with
-                    {
-                        CombatLog = GetInactiveCombatLogStatus(savedSettings, status.WowProcess),
-                    }
-                );
-                await ApplyCombatLogMonitoringForCurrentStateAsync();
-
+                await GetMonitoringSupervisor().ApplySettingsChangeAsync();
                 return result;
             }
             catch (Exception exception)
@@ -229,7 +253,13 @@ public sealed class ApplicationController : IAsyncDisposable
                 UpdateStatus(status =>
                     status with
                     {
-                        CombatLog = InitialCombatLogStatus with { LastFileSystemError = exception },
+                        CombatLog = ApplicationMonitoringSupervisor.GetInactiveCombatLogStatus(
+                            savedSettings,
+                            status.WowProcess
+                        ) with
+                        {
+                            LastFileSystemError = exception,
+                        },
                     }
                 );
                 return result with
@@ -252,11 +282,12 @@ public sealed class ApplicationController : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(uiSettings);
 
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         await _lifetimeLock.WaitAsync(cancellationToken);
 
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
 
             var settingsService =
                 _settingsService
@@ -286,32 +317,21 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
+        if (IsDisposed)
+        {
+            return;
+        }
+
         await _lifetimeLock.WaitAsync(cancellationToken);
 
         try
         {
-            var coordinator = _recordingCoordinator;
-
-            if (coordinator is null)
+            if (IsDisposed)
             {
                 return;
             }
 
-            _recordingCoordinator = null;
-            _settingsService = null;
-            _settingsProvider = null;
-            await StopCombatLogMonitoringAsync();
-            await StopWowProcessMonitoringAsync();
-
-            try
-            {
-                await coordinator.DisposeAsync();
-            }
-            finally
-            {
-                UpdateStatus(status => status with { Recording = coordinator.Status });
-                coordinator.StatusChanged -= OnRecordingStatusChanged;
-            }
+            await ShutdownCoreAsync();
         }
         finally
         {
@@ -321,179 +341,26 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
         {
             return;
         }
 
-        await ShutdownAsync(CancellationToken.None);
-        _disposed = true;
-        _lifetimeLock.Dispose();
-    }
-
-    private void StartCombatLogMonitoring(string logsDirectory, SettingsProvider settingsProvider)
-    {
-        var monitor = _createCombatLogMonitor(logsDirectory);
-        var eventHandler = new CombatLogEventHandler(
-            GetRecordingCoordinator(),
-            settingsProvider,
-            _loggerFactory.CreateLogger<CombatLogEventHandler>()
-        );
-        var cancellation = new CancellationTokenSource();
-
-        monitor.StatusChanged += OnCombatLogStatusChanged;
-        _combatLogMonitor = monitor;
-        _monitorCancellation = cancellation;
-        UpdateStatus(status => status with { CombatLog = monitor.Status });
-        _monitorTask = Task.Run(
-            () => MonitorCombatLogsAsync(monitor, eventHandler, cancellation.Token),
-            CancellationToken.None
-        );
-    }
-
-    private void StartWowProcessMonitoring()
-    {
-        if (_createWowProcessMonitor is null)
-        {
-            return;
-        }
-
-        var monitor = _createWowProcessMonitor();
-        var cancellation = new CancellationTokenSource();
-
-        monitor.StatusChanged += OnWowProcessStatusChanged;
-        _wowProcessMonitor = monitor;
-        _wowProcessCancellation = cancellation;
-        UpdateStatus(status => status with { WowProcess = monitor.Status });
-        _wowProcessTask = Task.Run(
-            () => MonitorWowProcessAsync(monitor, cancellation.Token),
-            CancellationToken.None
-        );
-    }
-
-    private async Task MonitorWowProcessAsync(
-        IWowProcessMonitor monitor,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            await monitor.WatchAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "WoW process monitoring stopped unexpectedly");
-        }
-    }
-
-    private async Task MonitorCombatLogsAsync(
-        ICombatLogMonitor monitor,
-        CombatLogEventHandler eventHandler,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            await monitor.ReadAsync(eventHandler.HandleAsync, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Combat-log monitoring stopped unexpectedly");
-
-            if (!ReferenceEquals(_combatLogMonitor, monitor))
-            {
-                return;
-            }
-
-            UpdateStatus(status =>
-                status with
-                {
-                    CombatLog = GetInactiveCombatLogStatus(
-                        status.EffectiveSettings,
-                        status.WowProcess
-                    ) with
-                    {
-                        LastFileSystemError = exception,
-                    },
-                }
-            );
-        }
-    }
-
-    private async Task StopCombatLogMonitoringAsync()
-    {
-        var cancellation = _monitorCancellation;
-        var task = _monitorTask;
-        var monitor = _combatLogMonitor;
-        _monitorCancellation = null;
-        _monitorTask = null;
-        _combatLogMonitor = null;
-
-        if (monitor is not null)
-        {
-            monitor.StatusChanged -= OnCombatLogStatusChanged;
-        }
-
-        if (cancellation is null)
-        {
-            return;
-        }
-
-        cancellation.Cancel();
+        Volatile.Write(ref _disposed, true);
+        await _lifetimeLock.WaitAsync(CancellationToken.None);
 
         try
         {
-            if (task is not null)
-            {
-                await task;
-            }
+            await ShutdownCoreAsync();
         }
         finally
         {
-            cancellation.Dispose();
+            _lifetimeLock.Release();
+            _lifetimeLock.Dispose();
         }
     }
 
-    private async Task StopWowProcessMonitoringAsync()
-    {
-        var cancellation = _wowProcessCancellation;
-        var task = _wowProcessTask;
-        var monitor = _wowProcessMonitor;
-        _wowProcessCancellation = null;
-        _wowProcessTask = null;
-        _wowProcessMonitor = null;
-
-        if (monitor is not null)
-        {
-            monitor.StatusChanged -= OnWowProcessStatusChanged;
-        }
-
-        if (cancellation is null)
-        {
-            return;
-        }
-
-        cancellation.Cancel();
-
-        try
-        {
-            if (task is not null)
-            {
-                await task;
-            }
-        }
-        finally
-        {
-            cancellation.Dispose();
-
-            if (monitor is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
-    }
+    private bool IsDisposed => Volatile.Read(ref _disposed);
 
     private RecordingCoordinator GetRecordingCoordinator()
     {
@@ -503,12 +370,97 @@ public sealed class ApplicationController : IAsyncDisposable
             );
     }
 
-    private SettingsProvider GetSettingsProvider()
+    private ApplicationMonitoringSupervisor GetMonitoringSupervisor()
     {
-        return _settingsProvider
+        return _monitoringSupervisor
             ?? throw new InvalidOperationException(
                 "The application controller has not been started."
             );
+    }
+
+    private async Task<RecordingCommandResult> RunRecordingCommandAsync(
+        Func<RecordingCoordinator, Task<RecordingCommandResult>> command,
+        CancellationToken cancellationToken
+    )
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        await _lifetimeLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+            return await command(GetRecordingCoordinator());
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
+    private async Task ShutdownCoreAsync()
+    {
+        var coordinator = _recordingCoordinator;
+
+        if (coordinator is null)
+        {
+            return;
+        }
+
+        var monitoringSupervisor = _monitoringSupervisor;
+        _recordingCoordinator = null;
+        _settingsService = null;
+        _monitoringSupervisor = null;
+
+        if (monitoringSupervisor is not null)
+        {
+            await monitoringSupervisor.StopAsync();
+        }
+
+        try
+        {
+            await coordinator.DisposeAsync();
+        }
+        finally
+        {
+            UpdateStatus(status => status with { Recording = coordinator.Status });
+            coordinator.StatusChanged -= OnRecordingStatusChanged;
+        }
+    }
+
+    private async Task RollBackFailedStartAsync(
+        RecordingCoordinator recordingCoordinator,
+        ApplicationMonitoringSupervisor monitoringSupervisor
+    )
+    {
+        _recordingCoordinator = null;
+        _settingsService = null;
+        _monitoringSupervisor = null;
+        OperatingSystemActions = null;
+        StartedWithCreatedSettingsFile = false;
+        recordingCoordinator.StatusChanged -= OnRecordingStatusChanged;
+
+        try
+        {
+            await monitoringSupervisor.StopAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Could not stop monitoring after startup failure");
+        }
+
+        try
+        {
+            await recordingCoordinator.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Could not dispose recording coordinator after startup failure"
+            );
+        }
+
+        _statusPublisher.Set(InitialStatus);
     }
 
     private static bool PathsEqual(string? left, string? right)
@@ -521,129 +473,8 @@ public sealed class ApplicationController : IAsyncDisposable
         UpdateStatus(current => current with { Recording = status });
     }
 
-    private void OnCombatLogStatusChanged(CombatLogReaderStatus status)
-    {
-        UpdateStatus(current => current with { CombatLog = status });
-    }
-
-    private void OnWowProcessStatusChanged(WowProcessStatus status)
-    {
-        UpdateStatus(current => current with { WowProcess = status });
-        _ = ApplyCombatLogMonitoringForWowChangeAsync();
-    }
-
-    private async Task ApplyCombatLogMonitoringForWowChangeAsync()
-    {
-        await _lifetimeLock.WaitAsync(CancellationToken.None);
-
-        try
-        {
-            if (_disposed || _recordingCoordinator is null)
-            {
-                return;
-            }
-
-            await ApplyCombatLogMonitoringForCurrentStateAsync();
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Could not apply WoW-gated combat-log monitoring state");
-            UpdateStatus(status =>
-                status with
-                {
-                    CombatLog = GetInactiveCombatLogStatus(
-                        status.EffectiveSettings,
-                        status.WowProcess
-                    ) with
-                    {
-                        LastFileSystemError = exception,
-                    },
-                }
-            );
-        }
-        finally
-        {
-            _lifetimeLock.Release();
-        }
-    }
-
-    private async Task ApplyCombatLogMonitoringForCurrentStateAsync()
-    {
-        var status = Status;
-        var settings = status.EffectiveSettings;
-
-        if (
-            settings is null
-            || !status.WowProcess.IsWindowAvailable
-            || settings.WowLogsDirectory is null
-        )
-        {
-            await StopCombatLogMonitoringAsync();
-            UpdateStatus(current =>
-                current with
-                {
-                    CombatLog = GetInactiveCombatLogStatus(settings, current.WowProcess),
-                }
-            );
-            return;
-        }
-
-        if (_combatLogMonitor is not null)
-        {
-            return;
-        }
-
-        StartCombatLogMonitoring(settings.WowLogsDirectory, GetSettingsProvider());
-    }
-
-    private static CombatLogReaderStatus GetInactiveCombatLogStatus(
-        PullWatchSettings? settings,
-        WowProcessStatus wowProcess
-    )
-    {
-        return InitialCombatLogStatus with
-        {
-            State =
-                !wowProcess.IsWindowAvailable ? CombatLogReaderState.WaitingForWow
-                : settings?.WowLogsDirectory is null ? CombatLogReaderState.WaitingForLogsDirectory
-                : CombatLogReaderState.WaitingForCombatLog,
-        };
-    }
-
     private void UpdateStatus(Func<ApplicationStatus, ApplicationStatus> update)
     {
-        lock (_notificationLock)
-        {
-            var snapshot = update(Status);
-            Volatile.Write(ref _status, snapshot);
-            _notificationQueue = _notificationQueue.ContinueWith(
-                _ => NotifyStatusChanged(snapshot),
-                CancellationToken.None,
-                TaskContinuationOptions.None,
-                TaskScheduler.Default
-            );
-        }
-    }
-
-    private void NotifyStatusChanged(ApplicationStatus snapshot)
-    {
-        var handlers = StatusChanged;
-
-        if (handlers is null)
-        {
-            return;
-        }
-
-        foreach (Action<ApplicationStatus> handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                handler(snapshot);
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Application status subscriber failed");
-            }
-        }
+        _statusPublisher.Update(update);
     }
 }
