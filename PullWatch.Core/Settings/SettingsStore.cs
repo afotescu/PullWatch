@@ -125,11 +125,7 @@ public sealed class SettingsStore
 
     private static string GetDefaultSettingsPath()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PullWatch",
-            "settings.json"
-        );
+        return PullWatchDataPaths.SettingsPath;
     }
 
     private static void ReplaceFile(string sourcePath, string destinationPath)

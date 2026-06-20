@@ -52,6 +52,41 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task StartupInitializesStorageBeforeCreatingRecordingService()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        var initializer = new FakeRecordingStorageInitializer();
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ =>
+            {
+                Assert.Equal(1, initializer.Calls);
+                return new FakeRecordingService();
+            },
+            _ => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance,
+            storageInitializer: initializer
+        );
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, initializer.Calls);
+    }
+
+    [Fact]
     public async Task StartupWithLogsDirectoryStartsMonitoringAndAggregatesStatus()
     {
         using var directory = new TemporaryDirectory();
@@ -490,6 +525,18 @@ public sealed class ApplicationControllerTests
         public void Dispose()
         {
             Directory.Delete(Path, true);
+        }
+    }
+
+    private sealed class FakeRecordingStorageInitializer : IRecordingStorageInitializer
+    {
+        public int Calls { get; private set; }
+
+        public Task InitializeAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            return Task.CompletedTask;
         }
     }
 }

@@ -33,6 +33,7 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly Func<SettingsProvider, IRecordingService> _createRecordingService;
     private readonly Func<string, ICombatLogMonitor> _createCombatLogMonitor;
     private readonly Func<IWowProcessMonitor>? _createWowProcessMonitor;
+    private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ApplicationController> _logger;
     private readonly SemaphoreSlim _lifetimeLock = new(1, 1);
@@ -67,7 +68,11 @@ public sealed class ApplicationController : IAsyncDisposable
             ),
             path => new CombatLogReader(path, loggerFactory.CreateLogger<CombatLogReader>()),
             loggerFactory,
-            () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>())
+            () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>()),
+            new RecordingStorageInitializer(
+                new SqliteConnectionFactory(new RecordingDatabasePathProvider()),
+                loggerFactory
+            )
         ) { }
 
     internal ApplicationController(
@@ -75,13 +80,15 @@ public sealed class ApplicationController : IAsyncDisposable
         Func<SettingsProvider, IRecordingService> createRecordingService,
         Func<string, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
-        Func<IWowProcessMonitor>? createWowProcessMonitor = null
+        Func<IWowProcessMonitor>? createWowProcessMonitor = null,
+        IRecordingStorageInitializer? storageInitializer = null
     )
     {
         _settingsBootstrapper = settingsBootstrapper;
         _createRecordingService = createRecordingService;
         _createCombatLogMonitor = createCombatLogMonitor;
         _createWowProcessMonitor = createWowProcessMonitor;
+        _storageInitializer = storageInitializer ?? NoOpRecordingStorageInitializer.Instance;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<ApplicationController>();
     }
@@ -111,6 +118,7 @@ public sealed class ApplicationController : IAsyncDisposable
                 await _settingsBootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken)
                 ?? throw new InvalidOperationException("Could not load valid effective settings.");
             var settings = bootstrapResult.Settings;
+            await _storageInitializer.InitializeAsync(cancellationToken);
             var settingsProvider = new SettingsProvider(settings);
             var settingsService = new ApplicationSettingsService(
                 _settingsBootstrapper.Store,
