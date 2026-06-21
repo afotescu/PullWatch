@@ -98,7 +98,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     public Task<RecordingCommandResult> StopAutomaticAsync(
         RecordingOwner owner,
         string? identity,
-        EncounterRecordingEnd? encounterEnd,
+        RecordingActivityEnd? activityEnd,
         CancellationToken cancellationToken
     )
     {
@@ -111,7 +111,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(owner, identity, encounterEnd, StopRequestKind.Automatic)
+        return StopCoreAsync(owner, identity, activityEnd, StopRequestKind.Automatic)
             .WaitAsync(cancellationToken);
     }
 
@@ -318,7 +318,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private async Task<RecordingCommandResult> StopCoreAsync(
         RecordingOwner? requestedOwner,
         string? requestedIdentity,
-        EncounterRecordingEnd? encounterEnd,
+        RecordingActivityEnd? activityEnd,
         StopRequestKind requestKind
     )
     {
@@ -375,7 +375,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             try
             {
                 await stopTask.WaitAsync(_stopTimeout);
-                await CompleteCatalogRecordingAsync(catalogRecordingId, encounterEnd);
+                await CompleteCatalogRecordingAsync(catalogRecordingId, activityEnd);
                 _savedCount++;
                 PublishStatus(RecordingCoordinatorState.Idle, null, null, null);
                 return RecordingCommandResult.Stopped;
@@ -396,7 +396,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 _ = ObserveCleanupAsync(
                     stopTask,
                     catalogRecordingId,
-                    encounterEnd,
+                    activityEnd,
                     countAsSaved: true
                 );
                 _logger.LogError(
@@ -449,7 +449,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 
     private async Task CompleteCatalogRecordingAsync(
         Guid? recordingId,
-        EncounterRecordingEnd? encounterEnd
+        RecordingActivityEnd? activityEnd
     )
     {
         if (_recordingCatalog is null || recordingId is null)
@@ -460,7 +460,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         await _recordingCatalog.CompleteRecordingAsync(
             recordingId.Value,
             DateTimeOffset.UtcNow,
-            encounterEnd,
+            activityEnd,
             CancellationToken.None
         );
         ClearActiveCatalogRecording(recordingId);
@@ -512,7 +512,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
     private async Task ObserveCleanupAsync(
         Task cleanupTask,
         Guid? catalogRecordingId,
-        EncounterRecordingEnd? encounterEnd,
+        RecordingActivityEnd? activityEnd,
         bool countAsSaved
     )
     {
@@ -537,7 +537,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
                 {
                     if (countAsSaved)
                     {
-                        await CompleteCatalogRecordingAsync(catalogRecordingId, encounterEnd);
+                        await CompleteCatalogRecordingAsync(catalogRecordingId, activityEnd);
                         _savedCount++;
                     }
 

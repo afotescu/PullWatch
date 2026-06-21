@@ -28,6 +28,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 null,
                 null
             ),
+            CreateChallengeModeSave(id, context),
             CreateRaidEncounterSave(id, context),
             cancellationToken
         );
@@ -47,7 +48,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
     public async Task CompleteRecordingAsync(
         Guid id,
         DateTimeOffset endedAtUtc,
-        EncounterRecordingEnd? encounterEnd,
+        RecordingActivityEnd? activityEnd,
         CancellationToken cancellationToken
     )
     {
@@ -79,7 +80,8 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 file.Length,
                 new DateTimeOffset(file.LastWriteTimeUtc)
             ),
-            CreateRaidEncounterCompletionSave(entry, encounterEnd),
+            CreateChallengeModeCompletionSave(entry, activityEnd),
+            CreateRaidEncounterCompletionSave(entry, activityEnd),
             cancellationToken
         );
     }
@@ -124,6 +126,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         var normalizedDirectory = NormalizeDirectoryPath(recordingsDirectory);
         var recordings = new List<RecordingCatalogFile>();
         var entries = await _repository.ListAsync(cancellationToken);
+        var challengeModes = await LoadChallengeModesAsync(entries, cancellationToken);
         var raidEncounters = await LoadRaidEncountersAsync(entries, cancellationToken);
 
         foreach (var entry in entries)
@@ -162,7 +165,8 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                     entry.EndedAtUtc,
                     file.Length,
                     new DateTimeOffset(file.LastWriteTimeUtc),
-                    raidEncounters.GetValueOrDefault(entry.Id)
+                    raidEncounters.GetValueOrDefault(entry.Id),
+                    challengeModes.GetValueOrDefault(entry.Id)
                 )
             );
         }
@@ -174,6 +178,23 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 StringComparer.OrdinalIgnoreCase
             )
             .ToList();
+    }
+
+    private async Task<Dictionary<Guid, ChallengeModeEntry>> LoadChallengeModesAsync(
+        IReadOnlyList<RecordingCatalogEntry> entries,
+        CancellationToken cancellationToken
+    )
+    {
+        var challengeModeRecordingIds = entries
+            .Where(entry => entry.Kind == RecordingCatalogKind.ChallengeMode)
+            .Select(entry => entry.Id)
+            .ToArray();
+        var challengeModes = await _repository.ListChallengeModesByRecordingIdsAsync(
+            challengeModeRecordingIds,
+            cancellationToken
+        );
+
+        return challengeModes.ToDictionary(challengeMode => challengeMode.RecordingId);
     }
 
     private async Task<Dictionary<Guid, RaidEncounterEntry>> LoadRaidEncountersAsync(
@@ -229,17 +250,61 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
             : null;
     }
 
-    private static RaidEncounterCompletionSave? CreateRaidEncounterCompletionSave(
-        RecordingCatalogEntry entry,
-        EncounterRecordingEnd? encounterEnd
+    private static ChallengeModeSave? CreateChallengeModeSave(
+        Guid recordingId,
+        RecordingContext context
     )
     {
-        return entry.Kind == RecordingCatalogKind.Encounter && encounterEnd is not null
+        return context is ChallengeRecordingContext challengeMode
+            ? new ChallengeModeSave(
+                recordingId,
+                challengeMode.DungeonName,
+                challengeMode.MapId,
+                challengeMode.ChallengeModeId,
+                challengeMode.KeystoneLevel,
+                challengeMode.AffixIds,
+                challengeMode.StartedAt.ToUniversalTime(),
+                ChallengeModeOutcome.Unknown,
+                null,
+                null,
+                null,
+                null
+            )
+            : null;
+    }
+
+    private static RaidEncounterCompletionSave? CreateRaidEncounterCompletionSave(
+        RecordingCatalogEntry entry,
+        RecordingActivityEnd? activityEnd
+    )
+    {
+        return
+            entry.Kind == RecordingCatalogKind.Encounter
+            && activityEnd is EncounterRecordingEnd encounterEnd
             ? new RaidEncounterCompletionSave(
                 entry.Id,
                 encounterEnd.Outcome,
                 encounterEnd.EndedAt.ToUniversalTime(),
                 encounterEnd.DurationMilliseconds
+            )
+            : null;
+    }
+
+    private static ChallengeModeCompletionSave? CreateChallengeModeCompletionSave(
+        RecordingCatalogEntry entry,
+        RecordingActivityEnd? activityEnd
+    )
+    {
+        return
+            entry.Kind == RecordingCatalogKind.ChallengeMode
+            && activityEnd is ChallengeRecordingEnd challengeEnd
+            ? new ChallengeModeCompletionSave(
+                entry.Id,
+                challengeEnd.Outcome,
+                challengeEnd.EndedAt.ToUniversalTime(),
+                challengeEnd.TotalTimeMilliseconds,
+                challengeEnd.OnTimeSeconds,
+                challengeEnd.TimerLimitSeconds
             )
             : null;
     }

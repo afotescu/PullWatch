@@ -39,7 +39,7 @@ public sealed class CombatLogEventHandler(
                 {
                     LogMalformedKnownEvent(
                         combatLogEvent,
-                        "Challenge start is missing a dungeon name or valid level"
+                        "Challenge start is missing a dungeon name, map id, challenge mode id, level, or affixes"
                     );
                     break;
                 }
@@ -80,12 +80,28 @@ public sealed class CombatLogEventHandler(
                 );
                 break;
             case WowEvents.ChallengeModeEnd:
+                ChallengeRecordingEnd? challengeEnd = null;
+
+                if (
+                    !CombatLogEventMetadataParser.TryParseChallengeEnd(
+                        combatLogEvent,
+                        receivedAt,
+                        out challengeEnd
+                    )
+                )
+                {
+                    LogMalformedKnownEvent(
+                        combatLogEvent,
+                        "Challenge end is missing valid completion metadata"
+                    );
+                }
+
                 await HandleEndAsync(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.ChallengeMode,
                     null,
-                    null,
+                    challengeEnd,
                     cancellationToken
                 );
                 break;
@@ -156,7 +172,7 @@ public sealed class CombatLogEventHandler(
         long eventTimestamp,
         RecordingOwner owner,
         string? identity,
-        EncounterRecordingEnd? encounterEnd,
+        RecordingActivityEnd? activityEnd,
         CancellationToken cancellationToken
     )
     {
@@ -164,7 +180,7 @@ public sealed class CombatLogEventHandler(
         var result = await recordingCoordinator.StopAutomaticAsync(
             owner,
             identity,
-            encounterEnd,
+            activityEnd,
             cancellationToken
         );
         LogCommandResult(combatLogEvent.Name, result);
@@ -282,6 +298,20 @@ public sealed class CombatLogEventHandler(
                 "Encounter ended: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, success {Success}, duration {DurationMilliseconds} ms",
                 arguments[1],
                 arguments[0],
+                arguments[2],
+                arguments[3],
+                arguments[4],
+                arguments[5]
+            );
+            return;
+        }
+
+        if (combatLogEvent.Name == WowEvents.ChallengeModeEnd && arguments.Count >= 6)
+        {
+            logger.LogInformation(
+                "Challenge ended: instance {InstanceId}, success {Success}, level {Level}, total time {TotalTimeMilliseconds} ms, on-time delta {OnTimeSeconds} s, timer limit {TimerLimitSeconds} s",
+                arguments[0],
+                arguments[1],
                 arguments[2],
                 arguments[3],
                 arguments[4],

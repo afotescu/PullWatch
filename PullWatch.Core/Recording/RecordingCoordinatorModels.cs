@@ -7,8 +7,13 @@ public sealed record ManualRecordingContext(DateTimeOffset StartedAt) : Recordin
 public sealed record ChallengeRecordingContext(
     DateTimeOffset StartedAt,
     string DungeonName,
-    int Level
+    int MapId,
+    int ChallengeModeId,
+    int KeystoneLevel,
+    IReadOnlyList<int> AffixIds
 ) : RecordingContext(StartedAt);
+
+public abstract record RecordingActivityEnd(DateTimeOffset EndedAt);
 
 public sealed record EncounterRecordingContext(
     DateTimeOffset StartedAt,
@@ -27,7 +32,17 @@ public sealed record EncounterRecordingEnd(
     int? GroupSize,
     RaidEncounterOutcome Outcome,
     int? DurationMilliseconds
-);
+) : RecordingActivityEnd(EndedAt);
+
+public sealed record ChallengeRecordingEnd(
+    DateTimeOffset EndedAt,
+    int MapId,
+    ChallengeModeOutcome Outcome,
+    int KeystoneLevel,
+    int? TotalTimeMilliseconds,
+    double? OnTimeSeconds,
+    int? TimerLimitSeconds
+) : RecordingActivityEnd(EndedAt);
 
 public enum RecordingOwner
 {
@@ -41,6 +56,13 @@ public enum RaidEncounterOutcome
     Unknown,
     Wipe,
     Kill,
+}
+
+public enum ChallengeModeOutcome
+{
+    Unknown,
+    Depleted,
+    Timed,
 }
 
 public enum RecordingCoordinatorState

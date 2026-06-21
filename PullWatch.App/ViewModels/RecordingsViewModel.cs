@@ -254,9 +254,9 @@ public sealed class RecordingsViewModel : ObservableObject
                 Path.GetFileNameWithoutExtension(file.FilePath),
                 FormatStartedAt(file),
                 GetEncounterName(file),
-                FormatDifficulty(file.RaidEncounter),
-                FormatOutcome(file.RaidEncounter),
-                FormatFightDuration(file.RaidEncounter),
+                FormatDifficulty(file),
+                FormatOutcome(file),
+                FormatFightDuration(file),
                 file.ModifiedAtUtc.ToLocalTime(),
                 file.SizeBytes
             ))
@@ -265,7 +265,10 @@ public sealed class RecordingsViewModel : ObservableObject
 
     private static string FormatStartedAt(RecordingCatalogFile file)
     {
-        var startedAtUtc = file.RaidEncounter?.EncounterStartedAtUtc ?? file.StartedAtUtc;
+        var startedAtUtc =
+            file.RaidEncounter?.EncounterStartedAtUtc
+            ?? file.ChallengeMode?.ChallengeStartedAtUtc
+            ?? file.StartedAtUtc;
 
         return startedAtUtc is null
             ? MissingMetadataValue
@@ -279,6 +282,11 @@ public sealed class RecordingsViewModel : ObservableObject
             return raidEncounter.EncounterName;
         }
 
+        if (file.ChallengeMode is { } challengeMode)
+        {
+            return challengeMode.DungeonName;
+        }
+
         return file.Kind switch
         {
             RecordingCatalogKind.Encounter => "Unknown encounter",
@@ -288,11 +296,11 @@ public sealed class RecordingsViewModel : ObservableObject
         };
     }
 
-    private static string FormatDifficulty(RaidEncounterEntry? raidEncounter)
+    private static string FormatDifficulty(RecordingCatalogFile file)
     {
-        return raidEncounter is null
-            ? MissingMetadataValue
-            : raidEncounter.DifficultyId switch
+        if (file.RaidEncounter is { } raidEncounter)
+        {
+            return raidEncounter.DifficultyId switch
             {
                 NormalRaidDifficultyId => "Normal",
                 HeroicRaidDifficultyId => "Heroic",
@@ -301,33 +309,65 @@ public sealed class RecordingsViewModel : ObservableObject
                 FlexibleMythicRaidDifficultyId => "Mythic",
                 _ => $"Difficulty {raidEncounter.DifficultyId}",
             };
+        }
+
+        return file.ChallengeMode is { } challengeMode
+            ? $"+{challengeMode.KeystoneLevel}"
+            : MissingMetadataValue;
     }
 
-    private static string FormatOutcome(RaidEncounterEntry? raidEncounter)
+    private static string FormatOutcome(RecordingCatalogFile file)
     {
-        return raidEncounter?.Outcome switch
+        if (file.RaidEncounter is { } raidEncounter)
+        {
+            return raidEncounter.Outcome switch
+            {
+                RaidEncounterOutcome.Kill => "Kill",
+                RaidEncounterOutcome.Wipe => "Wipe",
+                _ => "Unknown",
+            };
+        }
+
+        return file.ChallengeMode?.Outcome switch
         {
             null => MissingMetadataValue,
-            RaidEncounterOutcome.Kill => "Kill",
-            RaidEncounterOutcome.Wipe => "Wipe",
+            ChallengeModeOutcome.Timed => "Timed",
+            ChallengeModeOutcome.Depleted => "Depleted",
             _ => "Unknown",
         };
     }
 
-    private static string FormatFightDuration(RaidEncounterEntry? raidEncounter)
+    private static string FormatFightDuration(RecordingCatalogFile file)
     {
-        if (raidEncounter is null)
+        if (file.RaidEncounter is { } raidEncounter)
         {
-            return MissingMetadataValue;
+            var duration =
+                raidEncounter.DurationMilliseconds is { } durationMilliseconds
+                    ? TimeSpan.FromMilliseconds(Math.Max(0, durationMilliseconds))
+                : raidEncounter.EncounterEndedAtUtc is { } endedAt
+                    ? endedAt - raidEncounter.EncounterStartedAtUtc
+                : (TimeSpan?)null;
+
+            return FormatNullableDuration(duration);
         }
 
-        var duration =
-            raidEncounter.DurationMilliseconds is { } durationMilliseconds
-                ? TimeSpan.FromMilliseconds(Math.Max(0, durationMilliseconds))
-            : raidEncounter.EncounterEndedAtUtc is { } endedAt
-                ? endedAt - raidEncounter.EncounterStartedAtUtc
-            : (TimeSpan?)null;
+        if (file.ChallengeMode is { } challengeMode)
+        {
+            var duration =
+                challengeMode.TotalTimeMilliseconds is { } totalTimeMilliseconds
+                    ? TimeSpan.FromMilliseconds(Math.Max(0, totalTimeMilliseconds))
+                : challengeMode.ChallengeEndedAtUtc is { } endedAt
+                    ? endedAt - challengeMode.ChallengeStartedAtUtc
+                : (TimeSpan?)null;
 
+            return FormatNullableDuration(duration);
+        }
+
+        return MissingMetadataValue;
+    }
+
+    private static string FormatNullableDuration(TimeSpan? duration)
+    {
         return duration is null
             ? MissingMetadataValue
             : RecordingTimeFormatter.FormatPlaybackTime(

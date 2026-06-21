@@ -1,11 +1,21 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace PullWatch;
 
 internal static class CombatLogEventMetadataParser
 {
     private const int ChallengeDungeonNameIndex = 0;
+    private const int ChallengeMapIdIndex = 1;
+    private const int ChallengeModeIdIndex = 2;
     private const int ChallengeLevelIndex = 3;
+    private const int ChallengeAffixesIndex = 4;
+    private const int ChallengeEndMapIdIndex = 0;
+    private const int ChallengeEndSuccessIndex = 1;
+    private const int ChallengeEndLevelIndex = 2;
+    private const int ChallengeEndTotalTimeMillisecondsIndex = 3;
+    private const int ChallengeEndOnTimeSecondsIndex = 4;
+    private const int ChallengeEndTimerLimitSecondsIndex = 5;
     private const int EncounterIdIndex = 0;
     private const int EncounterNameIndex = 1;
     private const int EncounterDifficultyIdIndex = 2;
@@ -25,8 +35,14 @@ internal static class CombatLogEventMetadataParser
 
         if (
             arguments.Count <= ChallengeDungeonNameIndex
+            || arguments.Count <= ChallengeMapIdIndex
+            || arguments.Count <= ChallengeModeIdIndex
             || arguments.Count <= ChallengeLevelIndex
+            || arguments.Count <= ChallengeAffixesIndex
+            || !TryParseInt(arguments[ChallengeMapIdIndex], out var mapId)
+            || !TryParseInt(arguments[ChallengeModeIdIndex], out var challengeModeId)
             || !TryParseInt(arguments[ChallengeLevelIndex], out var level)
+            || !TryParseIntArray(arguments[ChallengeAffixesIndex], out var affixIds)
         )
         {
             return false;
@@ -35,7 +51,58 @@ internal static class CombatLogEventMetadataParser
         context = new ChallengeRecordingContext(
             startedAt,
             arguments[ChallengeDungeonNameIndex],
-            level
+            mapId,
+            challengeModeId,
+            level,
+            affixIds
+        );
+        return true;
+    }
+
+    public static bool TryParseChallengeEnd(
+        CombatLogEvent combatLogEvent,
+        DateTimeOffset endedAt,
+        out ChallengeRecordingEnd challengeEnd
+    )
+    {
+        var arguments = combatLogEvent.Arguments;
+        challengeEnd = null!;
+
+        if (
+            arguments.Count <= ChallengeEndMapIdIndex
+            || arguments.Count <= ChallengeEndSuccessIndex
+            || arguments.Count <= ChallengeEndLevelIndex
+            || !TryParseInt(arguments[ChallengeEndMapIdIndex], out var mapId)
+            || !TryParseChallengeOutcome(arguments[ChallengeEndSuccessIndex], out var outcome)
+            || !TryParseInt(arguments[ChallengeEndLevelIndex], out var level)
+            || !TryParseOptionalInt(
+                arguments,
+                ChallengeEndTotalTimeMillisecondsIndex,
+                out var totalTimeMilliseconds
+            )
+            || !TryParseOptionalDouble(
+                arguments,
+                ChallengeEndOnTimeSecondsIndex,
+                out var onTimeSeconds
+            )
+            || !TryParseOptionalInt(
+                arguments,
+                ChallengeEndTimerLimitSecondsIndex,
+                out var timerLimitSeconds
+            )
+        )
+        {
+            return false;
+        }
+
+        challengeEnd = new ChallengeRecordingEnd(
+            endedAt,
+            mapId,
+            outcome,
+            level,
+            totalTimeMilliseconds,
+            onTimeSeconds,
+            timerLimitSeconds
         );
         return true;
     }
@@ -138,13 +205,104 @@ internal static class CombatLogEventMetadataParser
             return true;
         }
 
-        if (!TryParseInt(arguments[index], out var parsed))
+        if (!TryParseFlexibleInt(arguments[index], out var parsed))
         {
             return false;
         }
 
         result = parsed;
         return true;
+    }
+
+    private static bool TryParseOptionalDouble(
+        IReadOnlyList<string> arguments,
+        int index,
+        out double? result
+    )
+    {
+        result = null;
+
+        if (arguments.Count <= index)
+        {
+            return true;
+        }
+
+        if (
+            !double.TryParse(
+                arguments[index],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed
+            )
+        )
+        {
+            return false;
+        }
+
+        result = parsed;
+        return true;
+    }
+
+    private static bool TryParseIntArray(string value, out IReadOnlyList<int> result)
+    {
+        result = [];
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<int[]>(value);
+            if (parsed is null)
+            {
+                return false;
+            }
+
+            result = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryParseFlexibleInt(string value, out int result)
+    {
+        if (TryParseInt(value, out result))
+        {
+            return true;
+        }
+
+        if (
+            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            && parsed == Math.Truncate(parsed)
+            && parsed >= int.MinValue
+            && parsed <= int.MaxValue
+        )
+        {
+            result = (int)parsed;
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
+
+    private static bool TryParseChallengeOutcome(string value, out ChallengeModeOutcome outcome)
+    {
+        outcome = ChallengeModeOutcome.Unknown;
+
+        if (!TryParseInt(value, out var parsed))
+        {
+            return false;
+        }
+
+        outcome = parsed switch
+        {
+            0 => ChallengeModeOutcome.Depleted,
+            1 => ChallengeModeOutcome.Timed,
+            _ => ChallengeModeOutcome.Unknown,
+        };
+
+        return outcome != ChallengeModeOutcome.Unknown;
     }
 
     private static bool TryParseOutcome(string value, out RaidEncounterOutcome outcome)

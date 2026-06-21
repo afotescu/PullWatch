@@ -14,7 +14,14 @@ public sealed class RecordingFilenameBuilderTests
         Assert.Equal(
             "20260615_001510_mythic-plus_magisters-terrace_22",
             RecordingFilenameBuilder.BuildBaseName(
-                new ChallengeRecordingContext(StartedAt, "Magisters' Terrace", 22)
+                new ChallengeRecordingContext(
+                    StartedAt,
+                    "Magisters' Terrace",
+                    2811,
+                    558,
+                    22,
+                    [9, 10, 147]
+                )
             )
         );
         Assert.Equal(

@@ -21,7 +21,35 @@ public sealed class CombatLogEventMetadataParserTests
         Assert.True(parsed);
         Assert.Equal(StartedAt, context.StartedAt);
         Assert.Equal("Magisters' Terrace", context.DungeonName);
-        Assert.Equal(22, context.Level);
+        Assert.Equal(2811, context.MapId);
+        Assert.Equal(558, context.ChallengeModeId);
+        Assert.Equal(22, context.KeystoneLevel);
+        Assert.Equal([9, 10, 147], context.AffixIds);
+    }
+
+    [Fact]
+    public void ParsesChallengeEnd()
+    {
+        var endedAt = StartedAt.AddMinutes(31);
+        var combatLogEvent = CreateEvent(
+            WowEvents.ChallengeModeEnd,
+            "2811,1,22,1850000,32.500000,1800.000000"
+        );
+
+        var parsed = CombatLogEventMetadataParser.TryParseChallengeEnd(
+            combatLogEvent,
+            endedAt,
+            out var challengeEnd
+        );
+
+        Assert.True(parsed);
+        Assert.Equal(endedAt, challengeEnd.EndedAt);
+        Assert.Equal(2811, challengeEnd.MapId);
+        Assert.Equal(ChallengeModeOutcome.Timed, challengeEnd.Outcome);
+        Assert.Equal(22, challengeEnd.KeystoneLevel);
+        Assert.Equal(1850000, challengeEnd.TotalTimeMilliseconds);
+        Assert.Equal(32.5, challengeEnd.OnTimeSeconds);
+        Assert.Equal(1800, challengeEnd.TimerLimitSeconds);
     }
 
     [Fact]
@@ -126,6 +154,46 @@ public sealed class CombatLogEventMetadataParserTests
         );
 
         Assert.False(parsed);
+    }
+
+    [Fact]
+    public void ChallengeStartWithMalformedAffixesReturnsFalse()
+    {
+        var combatLogEvent = CreateEvent(
+            WowEvents.ChallengeModeStart,
+            "\"Magisters' Terrace\",2811,558,22,not-json"
+        );
+
+        var parsed = CombatLogEventMetadataParser.TryParseChallengeStart(
+            combatLogEvent,
+            StartedAt,
+            out _
+        );
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
+    public void ChallengeEndWithInvalidCompletionMetadataReturnsFalse()
+    {
+        string[] arguments =
+        [
+            "2811,invalid,22,1850000,32.500000,1800",
+            "2811,2,22,1850000,32.500000,1800",
+            "2811,1,invalid,1850000,32.500000,1800",
+        ];
+
+        foreach (var value in arguments)
+        {
+            var combatLogEvent = CreateEvent(WowEvents.ChallengeModeEnd, value);
+            var parsed = CombatLogEventMetadataParser.TryParseChallengeEnd(
+                combatLogEvent,
+                StartedAt,
+                out _
+            );
+
+            Assert.False(parsed);
+        }
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -30,6 +31,22 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         Outcome,
         EncounterEndedAtUtc,
         DurationMilliseconds
+        """;
+    private const string ChallengeModeSelectColumns = """
+        RecordingId,
+        CreatedAtUtc,
+        UpdatedAtUtc,
+        DungeonName,
+        MapId,
+        ChallengeModeId,
+        KeystoneLevel,
+        AffixIdsJson,
+        ChallengeStartedAtUtc,
+        Outcome,
+        ChallengeEndedAtUtc,
+        TotalTimeMilliseconds,
+        OnTimeSeconds,
+        TimerLimitSeconds
         """;
 
     private readonly SqliteConnectionFactory _connectionFactory =
@@ -86,7 +103,18 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken
     )
     {
+        return await UpdateAsync(recording, null, raidEncounterCompletion, cancellationToken);
+    }
+
+    public async Task<bool> UpdateAsync(
+        RecordingCatalogSave recording,
+        ChallengeModeCompletionSave? challengeModeCompletion,
+        RaidEncounterCompletionSave? raidEncounterCompletion,
+        CancellationToken cancellationToken
+    )
+    {
         Validate(recording);
+        Validate(challengeModeCompletion);
         Validate(raidEncounterCompletion);
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(
@@ -100,6 +128,16 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             recording,
             cancellationToken
         );
+
+        if (affectedRows > 0 && challengeModeCompletion is not null)
+        {
+            await ExecuteChallengeModeCompletionUpdateAsync(
+                connection,
+                transaction,
+                challengeModeCompletion,
+                cancellationToken
+            );
+        }
 
         if (affectedRows > 0 && raidEncounterCompletion is not null)
         {
@@ -130,7 +168,18 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken
     )
     {
+        await UpsertAsync(recording, null, raidEncounter, cancellationToken);
+    }
+
+    public async Task UpsertAsync(
+        RecordingCatalogSave recording,
+        ChallengeModeSave? challengeMode,
+        RaidEncounterSave? raidEncounter,
+        CancellationToken cancellationToken
+    )
+    {
         Validate(recording);
+        Validate(challengeMode);
         Validate(raidEncounter);
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(
@@ -139,6 +188,16 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         using var transaction = connection.BeginTransaction();
 
         await ExecuteRecordingUpsertAsync(connection, transaction, recording, cancellationToken);
+
+        if (challengeMode is not null)
+        {
+            await ExecuteChallengeModeUpsertAsync(
+                connection,
+                transaction,
+                challengeMode,
+                cancellationToken
+            );
+        }
 
         if (raidEncounter is not null)
         {
@@ -194,6 +253,57 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                 $"""
                 SELECT {RaidEncounterSelectColumns}
                 FROM RecordingRaidEncounters
+                WHERE RecordingId IN @RecordingIds;
+                """,
+                new { RecordingIds = recordingIds.Select(FormatId).ToArray() },
+                cancellationToken: cancellationToken
+            )
+        );
+
+        return rows.Select(FromRow).ToList();
+    }
+
+    public async Task<ChallengeModeEntry?> GetChallengeModeByRecordingIdAsync(
+        Guid recordingId,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var row = await connection.QuerySingleOrDefaultAsync<ChallengeModeRow>(
+            new CommandDefinition(
+                $"""
+                SELECT {ChallengeModeSelectColumns}
+                FROM RecordingChallengeModes
+                WHERE RecordingId = @RecordingId;
+                """,
+                new { RecordingId = FormatId(recordingId) },
+                cancellationToken: cancellationToken
+            )
+        );
+
+        return row is null ? null : FromRow(row);
+    }
+
+    public async Task<IReadOnlyList<ChallengeModeEntry>> ListChallengeModesByRecordingIdsAsync(
+        IReadOnlyCollection<Guid> recordingIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (recordingIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var rows = await connection.QueryAsync<ChallengeModeRow>(
+            new CommandDefinition(
+                $"""
+                SELECT {ChallengeModeSelectColumns}
+                FROM RecordingChallengeModes
                 WHERE RecordingId IN @RecordingIds;
                 """,
                 new { RecordingIds = recordingIds.Select(FormatId).ToArray() },
@@ -366,6 +476,64 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
     }
 
+    private static async Task ExecuteChallengeModeUpsertAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ChallengeModeSave challengeMode,
+        CancellationToken cancellationToken
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO RecordingChallengeModes (
+                    RecordingId,
+                    DungeonName,
+                    MapId,
+                    ChallengeModeId,
+                    KeystoneLevel,
+                    AffixIdsJson,
+                    ChallengeStartedAtUtc,
+                    Outcome,
+                    ChallengeEndedAtUtc,
+                    TotalTimeMilliseconds,
+                    OnTimeSeconds,
+                    TimerLimitSeconds
+                )
+                VALUES (
+                    @RecordingId,
+                    @DungeonName,
+                    @MapId,
+                    @ChallengeModeId,
+                    @KeystoneLevel,
+                    @AffixIdsJson,
+                    @ChallengeStartedAtUtc,
+                    @Outcome,
+                    @ChallengeEndedAtUtc,
+                    @TotalTimeMilliseconds,
+                    @OnTimeSeconds,
+                    @TimerLimitSeconds
+                )
+                ON CONFLICT(RecordingId) DO UPDATE SET
+                    DungeonName = excluded.DungeonName,
+                    MapId = excluded.MapId,
+                    ChallengeModeId = excluded.ChallengeModeId,
+                    KeystoneLevel = excluded.KeystoneLevel,
+                    AffixIdsJson = excluded.AffixIdsJson,
+                    ChallengeStartedAtUtc = excluded.ChallengeStartedAtUtc,
+                    Outcome = excluded.Outcome,
+                    ChallengeEndedAtUtc = excluded.ChallengeEndedAtUtc,
+                    TotalTimeMilliseconds = excluded.TotalTimeMilliseconds,
+                    OnTimeSeconds = excluded.OnTimeSeconds,
+                    TimerLimitSeconds = excluded.TimerLimitSeconds;
+                """,
+                ToParameters(challengeMode),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
     private static async Task ExecuteRaidEncounterUpsertAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -418,6 +586,32 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
     }
 
+    private static async Task ExecuteChallengeModeCompletionUpdateAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ChallengeModeCompletionSave challengeModeCompletion,
+        CancellationToken cancellationToken
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE RecordingChallengeModes
+                SET
+                    Outcome = @Outcome,
+                    ChallengeEndedAtUtc = @ChallengeEndedAtUtc,
+                    TotalTimeMilliseconds = @TotalTimeMilliseconds,
+                    OnTimeSeconds = @OnTimeSeconds,
+                    TimerLimitSeconds = @TimerLimitSeconds
+                WHERE RecordingId = @RecordingId;
+                """,
+                ToParameters(challengeModeCompletion),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
     private static async Task ExecuteRaidEncounterCompletionUpdateAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -448,6 +642,17 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         ArgumentException.ThrowIfNullOrWhiteSpace(recording.FilePath);
     }
 
+    private static void Validate(ChallengeModeSave? challengeMode)
+    {
+        if (challengeMode is null)
+        {
+            return;
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(challengeMode.DungeonName);
+        ArgumentNullException.ThrowIfNull(challengeMode.AffixIds);
+    }
+
     private static void Validate(RaidEncounterSave? raidEncounter)
     {
         if (raidEncounter is null)
@@ -456,6 +661,22 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(raidEncounter.EncounterName);
+    }
+
+    private static void Validate(ChallengeModeCompletionSave? challengeModeCompletion)
+    {
+        if (challengeModeCompletion is null)
+        {
+            return;
+        }
+
+        if (challengeModeCompletion.Outcome == ChallengeModeOutcome.Unknown)
+        {
+            throw new ArgumentException(
+                "Challenge mode completion must have a timed or depleted outcome.",
+                nameof(challengeModeCompletion)
+            );
+        }
     }
 
     private static void Validate(RaidEncounterCompletionSave? raidEncounterCompletion)
@@ -522,6 +743,26 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
     }
 
+    private static ChallengeModeEntry FromRow(ChallengeModeRow row)
+    {
+        return new ChallengeModeEntry(
+            Guid.Parse(row.RecordingId),
+            StorageTimestampFormatter.ParseUtc(row.CreatedAtUtc),
+            StorageTimestampFormatter.ParseUtc(row.UpdatedAtUtc),
+            row.DungeonName,
+            ToInt32(row.MapId),
+            ToInt32(row.ChallengeModeId),
+            ToInt32(row.KeystoneLevel),
+            ParseAffixIds(row.AffixIdsJson),
+            StorageTimestampFormatter.ParseUtc(row.ChallengeStartedAtUtc),
+            ParseEnum<ChallengeModeOutcome>(row.Outcome),
+            StorageTimestampFormatter.ParseNullableUtc(row.ChallengeEndedAtUtc),
+            ToNullableInt32(row.TotalTimeMilliseconds),
+            row.OnTimeSeconds,
+            ToNullableInt32(row.TimerLimitSeconds)
+        );
+    }
+
     private static TEnum ParseEnum<TEnum>(string value)
         where TEnum : struct, Enum
     {
@@ -547,6 +788,27 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         return value is null ? null : ToInt32(value.Value);
     }
 
+    private static string FormatAffixIds(IReadOnlyList<int> affixIds)
+    {
+        return JsonSerializer.Serialize(affixIds);
+    }
+
+    private static IReadOnlyList<int> ParseAffixIds(string value)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<int[]>(value)
+                ?? throw new InvalidOperationException("Affix ID list cannot be null.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                "Database value is not a valid affix ID list.",
+                exception
+            );
+        }
+    }
+
     private sealed record RecordingCatalogParameters(
         string Id,
         string FilePath,
@@ -557,6 +819,24 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         long? FileSizeBytes,
         string? FileModifiedAtUtc
     );
+
+    private static ChallengeModeParameters ToParameters(ChallengeModeSave challengeMode)
+    {
+        return new ChallengeModeParameters(
+            FormatId(challengeMode.RecordingId),
+            challengeMode.DungeonName,
+            challengeMode.MapId,
+            challengeMode.ChallengeModeId,
+            challengeMode.KeystoneLevel,
+            FormatAffixIds(challengeMode.AffixIds),
+            StorageTimestampFormatter.FormatUtc(challengeMode.ChallengeStartedAtUtc),
+            challengeMode.Outcome.ToString(),
+            StorageTimestampFormatter.FormatNullableUtc(challengeMode.ChallengeEndedAtUtc),
+            challengeMode.TotalTimeMilliseconds,
+            challengeMode.OnTimeSeconds,
+            challengeMode.TimerLimitSeconds
+        );
+    }
 
     private static RaidEncounterParameters ToParameters(RaidEncounterSave raidEncounter)
     {
@@ -571,6 +851,20 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             raidEncounter.Outcome.ToString(),
             StorageTimestampFormatter.FormatNullableUtc(raidEncounter.EncounterEndedAtUtc),
             raidEncounter.DurationMilliseconds
+        );
+    }
+
+    private static ChallengeModeCompletionParameters ToParameters(
+        ChallengeModeCompletionSave challengeModeCompletion
+    )
+    {
+        return new ChallengeModeCompletionParameters(
+            FormatId(challengeModeCompletion.RecordingId),
+            challengeModeCompletion.Outcome.ToString(),
+            StorageTimestampFormatter.FormatUtc(challengeModeCompletion.ChallengeEndedAtUtc),
+            challengeModeCompletion.TotalTimeMilliseconds,
+            challengeModeCompletion.OnTimeSeconds,
+            challengeModeCompletion.TimerLimitSeconds
         );
     }
 
@@ -599,6 +893,21 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string? FileModifiedAtUtc
     );
 
+    private sealed record ChallengeModeParameters(
+        string RecordingId,
+        string DungeonName,
+        int MapId,
+        int ChallengeModeId,
+        int KeystoneLevel,
+        string AffixIdsJson,
+        string ChallengeStartedAtUtc,
+        string Outcome,
+        string? ChallengeEndedAtUtc,
+        int? TotalTimeMilliseconds,
+        double? OnTimeSeconds,
+        int? TimerLimitSeconds
+    );
+
     private sealed record RaidEncounterParameters(
         string RecordingId,
         int EncounterId,
@@ -612,11 +921,37 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         int? DurationMilliseconds
     );
 
+    private sealed record ChallengeModeCompletionParameters(
+        string RecordingId,
+        string Outcome,
+        string ChallengeEndedAtUtc,
+        int? TotalTimeMilliseconds,
+        double? OnTimeSeconds,
+        int? TimerLimitSeconds
+    );
+
     private sealed record RaidEncounterCompletionParameters(
         string RecordingId,
         string Outcome,
         string EncounterEndedAtUtc,
         int? DurationMilliseconds
+    );
+
+    private sealed record ChallengeModeRow(
+        string RecordingId,
+        string CreatedAtUtc,
+        string UpdatedAtUtc,
+        string DungeonName,
+        long MapId,
+        long ChallengeModeId,
+        long KeystoneLevel,
+        string AffixIdsJson,
+        string ChallengeStartedAtUtc,
+        string Outcome,
+        string? ChallengeEndedAtUtc,
+        long? TotalTimeMilliseconds,
+        double? OnTimeSeconds,
+        long? TimerLimitSeconds
     );
 
     private sealed record RaidEncounterRow(

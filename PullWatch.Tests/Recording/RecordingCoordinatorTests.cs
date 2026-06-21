@@ -494,7 +494,14 @@ public sealed class RecordingCoordinatorTests
 
     private static ChallengeRecordingContext Challenge()
     {
-        return new ChallengeRecordingContext(DateTimeOffset.Now, "Magisters' Terrace", 22);
+        return new ChallengeRecordingContext(
+            DateTimeOffset.Now,
+            "Magisters' Terrace",
+            2811,
+            558,
+            22,
+            [9, 10, 147]
+        );
     }
 
     private static EncounterRecordingContext Encounter(int encounterId)

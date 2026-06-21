@@ -53,6 +53,37 @@ public sealed class RecordingStorageInitializerTests
             1L,
             await ScalarLongAsync(
                 factory,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'RecordingChallengeModes';",
+                cancellationToken
+            )
+        );
+        Assert.Equal(
+            1L,
+            await ScalarLongAsync(
+                factory,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_RecordingChallengeModes_ChallengeModeId';",
+                cancellationToken
+            )
+        );
+        Assert.Equal(
+            1L,
+            await ScalarLongAsync(
+                factory,
+                """
+                SELECT COUNT(*)
+                FROM pragma_foreign_key_list('RecordingChallengeModes')
+                WHERE "table" = 'Recordings'
+                    AND "from" = 'RecordingId'
+                    AND "to" = 'Id'
+                    AND on_delete = 'CASCADE';
+                """,
+                cancellationToken
+            )
+        );
+        Assert.Equal(
+            1L,
+            await ScalarLongAsync(
+                factory,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_RecordingRaidEncounters_EncounterId';",
                 cancellationToken
             )

@@ -46,7 +46,8 @@ public sealed record RecordingCatalogFile(
     DateTimeOffset? EndedAtUtc,
     long SizeBytes,
     DateTimeOffset ModifiedAtUtc,
-    RaidEncounterEntry? RaidEncounter = null
+    RaidEncounterEntry? RaidEncounter = null,
+    ChallengeModeEntry? ChallengeMode = null
 );
 
 public sealed record RaidEncounterEntry(
@@ -82,4 +83,45 @@ public sealed record RaidEncounterCompletionSave(
     RaidEncounterOutcome Outcome,
     DateTimeOffset EncounterEndedAtUtc,
     int? DurationMilliseconds
+);
+
+public sealed record ChallengeModeEntry(
+    Guid RecordingId,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc,
+    string DungeonName,
+    int MapId,
+    int ChallengeModeId,
+    int KeystoneLevel,
+    IReadOnlyList<int> AffixIds,
+    DateTimeOffset ChallengeStartedAtUtc,
+    ChallengeModeOutcome Outcome,
+    DateTimeOffset? ChallengeEndedAtUtc,
+    int? TotalTimeMilliseconds,
+    double? OnTimeSeconds,
+    int? TimerLimitSeconds
+);
+
+public sealed record ChallengeModeSave(
+    Guid RecordingId,
+    string DungeonName,
+    int MapId,
+    int ChallengeModeId,
+    int KeystoneLevel,
+    IReadOnlyList<int> AffixIds,
+    DateTimeOffset ChallengeStartedAtUtc,
+    ChallengeModeOutcome Outcome,
+    DateTimeOffset? ChallengeEndedAtUtc,
+    int? TotalTimeMilliseconds,
+    double? OnTimeSeconds,
+    int? TimerLimitSeconds
+);
+
+public sealed record ChallengeModeCompletionSave(
+    Guid RecordingId,
+    ChallengeModeOutcome Outcome,
+    DateTimeOffset ChallengeEndedAtUtc,
+    int? TotalTimeMilliseconds,
+    double? OnTimeSeconds,
+    int? TimerLimitSeconds
 );

@@ -388,6 +388,58 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public void FormatsChallengeModeColumns()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var id = Guid.Parse("7DA1220D-1E5D-4737-8E74-8998F9D99AC1");
+            var challengeStartedAtUtc = new DateTimeOffset(2026, 6, 14, 20, 37, 55, TimeSpan.Zero);
+            var recording = CatalogFile(
+                Path.Combine(directory, "magisters-terrace.mp4"),
+                new DateTimeOffset(2026, 6, 14, 21, 8, 45, TimeSpan.Zero),
+                id: id,
+                kind: RecordingCatalogKind.ChallengeMode,
+                challengeMode: new ChallengeModeEntry(
+                    id,
+                    challengeStartedAtUtc,
+                    new DateTimeOffset(2026, 6, 14, 21, 8, 45, TimeSpan.Zero),
+                    "Magisters' Terrace",
+                    2811,
+                    558,
+                    22,
+                    [9, 10, 147],
+                    challengeStartedAtUtc,
+                    ChallengeModeOutcome.Timed,
+                    new DateTimeOffset(2026, 6, 14, 21, 8, 45, TimeSpan.Zero),
+                    1850000,
+                    32.5,
+                    1800
+                )
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording])
+            );
+
+            var item = Assert.Single(viewModel.Recordings);
+
+            Assert.Equal("magisters-terrace", item.DisplayName);
+            Assert.Equal($"{challengeStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}", item.StartedAt);
+            Assert.Equal("Magisters' Terrace", item.EncounterName);
+            Assert.Equal("+22", item.Difficulty);
+            Assert.Equal("Timed", item.Outcome);
+            Assert.Equal("30:50", item.FightDuration);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public async Task DeleteSelectedRecordingConfirmsDeletesAndRefreshesList()
     {
         var directory = CreateTempDirectory();
@@ -694,6 +746,7 @@ public sealed class RecordingsViewModelTests
         Guid? id = null,
         RecordingCatalogKind kind = RecordingCatalogKind.Manual,
         RaidEncounterEntry? raidEncounter = null,
+        ChallengeModeEntry? challengeMode = null,
         DateTimeOffset? startedAtUtc = null
     )
     {
@@ -705,7 +758,8 @@ public sealed class RecordingsViewModelTests
             null,
             sizeBytes,
             modifiedAtUtc,
-            raidEncounter
+            raidEncounter,
+            challengeMode
         );
     }
 

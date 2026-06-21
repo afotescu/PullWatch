@@ -18,7 +18,14 @@ public sealed class RecordingCatalogTests
         var outputPath = Path.Combine(directory.FullName, "challenge.mp4");
         var startedAt = new DateTimeOffset(2026, 6, 20, 12, 30, 0, TimeSpan.FromHours(3));
         var modifiedAtUtc = new DateTime(2026, 6, 20, 10, 35, 0, DateTimeKind.Utc);
-        var context = new ChallengeRecordingContext(startedAt, "Magisters' Terrace", 22);
+        var context = new ChallengeRecordingContext(
+            startedAt,
+            "Magisters' Terrace",
+            2811,
+            558,
+            22,
+            [9, 10, 147]
+        );
 
         var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
         var started = await database.Repository.GetByIdAsync(id, cancellationToken);
@@ -44,6 +51,92 @@ public sealed class RecordingCatalogTests
         Assert.Equal(endedAt, completed.EndedAtUtc);
         Assert.Equal(9, completed.FileSizeBytes);
         Assert.Equal(new DateTimeOffset(modifiedAtUtc), completed.FileModifiedAtUtc);
+    }
+
+    [Fact]
+    public async Task ChallengeModeRecordingStoresMetadata()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var outputPath = Path.Combine(directory.FullName, "magisters-terrace.mp4");
+        var startedAt = new DateTimeOffset(2026, 6, 14, 23, 37, 55, TimeSpan.FromHours(3));
+        var context = new ChallengeRecordingContext(
+            startedAt,
+            "Magisters' Terrace",
+            2811,
+            558,
+            22,
+            [9, 10, 147]
+        );
+
+        var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
+        var startedChallengeMode = await database.Repository.GetChallengeModeByRecordingIdAsync(
+            id,
+            cancellationToken
+        );
+
+        File.WriteAllText(outputPath, "recording");
+        var challengeEndedAt = new DateTimeOffset(2026, 6, 15, 0, 8, 45, TimeSpan.FromHours(3));
+        await catalog.CompleteRecordingAsync(
+            id,
+            challengeEndedAt.AddSeconds(1),
+            new ChallengeRecordingEnd(
+                challengeEndedAt,
+                2811,
+                ChallengeModeOutcome.Timed,
+                22,
+                1850000,
+                32.5,
+                1800
+            ),
+            cancellationToken
+        );
+
+        var completedChallengeMode = await database.Repository.GetChallengeModeByRecordingIdAsync(
+            id,
+            cancellationToken
+        );
+
+        Assert.NotNull(startedChallengeMode);
+        Assert.Equal("Magisters' Terrace", startedChallengeMode.DungeonName);
+        Assert.Equal(2811, startedChallengeMode.MapId);
+        Assert.Equal(558, startedChallengeMode.ChallengeModeId);
+        Assert.Equal(22, startedChallengeMode.KeystoneLevel);
+        Assert.Equal([9, 10, 147], startedChallengeMode.AffixIds);
+        Assert.Equal(startedAt.ToUniversalTime(), startedChallengeMode.ChallengeStartedAtUtc);
+        Assert.Equal(ChallengeModeOutcome.Unknown, startedChallengeMode.Outcome);
+        Assert.Null(startedChallengeMode.ChallengeEndedAtUtc);
+        Assert.Null(startedChallengeMode.TotalTimeMilliseconds);
+
+        Assert.NotNull(completedChallengeMode);
+        Assert.Equal(ChallengeModeOutcome.Timed, completedChallengeMode.Outcome);
+        Assert.Equal(
+            challengeEndedAt.ToUniversalTime(),
+            completedChallengeMode.ChallengeEndedAtUtc
+        );
+        Assert.Equal(1850000, completedChallengeMode.TotalTimeMilliseconds);
+        Assert.Equal(32.5, completedChallengeMode.OnTimeSeconds);
+        Assert.Equal(1800, completedChallengeMode.TimerLimitSeconds);
+
+        var recordings = await catalog.ListAvailableFilesAsync(
+            directory.FullName,
+            cancellationToken
+        );
+        var recording = Assert.Single(recordings);
+        Assert.NotNull(recording.ChallengeMode);
+        Assert.Equal("Magisters' Terrace", recording.ChallengeMode.DungeonName);
+        Assert.Equal(ChallengeModeOutcome.Timed, recording.ChallengeMode.Outcome);
+        Assert.Equal(1850000, recording.ChallengeMode.TotalTimeMilliseconds);
+
+        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+
+        Assert.Null(
+            await database.Repository.GetChallengeModeByRecordingIdAsync(id, cancellationToken)
+        );
     }
 
     [Fact]

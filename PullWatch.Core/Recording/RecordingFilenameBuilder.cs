@@ -28,7 +28,7 @@ internal static class RecordingFilenameBuilder
         {
             ManualRecordingContext => $"{timestamp}_manual",
             ChallengeRecordingContext challenge =>
-                $"{timestamp}_mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.Level}",
+                $"{timestamp}_mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.KeystoneLevel}",
             EncounterRecordingContext encounter =>
                 $"{timestamp}_raid_{Sanitize(encounter.EncounterName)}_{GetDifficultyName(encounter.DifficultyId)}",
             _ => throw new ArgumentOutOfRangeException(
