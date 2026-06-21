@@ -9,7 +9,7 @@ public sealed class DiagnosticsViewModelTests
         var dialogs = new FakeDiagnosticsDialogs();
         var viewModel = new DiagnosticsViewModel(Status(), logs, dialogs);
 
-        await viewModel.ExportDiagnosticsCommand.ExecuteAsync();
+        await viewModel.ExportDiagnosticsCommand.ExecuteAsync(null);
 
         Assert.Matches(@"PullWatch-diagnostics-\d{8}-\d{6}\.txt", dialogs.SuggestedFileName!);
         Assert.Equal(@"C:\Temp\diagnostics.txt", dialogs.WrittenPath);

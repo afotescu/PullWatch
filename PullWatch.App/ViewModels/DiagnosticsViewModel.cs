@@ -17,15 +17,12 @@ public sealed class DiagnosticsViewModel : ObservableObject
         _logs = logs;
         _dialogs = dialogs;
         CopyDiagnosticsCommand = new RelayCommand(CopyDiagnostics);
-        ExportDiagnosticsCommand = new AsyncRelayCommand(
-            ExportDiagnosticsAsync,
-            onException: HandleCommandFailure
-        );
+        ExportDiagnosticsCommand = new AsyncRelayCommand(ExportDiagnosticsAsync);
     }
 
-    public RelayCommand CopyDiagnosticsCommand { get; }
+    public IRelayCommand CopyDiagnosticsCommand { get; }
 
-    public AsyncRelayCommand ExportDiagnosticsCommand { get; }
+    public IAsyncRelayCommand ExportDiagnosticsCommand { get; }
 
     public IReadOnlyList<DiagnosticsSectionViewModel> Sections =>
         [
@@ -93,7 +90,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
     public void ApplyStatus(ApplicationStatus status)
     {
         _status = status;
-        OnAllPropertiesChanged();
+        OnPropertyChanged(string.Empty);
     }
 
     public void RefreshLogs()
@@ -142,11 +139,6 @@ public sealed class DiagnosticsViewModel : ObservableObject
             _status,
             _logs.GetSnapshot()
         );
-    }
-
-    private void HandleCommandFailure(Exception exception)
-    {
-        ActionMessage = $"Diagnostics command failed: {exception.Message}";
     }
 
     private static string FormatLogs(IReadOnlyList<ApplicationLogEntry> logs)

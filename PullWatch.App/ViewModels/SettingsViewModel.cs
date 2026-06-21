@@ -38,36 +38,32 @@ public sealed class SettingsViewModel : ObservableObject
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
-            CommitWowLogsDirectoryAsync,
-            () => IsEditingEnabled,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(CommitWowLogsDirectoryAsync),
+            () => IsEditingEnabled
         );
         CommitRecordingsDirectoryCommand = new AsyncRelayCommand(
-            CommitRecordingsDirectoryAsync,
-            () => IsEditingEnabled,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(CommitRecordingsDirectoryAsync),
+            () => IsEditingEnabled
         );
         PickWowLogsDirectoryCommand = new AsyncRelayCommand(
-            PickWowLogsDirectoryAsync,
-            () => IsEditingEnabled,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(PickWowLogsDirectoryAsync),
+            () => IsEditingEnabled
         );
         PickRecordingsDirectoryCommand = new AsyncRelayCommand(
-            PickRecordingsDirectoryAsync,
-            () => IsEditingEnabled,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(PickRecordingsDirectoryAsync),
+            () => IsEditingEnabled
         );
         LoadSettings(_savedSettings);
         ApplyStatus(initialStatus);
     }
 
-    public AsyncRelayCommand CommitWowLogsDirectoryCommand { get; }
+    public IAsyncRelayCommand CommitWowLogsDirectoryCommand { get; }
 
-    public AsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
+    public IAsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
 
-    public AsyncRelayCommand PickWowLogsDirectoryCommand { get; }
+    public IAsyncRelayCommand PickWowLogsDirectoryCommand { get; }
 
-    public AsyncRelayCommand PickRecordingsDirectoryCommand { get; }
+    public IAsyncRelayCommand PickRecordingsDirectoryCommand { get; }
 
     public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
     [
@@ -260,6 +256,30 @@ public sealed class SettingsViewModel : ObservableObject
     public Task<bool> CommitRecordingsDirectoryAsync()
     {
         return CommitPathAsync(includeWowLogsDirectory: false, includeRecordingsDirectory: true);
+    }
+
+    private async Task ExecuteCommandAsync(Func<Task<bool>> command)
+    {
+        try
+        {
+            await command();
+        }
+        catch (Exception exception)
+        {
+            HandleCommandFailure(exception);
+        }
+    }
+
+    private async Task ExecuteCommandAsync(Func<Task> command)
+    {
+        try
+        {
+            await command();
+        }
+        catch (Exception exception)
+        {
+            HandleCommandFailure(exception);
+        }
     }
 
     private async Task PickWowLogsDirectoryAsync()

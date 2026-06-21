@@ -133,7 +133,7 @@ public sealed class RecordingsViewModelTests
             () => pendingStart.Task
         );
 
-        var execution = viewModel.ManualRecordingCommand.ExecuteAsync();
+        var execution = viewModel.ManualRecordingCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
 
@@ -159,7 +159,7 @@ public sealed class RecordingsViewModelTests
             () => Task.FromResult(result)
         );
 
-        await viewModel.ManualRecordingCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
 
         Assert.Equal(expectedMessage, viewModel.CommandMessage);
     }
@@ -175,7 +175,7 @@ public sealed class RecordingsViewModelTests
                 )
         );
 
-        await viewModel.ManualRecordingCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
 
         Assert.Equal("Command failed: controller unavailable", viewModel.CommandMessage);
     }
@@ -188,7 +188,7 @@ public sealed class RecordingsViewModelTests
             () => Task.FromResult(RecordingCommandResult.Failed)
         );
 
-        await viewModel.ManualRecordingCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
         viewModel.ApplyStatus(
             Status(
                 RecordingCoordinatorState.Idle,
@@ -251,7 +251,7 @@ public sealed class RecordingsViewModelTests
             () => Task.FromResult(RecordingCommandResult.Failed)
         );
 
-        await viewModel.ManualRecordingCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
 
         Assert.Equal("World of Warcraft is not running.", viewModel.CommandMessage);
         Assert.Equal(RecordingStatusHealth.Idle, viewModel.RecorderHealth);
@@ -275,7 +275,7 @@ public sealed class RecordingsViewModelTests
             }
         );
 
-        await viewModel.ManualRecordingCommand.ExecuteAsync();
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
 
         Assert.Equal(1, stopCalls);
         Assert.Equal("Recording stopped.", viewModel.CommandMessage);
@@ -486,7 +486,7 @@ public sealed class RecordingsViewModelTests
                 confirmPermanentDelete: _ => true
             );
 
-            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
             await deleteStarted.Task.WaitAsync(
                 TimeSpan.FromSeconds(2),
                 TestContext.Current.CancellationToken
@@ -535,7 +535,7 @@ public sealed class RecordingsViewModelTests
                 confirmPermanentDelete: _ => false
             );
 
-            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
 
             Assert.Equal(0, deleteCalls);
             Assert.Equal(recording.Id, viewModel.SelectedRecording?.Id);
@@ -566,7 +566,7 @@ public sealed class RecordingsViewModelTests
                 confirmPermanentDelete: _ => true
             );
 
-            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
 
             var visibleRecording = Assert.Single(viewModel.Recordings);
             Assert.Equal(recording.Id, visibleRecording.Id);

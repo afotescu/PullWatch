@@ -170,7 +170,7 @@ public sealed class SettingsViewModelTests
             dialogs: dialogs
         );
 
-        await viewModel.PickRecordingsDirectoryCommand.ExecuteAsync();
+        await viewModel.PickRecordingsDirectoryCommand.ExecuteAsync(null);
 
         Assert.Equal(selected, saved!.RecordingsDirectory);
         Assert.False(viewModel.IsRecordingsDirectoryPending);

@@ -56,14 +56,14 @@ public partial class SettingsView : UserControl
     private Task CommitWowLogsDirectoryAsync()
     {
         return DataContext is SettingsViewModel viewModel
-            ? viewModel.CommitWowLogsDirectoryCommand.ExecuteAsync()
+            ? viewModel.CommitWowLogsDirectoryCommand.ExecuteAsync(null)
             : Task.CompletedTask;
     }
 
     private Task CommitRecordingsDirectoryAsync()
     {
         return DataContext is SettingsViewModel viewModel
-            ? viewModel.CommitRecordingsDirectoryCommand.ExecuteAsync()
+            ? viewModel.CommitRecordingsDirectoryCommand.ExecuteAsync(null)
             : Task.CompletedTask;
     }
 }

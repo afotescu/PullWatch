@@ -55,18 +55,15 @@ public sealed class RecordingsViewModel : ObservableObject
         _confirmPermanentDelete = confirmPermanentDelete;
         _openRecordingsFolder = openRecordingsFolder;
         ManualRecordingCommand = new AsyncRelayCommand(
-            ToggleManualRecordingAsync,
-            () => CanRunManualCommand,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(ToggleManualRecordingAsync),
+            () => CanRunManualCommand
         );
-        OpenRecordingsFolderCommand = new AsyncRelayCommand(
-            OpenRecordingsFolderAsync,
-            onException: HandleCommandFailure
+        OpenRecordingsFolderCommand = new AsyncRelayCommand(() =>
+            ExecuteCommandAsync(OpenRecordingsFolderAsync)
         );
         DeleteSelectedRecordingCommand = new AsyncRelayCommand(
-            DeleteSelectedRecordingAsync,
-            () => SelectedRecording is not null,
-            HandleCommandFailure
+            () => ExecuteCommandAsync(DeleteSelectedRecordingAsync),
+            () => SelectedRecording is not null
         );
         DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
@@ -75,13 +72,13 @@ public sealed class RecordingsViewModel : ObservableObject
 
     public ObservableCollection<RecordingListItem> Recordings { get; } = new();
 
-    public AsyncRelayCommand ManualRecordingCommand { get; }
+    public IAsyncRelayCommand ManualRecordingCommand { get; }
 
-    public AsyncRelayCommand OpenRecordingsFolderCommand { get; }
+    public IAsyncRelayCommand OpenRecordingsFolderCommand { get; }
 
-    public AsyncRelayCommand DeleteSelectedRecordingCommand { get; }
+    public IAsyncRelayCommand DeleteSelectedRecordingCommand { get; }
 
-    public RelayCommand DismissFailureCommand { get; }
+    public IRelayCommand DismissFailureCommand { get; }
 
     public string StateTitle => GetStateTitle(_recording, _wowProcess);
 
@@ -178,7 +175,7 @@ public sealed class RecordingsViewModel : ObservableObject
             );
         }
 
-        OnAllPropertiesChanged();
+        OnPropertyChanged(string.Empty);
         ManualRecordingCommand.NotifyCanExecuteChanged();
         DeleteSelectedRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
@@ -463,6 +460,18 @@ public sealed class RecordingsViewModel : ObservableObject
         return _recording.State == RecordingCoordinatorState.Recording
             ? StopManualAsync()
             : StartManualAsync();
+    }
+
+    private async Task ExecuteCommandAsync(Func<Task> command)
+    {
+        try
+        {
+            await command();
+        }
+        catch (Exception exception)
+        {
+            HandleCommandFailure(exception);
+        }
     }
 
     private async Task StartManualAsync()
