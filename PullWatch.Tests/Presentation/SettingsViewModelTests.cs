@@ -298,7 +298,7 @@ public sealed class SettingsViewModelTests
 
         viewModel.RecordMythicPlus = false;
 
-        await WaitForAsync(() => saves.Count == 2);
+        await WaitForAsync(() => saves.Count == 2 && viewModel.SaveMessage == "Settings saved.");
 
         Assert.Equal(committedRecordingsDirectory, saves[1].RecordingsDirectory);
         Assert.False(saves[1].RecordMythicPlus);
