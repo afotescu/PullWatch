@@ -99,7 +99,7 @@ public partial class RecordingsView : UserControl
 
         var selectedRecording = _viewModel?.SelectedRecording;
         RecordingPlayer.Source = selectedRecording?.Source;
-        PlayPauseButton.IsEnabled = selectedRecording is not null;
+        PlayPauseButton.IsEnabled = false;
         PlayerPlaceholder.SetCurrentValue(
             TextBlock.TextProperty,
             _viewModel?.RecordingLibraryStatus ?? string.Empty
@@ -141,8 +141,17 @@ public partial class RecordingsView : UserControl
             PlaybackSlider.IsEnabled = duration > TimeSpan.Zero;
         }
 
-        RecordingPlayer.Pause();
-        RecordingPlayer.Position = TimeSpan.Zero;
+        if (_isPlaying)
+        {
+            RecordingPlayer.Play();
+            _positionTimer.Start();
+        }
+        else
+        {
+            RecordingPlayer.Pause();
+            RecordingPlayer.Position = TimeSpan.Zero;
+        }
+
         UpdatePositionFromPlayer();
     }
 
@@ -267,6 +276,7 @@ public partial class RecordingsView : UserControl
     {
         _positionTimer.Stop();
         _isPlaying = false;
+        PlayPauseButton.Content = "Play";
         if (RecordingPlayer.Source is not null)
         {
             RecordingPlayer.Stop();
