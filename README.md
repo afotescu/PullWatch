@@ -1,36 +1,35 @@
 # PullWatch
 
-A lightweight Windows desktop app that automatically records World of Warcraft
-Mythic+ runs and raid encounters from combat-log events.
+PullWatch is a lightweight Windows desktop app for recording World of Warcraft
+gameplay. It watches the WoW process and combat log, starts recordings for
+Mythic+ runs and raid encounters, and keeps finished videos in a browsable
+in-app library.
 
 ## Screenshot
 
-![PullWatch dashboard](.github/assets/pullwatch-dashboard.png)
+![PullWatch recordings view](.github/assets/pullwatch-recordings.png)
 
 ## Status
 
 This project is in early development. Expect issues.
 
-Recordings are saved by default to:
+## Features
 
-```text
-Videos/PullWatch
-```
-
-You can change this at any time in settings.
-
-## Recording Settings
-
-PullWatch records with H.264 and uses simple video presets instead of exposing
-raw bitrate controls:
-
-- `Compact` for smaller files
-- `Balanced` for the default quality and size tradeoff
-- `High` for cleaner motion and larger files
-
-Frame rate is selectable as `30 FPS` or `60 FPS`. The settings screen shows an
-approximate recording size per 5 minutes based on the primary display; actual
-recordings use the captured World of Warcraft window size.
+- Automatic recording for Mythic+ runs from `CHALLENGE_MODE_START` and
+  `CHALLENGE_MODE_END` combat-log events.
+- Automatic recording for raid encounters from `ENCOUNTER_START` and
+  `ENCOUNTER_END` combat-log events.
+- Manual start and stop when the World of Warcraft window is available.
+- In-app playback with seeking, time display, and fullscreen viewing.
+- Saved recordings table with start time, dungeon or encounter, key level or
+  raid difficulty, outcome, and duration.
+- Recording management actions for opening the recordings folder and deleting a
+  selected finished recording.
+- Settings for combat-log and recordings directories, Mythic+ and raid toggles,
+  quality preset, frame rate, system audio, microphone, cursor capture, and
+  capture border.
+- Diagnostics view with combat-log, WoW process, recorder state, effective
+  settings, and recent application logs.
 
 ## Requirements
 
@@ -48,32 +47,62 @@ install the official Microsoft x64 redistributable:
 https://aka.ms/vc14/vc_redist.x64.exe
 ```
 
-### Building from Source
+Automatic recording requires World of Warcraft combat logging to be enabled so
+the game writes `WoWCombatLog*.txt` files.
+
+## Data Locations
+
+Recordings are saved by default to:
+
+```text
+Videos\PullWatch
+```
+
+You can change this in Settings.
+
+PullWatch stores its settings and recording catalog under:
+
+```text
+%LOCALAPPDATA%\PullWatch
+```
+
+The catalog database is `pullwatch.db`; it stores metadata for finished
+recordings, not the video files themselves.
+
+## Recording Behavior
+
+PullWatch captures the World of Warcraft window with H.264 video. It uses simple
+quality presets instead of exposing raw bitrate controls:
+
+- `Compact` for smaller files
+- `Balanced` for the default quality and size tradeoff
+- `High` for cleaner motion and larger files
+
+Frame rate is selectable as `30 FPS` or `60 FPS`. The settings screen shows an
+approximate recording size per 5 minutes based on the primary display; actual
+recordings use the captured WoW window size.
+
+Automatic recording starts only when PullWatch can see the WoW window and read
+the configured logs directory. If combat-log monitoring is unavailable, manual
+recording can still be used while the WoW window is available.
+
+Finished recordings are saved as `.mp4` files. File names include the recording
+start time and context, such as `manual`, `mythic-plus`, or `raid`.
+
+## Building from Source
+
+Requirements:
 
 - Windows x64
 - .NET 10 SDK
 
-## Key Dependencies
+Restore local tools:
 
-- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
+```powershell
+dotnet tool restore
+```
 
-## How It Works
-
-PullWatch currently handles these combat-log events:
-
-- `CHALLENGE_MODE_START`
-- `CHALLENGE_MODE_END`
-- `ENCOUNTER_START`
-- `ENCOUNTER_END`
-
-PullWatch uses combat-log events to decide when recordings should start and
-stop.
-
-## Development
-
-GitHub Actions runs build and tests on pushes and pull requests.
-
-Run a Release build:
+Run the app:
 
 ```powershell
 dotnet run --project PullWatch.App/PullWatch.App.csproj -c Release -p:Platform=x64
@@ -82,7 +111,13 @@ dotnet run --project PullWatch.App/PullWatch.App.csproj -c Release -p:Platform=x
 Run tests:
 
 ```powershell
-dotnet test PullWatch.sln -p:Platform=x64
+dotnet test PullWatch.sln -c Release -p:Platform=x64
+```
+
+Format the codebase:
+
+```powershell
+dotnet csharpier format .
 ```
 
 Create a local self-contained Windows x64 publish:
@@ -94,12 +129,17 @@ Create a local self-contained Windows x64 publish:
 The publish output is written to:
 
 ```text
-artifacts/publish/win-x64
+artifacts\publish\win-x64
 ```
 
 Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
 kept next to the executable because the native recorder library does not load
 reliably when embedded into the single-file bundle.
+
+## CI and Releases
+
+GitHub Actions checks formatting, builds, and runs tests on pushes and pull
+requests.
 
 Create a GitHub release by pushing a version tag:
 
@@ -109,6 +149,12 @@ git push origin v0.1.0
 ```
 
 Release tags publish a Windows x64 zip and embed the tag version into the app.
+
+## Key Dependencies
+
+- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
+- [Dapper](https://github.com/DapperLib/Dapper)
+- [FluentMigrator](https://fluentmigrator.github.io/)
 
 ## Disclaimer
 
