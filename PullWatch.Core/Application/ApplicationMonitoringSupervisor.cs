@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace PullWatch;
 
 internal sealed class ApplicationMonitoringSupervisor(
-    Func<string, ICombatLogMonitor> createCombatLogMonitor,
+    Func<string, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
     Func<IWowProcessMonitor> createWowProcessMonitor,
     RecordingCoordinator recordingCoordinator,
     SettingsProvider settingsProvider,
@@ -100,7 +100,7 @@ internal sealed class ApplicationMonitoringSupervisor(
 
     private void StartCombatLogMonitoring(string logsDirectory)
     {
-        var monitor = createCombatLogMonitor(logsDirectory);
+        var monitor = createCombatLogMonitor(logsDirectory, CanDiscoverCombatLog);
         var eventHandler = new CombatLogEventHandler(
             recordingCoordinator,
             settingsProvider,
@@ -330,5 +330,10 @@ internal sealed class ApplicationMonitoringSupervisor(
         }
 
         StartCombatLogMonitoring(settings.WowLogsDirectory);
+    }
+
+    private bool CanDiscoverCombatLog()
+    {
+        return recordingCoordinator.Status.State == RecordingCoordinatorState.Idle;
     }
 }

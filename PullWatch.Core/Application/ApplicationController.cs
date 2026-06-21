@@ -36,10 +36,9 @@ public sealed class ApplicationController : IAsyncDisposable
         InitialCombatLogStatus,
         InitialWowProcessStatus
     );
-
     private readonly SettingsBootstrapper _settingsBootstrapper;
     private readonly Func<SettingsProvider, IRecordingService> _createRecordingService;
-    private readonly Func<string, ICombatLogMonitor> _createCombatLogMonitor;
+    private readonly Func<string, Func<bool>, ICombatLogMonitor> _createCombatLogMonitor;
     private readonly Func<IWowProcessMonitor> _createWowProcessMonitor;
     private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly RecordingCatalog? _recordingCatalog;
@@ -63,7 +62,12 @@ public sealed class ApplicationController : IAsyncDisposable
                 settings,
                 loggerFactory.CreateLogger<ScreenRecordingService>()
             ),
-            path => new CombatLogReader(path, loggerFactory.CreateLogger<CombatLogReader>()),
+            (path, canDiscoverCombatLog) =>
+                new CombatLogReader(
+                    path,
+                    loggerFactory.CreateLogger<CombatLogReader>(),
+                    canDiscoverCombatLog: canDiscoverCombatLog
+                ),
             loggerFactory,
             () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>()),
             CreateDefaultStorageInitializer(loggerFactory),
@@ -74,6 +78,25 @@ public sealed class ApplicationController : IAsyncDisposable
         SettingsBootstrapper settingsBootstrapper,
         Func<SettingsProvider, IRecordingService> createRecordingService,
         Func<string, ICombatLogMonitor> createCombatLogMonitor,
+        ILoggerFactory loggerFactory,
+        Func<IWowProcessMonitor> createWowProcessMonitor,
+        IRecordingStorageInitializer? storageInitializer = null,
+        RecordingCatalog? recordingCatalog = null
+    )
+        : this(
+            settingsBootstrapper,
+            createRecordingService,
+            (logsDirectory, _) => createCombatLogMonitor(logsDirectory),
+            loggerFactory,
+            createWowProcessMonitor,
+            storageInitializer,
+            recordingCatalog
+        ) { }
+
+    internal ApplicationController(
+        SettingsBootstrapper settingsBootstrapper,
+        Func<SettingsProvider, IRecordingService> createRecordingService,
+        Func<string, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
         Func<IWowProcessMonitor> createWowProcessMonitor,
         IRecordingStorageInitializer? storageInitializer = null,

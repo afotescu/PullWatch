@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -7,12 +8,15 @@ public sealed class CombatLogReader : ICombatLogMonitor
 {
     private const string CombatLogPattern = "WoWCombatLog-*";
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan DefaultDiscoveryInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultMaximumRetryDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(30);
 
     private readonly string _logsDirectory;
     private readonly ILogger<CombatLogReader> _logger;
+    private readonly Func<bool> _canDiscoverCombatLog;
     private readonly TimeSpan _pollInterval;
+    private readonly TimeSpan _discoveryInterval;
     private readonly TimeSpan _maximumRetryDelay;
     private CombatLogReaderStatus _status = new(
         CombatLogReaderState.WaitingForLogsDirectory,
@@ -22,18 +26,23 @@ public sealed class CombatLogReader : ICombatLogMonitor
     );
     private DateTimeOffset _lastErrorLogTime = DateTimeOffset.MinValue;
     private string? _lastLoggedErrorMessage;
+    private long _lastDiscoveryTimestamp;
     private bool _hasPublishedState;
 
     public CombatLogReader(
         string logsDirectory,
         ILogger<CombatLogReader> logger,
         TimeSpan? pollInterval = null,
-        TimeSpan? maximumRetryDelay = null
+        TimeSpan? maximumRetryDelay = null,
+        Func<bool>? canDiscoverCombatLog = null,
+        TimeSpan? discoveryInterval = null
     )
     {
         _logsDirectory = logsDirectory;
         _logger = logger;
+        _canDiscoverCombatLog = canDiscoverCombatLog ?? (() => true);
         _pollInterval = pollInterval ?? DefaultPollInterval;
+        _discoveryInterval = discoveryInterval ?? DefaultDiscoveryInterval;
         _maximumRetryDelay = maximumRetryDelay ?? DefaultMaximumRetryDelay;
     }
 
@@ -48,10 +57,10 @@ public sealed class CombatLogReader : ICombatLogMonitor
     {
         ArgumentNullException.ThrowIfNull(handleEventAsync);
 
-        var initialDiscovery = DiscoverLatestCombatLog();
-        FileSession? session = initialDiscovery.Candidate is null
+        var initialCandidate = CanDiscoverCombatLog() ? DiscoverLatestCombatLog().Candidate : null;
+        FileSession? session = initialCandidate is null
             ? null
-            : new FileSession(initialDiscovery.Candidate, initialDiscovery.Candidate.Length, []);
+            : new FileSession(initialCandidate, initialCandidate.Length, []);
         var retryDelay = _pollInterval;
 
         while (true)
@@ -60,6 +69,12 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
             if (session is null)
             {
+                if (!CanDiscoverCombatLog() || !ShouldDiscoverCombatLog())
+                {
+                    await Task.Delay(_pollInterval, cancellationToken);
+                    continue;
+                }
+
                 var discovery = DiscoverLatestCombatLog();
                 PublishWaitingStatus(discovery);
 
@@ -115,28 +130,33 @@ public sealed class CombatLogReader : ICombatLogMonitor
                 continue;
             }
 
-            var discovery = DiscoverLatestCombatLog();
+            if (CanDiscoverCombatLog() && ShouldDiscoverCombatLog())
+            {
+                var discovery = DiscoverLatestCombatLog();
 
-            if (discovery.Error is not null)
-            {
-                PublishError(discovery.Error, session.Candidate.FullName);
+                if (discovery.Error is not null)
+                {
+                    PublishError(discovery.Error, session.Candidate.FullName);
+                }
+                else if (!File.Exists(session.Candidate.FullName))
+                {
+                    PublishWaitingStatus(discovery);
+                    return discovery.Candidate is null
+                        ? null
+                        : SwitchTo(discovery.Candidate, session.Candidate.FullName);
+                }
+                else if (
+                    discovery.Candidate is not null
+                    && !PathComparer.Equals(
+                        discovery.Candidate.FullName,
+                        session.Candidate.FullName
+                    )
+                    && discovery.Candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc
+                )
+                {
+                    return SwitchTo(discovery.Candidate, session.Candidate.FullName);
+                }
             }
-            else if (!File.Exists(session.Candidate.FullName))
-            {
-                PublishWaitingStatus(discovery);
-                return discovery.Candidate is null
-                    ? null
-                    : SwitchTo(discovery.Candidate, session.Candidate.FullName);
-            }
-            else if (
-                discovery.Candidate is not null
-                && !PathComparer.Equals(discovery.Candidate.FullName, session.Candidate.FullName)
-                && discovery.Candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc
-            )
-            {
-                return SwitchTo(discovery.Candidate, session.Candidate.FullName);
-            }
-
             await Task.Delay(_pollInterval, cancellationToken);
         }
     }
@@ -230,25 +250,51 @@ public sealed class CombatLogReader : ICombatLogMonitor
         return completedLines;
     }
 
+    private bool CanDiscoverCombatLog()
+    {
+        return _canDiscoverCombatLog();
+    }
+
+    private bool ShouldDiscoverCombatLog()
+    {
+        var lastDiscoveryTimestamp = Volatile.Read(ref _lastDiscoveryTimestamp);
+        return lastDiscoveryTimestamp == 0
+            || Stopwatch.GetElapsedTime(lastDiscoveryTimestamp) >= _discoveryInterval;
+    }
+
     private DiscoveryResult DiscoverLatestCombatLog()
     {
+        Volatile.Write(ref _lastDiscoveryTimestamp, Stopwatch.GetTimestamp());
+
         try
         {
-            var latestCombatLog = new DirectoryInfo(_logsDirectory)
-                .EnumerateFiles(CombatLogPattern)
-                .MaxBy(file => file.LastWriteTimeUtc);
+            FileInfo? latestCombatLog = null;
 
-            return latestCombatLog is null
-                ? new DiscoveryResult(true, null, null)
-                : new DiscoveryResult(
-                    true,
-                    new FileCandidate(
-                        latestCombatLog.FullName,
-                        latestCombatLog.LastWriteTimeUtc,
-                        latestCombatLog.Length
-                    ),
-                    null
-                );
+            foreach (var file in new DirectoryInfo(_logsDirectory).EnumerateFiles(CombatLogPattern))
+            {
+                if (
+                    latestCombatLog is null
+                    || file.LastWriteTimeUtc > latestCombatLog.LastWriteTimeUtc
+                )
+                {
+                    latestCombatLog = file;
+                }
+            }
+
+            if (latestCombatLog is null)
+            {
+                return new DiscoveryResult(true, null, null);
+            }
+
+            return new DiscoveryResult(
+                true,
+                new FileCandidate(
+                    latestCombatLog.FullName,
+                    latestCombatLog.LastWriteTimeUtc,
+                    latestCombatLog.Length
+                ),
+                null
+            );
         }
         catch (DirectoryNotFoundException)
         {

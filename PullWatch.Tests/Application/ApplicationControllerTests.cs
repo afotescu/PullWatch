@@ -181,6 +181,62 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task CombatLogDiscoveryGateIsDisabledWhileRecording()
+    {
+        using var directory = new TemporaryDirectory();
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                WowLogsDirectory = logsDirectory,
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        var monitor = new FakeCombatLogMonitor();
+        var recorder = new FakeRecordingService();
+        Func<bool>? canDiscoverCombatLog = null;
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => recorder,
+            (_, discoveryGate) =>
+            {
+                canDiscoverCombatLog = discoveryGate;
+                return monitor;
+            },
+            NullLoggerFactory.Instance,
+            AvailableWowMonitor
+        );
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+        await WaitForAsync(() => monitor.Started && canDiscoverCombatLog is not null);
+
+        Assert.True(canDiscoverCombatLog!());
+
+        await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
+        await WaitForAsync(() =>
+            controller.Status.Recording.State == RecordingCoordinatorState.Recording
+        );
+
+        Assert.False(canDiscoverCombatLog!());
+
+        await controller.StopManualRecordingAsync(TestContext.Current.CancellationToken);
+        await WaitForAsync(() =>
+            controller.Status.Recording.State == RecordingCoordinatorState.Idle
+        );
+
+        Assert.True(canDiscoverCombatLog!());
+    }
+
+    [Fact]
     public async Task UnexpectedCombatLogMonitoringFailureReportsInactiveError()
     {
         using var directory = new TemporaryDirectory();
