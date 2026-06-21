@@ -7,7 +7,7 @@ in-app library.
 
 ## Screenshot
 
-![PullWatch recordings view](.github/assets/pullwatch-recordings.png)
+![PullWatch playback and recordings view](.github/assets/pullwatch-recordings.png)
 
 ## Status
 

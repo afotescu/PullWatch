@@ -110,7 +110,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         if (normalizedFilePath is not null)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            File.Delete(normalizedFilePath);
+            await Task.Run(() => File.Delete(normalizedFilePath), cancellationToken);
         }
 
         await _repository.DeleteAsync(id, cancellationToken);

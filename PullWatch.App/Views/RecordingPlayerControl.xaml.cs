@@ -201,6 +201,19 @@ public partial class RecordingPlayerControl : UserControl
     private void ScheduleLoadSource(Uri? source)
     {
         var loadVersion = ++_sourceLoadVersion;
+
+        if (source is null)
+        {
+            LoadSource(null);
+            return;
+        }
+
+        if (IsReadyToLoadSource())
+        {
+            LoadSource(source);
+            return;
+        }
+
         Dispatcher.InvokeAsync(
             () =>
             {
@@ -209,7 +222,7 @@ public partial class RecordingPlayerControl : UserControl
                     return;
                 }
 
-                if (source is not null && !IsReadyToLoadSource())
+                if (!IsReadyToLoadSource())
                 {
                     return;
                 }

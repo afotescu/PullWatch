@@ -440,13 +440,20 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
-    public async Task DeleteSelectedRecordingConfirmsDeletesAndRefreshesList()
+    public async Task DeleteSelectedRecordingConfirmsDeletesAndRemovesVisibleItem()
     {
         var directory = CreateTempDirectory();
 
         try
         {
+            var loadCalls = 0;
             var deletedIds = new List<Guid>();
+            var deleteStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
             var firstId = Guid.Parse("5290C068-36C1-47BB-8B8C-60A6AE506695");
             var secondId = Guid.Parse("4443274B-22F2-471C-8676-46F63F8A7B87");
             var first = CatalogFile(
@@ -463,22 +470,38 @@ public sealed class RecordingsViewModelTests
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
                 loadRecordings: _ =>
-                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings.ToList()),
+                {
+                    loadCalls++;
+                    return Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(
+                        recordings.ToList()
+                    );
+                },
                 deleteRecording: id =>
                 {
                     deletedIds.Add(id);
                     recordings.RemoveAll(recording => recording.Id == id);
-                    return Task.CompletedTask;
+                    deleteStarted.SetResult();
+                    return deleteCompletion.Task;
                 },
                 confirmPermanentDelete: _ => true
             );
 
-            await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync();
+            await deleteStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
 
+            Assert.Equal(1, loadCalls);
             Assert.Equal([firstId], deletedIds);
             var remaining = Assert.Single(viewModel.Recordings);
             Assert.Equal(secondId, remaining.Id);
             Assert.Equal(secondId, viewModel.SelectedRecording?.Id);
+            Assert.False(deleteTask.IsCompleted);
+
+            deleteCompletion.SetResult();
+            await deleteTask;
+
             Assert.Equal("Recording deleted.", viewModel.CommandMessage);
             Assert.True(viewModel.IsCommandMessageVisible);
         }

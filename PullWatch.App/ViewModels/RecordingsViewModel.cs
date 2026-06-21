@@ -384,19 +384,78 @@ public sealed class RecordingsViewModel : ObservableObject
             return;
         }
 
+        var removedIndex = Recordings.IndexOf(recording);
         SelectedRecording = null;
+        removedIndex = RemoveRecording(recording.Id, removedIndex);
+        UpdateRecordingLibraryStatus();
 
         try
         {
+            SelectRecordingNear(removedIndex);
             await _deleteRecording(recording.Id);
             CommandMessage = "Recording deleted.";
-            await RefreshRecordingsAsync();
         }
         catch (Exception exception)
         {
+            RestoreRecording(recording, removedIndex);
             SelectedRecording = recording;
             CommandMessage = $"Could not delete recording: {exception.Message}";
         }
+    }
+
+    private int RemoveRecording(Guid id, int fallbackIndex)
+    {
+        var index = FindRecordingIndex(id);
+
+        if (index < 0)
+        {
+            return fallbackIndex;
+        }
+
+        Recordings.RemoveAt(index);
+        return index;
+    }
+
+    private void RestoreRecording(RecordingListItem recording, int removedIndex)
+    {
+        if (FindRecordingIndex(recording.Id) >= 0)
+        {
+            return;
+        }
+
+        var insertIndex =
+            removedIndex < 0 || removedIndex > Recordings.Count ? Recordings.Count : removedIndex;
+        Recordings.Insert(insertIndex, recording);
+        UpdateRecordingLibraryStatus();
+    }
+
+    private void SelectRecordingNear(int removedIndex)
+    {
+        if (SelectedRecording is not null || Recordings.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIndex = removedIndex < 0 ? 0 : Math.Min(removedIndex, Recordings.Count - 1);
+        SelectedRecording = Recordings[selectedIndex];
+    }
+
+    private int FindRecordingIndex(Guid id)
+    {
+        for (var index = 0; index < Recordings.Count; index++)
+        {
+            if (Recordings[index].Id == id)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private void UpdateRecordingLibraryStatus()
+    {
+        RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
     }
 
     private Task ToggleManualRecordingAsync()
