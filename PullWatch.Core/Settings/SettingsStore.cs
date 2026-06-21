@@ -169,6 +169,7 @@ public sealed class SettingsStore
     private sealed record PersistedUiSettings
     {
         public WindowPlacementSettings? WindowPlacement { get; init; } = new();
+        public bool SidebarCollapsed { get; init; }
 
         public UiSettings ToSettings()
         {
@@ -177,6 +178,7 @@ public sealed class SettingsStore
                 WindowPlacement =
                     WindowPlacement
                     ?? throw new JsonException("Window placement settings are required."),
+                SidebarCollapsed = SidebarCollapsed,
             };
         }
     }

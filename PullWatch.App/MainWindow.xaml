@@ -1,5 +1,6 @@
 <Window
   x:Class="PullWatch.MainWindow"
+  x:Name="ShellWindow"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:local="clr-namespace:PullWatch"
@@ -11,9 +12,130 @@
   Icon="Assets/favicon.ico"
   WindowStartupLocation="CenterScreen"
 >
+  <Window.Resources>
+    <Style x:Key="CollapsedStatusDotStyle" TargetType="Ellipse">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Fill" Value="{StaticResource StatusNeutralBrush}" />
+      <Setter Property="Stroke" Value="{StaticResource BorderBrush}" />
+      <Setter Property="StrokeThickness" Value="1" />
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+      <Setter Property="RenderTransform">
+        <Setter.Value>
+          <ScaleTransform ScaleX="1" ScaleY="1" />
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <DataTrigger
+          Binding="{Binding Recordings.StatusHealth}"
+          Value="{x:Static local:RecordingStatusHealth.Active}"
+        >
+          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+        </DataTrigger>
+        <DataTrigger
+          Binding="{Binding Recordings.StatusHealth}"
+          Value="{x:Static local:RecordingStatusHealth.ManualOnly}"
+        >
+          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+        </DataTrigger>
+        <DataTrigger
+          Binding="{Binding Recordings.StatusHealth}"
+          Value="{x:Static local:RecordingStatusHealth.Ready}"
+        >
+          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+        </DataTrigger>
+        <DataTrigger
+          Binding="{Binding Recordings.StatusHealth}"
+          Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}"
+        >
+          <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
+          <Setter Property="Stroke" Value="{StaticResource FailureBrush}" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Recordings.IsRecordingPulseActive}" Value="True">
+          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
+          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+          <DataTrigger.EnterActions>
+            <BeginStoryboard x:Name="RecordingPulseStoryboard">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <DoubleAnimation
+                  Storyboard.TargetProperty="Opacity"
+                  To="0.48"
+                  Duration="0:0:0.75"
+                />
+                <DoubleAnimation
+                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                  To="1.18"
+                  Duration="0:0:0.75"
+                />
+                <DoubleAnimation
+                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                  To="1.18"
+                  Duration="0:0:0.75"
+                />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <StopStoryboard BeginStoryboardName="RecordingPulseStoryboard" />
+          </DataTrigger.ExitActions>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CollapsedStatusButtonStyle" TargetType="Button">
+      <Setter Property="Width" Value="44" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid Background="Transparent">
+              <Border
+                x:Name="HoverBackground"
+                Background="{StaticResource SurfaceRaisedBrush}"
+                CornerRadius="6"
+                Opacity="0"
+              />
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Border
+                x:Name="FocusBorder"
+                BorderBrush="{StaticResource FocusBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                IsHitTestVisible="False"
+                Opacity="0"
+              />
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="HoverBackground" Property="Opacity" Value="1" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="FocusBorder" Property="Opacity" Value="1" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Cursor" Value="Arrow" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
   <Grid Background="{StaticResource WindowBrush}">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="230" />
+      <ColumnDefinition Width="{Binding DataContext.SidebarWidth, ElementName=ShellWindow}" />
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
 
@@ -22,53 +144,166 @@
       Background="{StaticResource SidebarBrush}"
       BorderBrush="{StaticResource BorderBrush}"
       BorderThickness="0,0,1,0"
-      Padding="20,24"
     >
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Top">
-          <TextBlock FontSize="26" FontWeight="SemiBold" Text="PullWatch" />
-          <TextBlock
-            Margin="0,4,0,20"
-            Style="{StaticResource SecondaryTextStyle}"
-            Text="Gameplay recorder"
-          />
+      <Border.Style>
+        <Style TargetType="Border">
+          <Setter Property="Padding" Value="20,24" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSidebarCollapsed}" Value="True">
+              <Setter Property="Padding" Value="10,24" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
 
-          <local:RecordingStatusCard Margin="0,0,0,22" DataContext="{Binding Recordings}" />
-        </StackPanel>
+      <Grid>
+        <DockPanel Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
+          <StackPanel DockPanel.Dock="Top">
+            <StackPanel Margin="0,0,0,20" Orientation="Horizontal">
+              <Image
+                Width="26"
+                Height="26"
+                Margin="0,2,10,0"
+                RenderOptions.BitmapScalingMode="HighQuality"
+                Source="Assets/favicon.ico"
+              />
+              <TextBlock FontSize="26" FontWeight="SemiBold" Text="PullWatch" />
+            </StackPanel>
 
-        <TextBlock
-          DockPanel.Dock="Bottom"
-          Margin="0,24,0,0"
-          Style="{StaticResource SecondaryTextStyle}"
-          Text="{Binding AppVersionLabel}"
-        />
+            <local:RecordingStatusCard Margin="0,0,0,22" DataContext="{Binding Recordings}" />
+          </StackPanel>
 
-        <ListBox
-          ItemsSource="{Binding NavigationItems}"
-          SelectedItem="{Binding SelectedNavigationItem}"
-          Style="{StaticResource NavigationListStyle}"
-          ItemContainerStyle="{StaticResource NavigationItemStyle}"
-        >
-          <ListBox.ItemTemplate>
-            <DataTemplate>
-              <StackPanel Orientation="Horizontal">
-                <TextBlock
-                  Width="26"
-                  FontFamily="Segoe MDL2 Assets"
-                  FontSize="15"
-                  Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
-                  Text="{Binding Glyph}"
+          <StackPanel DockPanel.Dock="Bottom" Margin="0,24,0,0">
+            <TextBlock
+              Style="{StaticResource SecondaryTextStyle}"
+              Text="{Binding AppVersionLabel}"
+            />
+            <Button
+              Margin="0,14,0,0"
+              HorizontalAlignment="Left"
+              Command="{Binding ToggleSidebarCommand}"
+              Style="{StaticResource SidebarIconButtonStyle}"
+              ToolTip="{Binding SidebarToggleToolTip}"
+            >
+              <Path
+                Width="13"
+                Height="13"
+                Data="{Binding SidebarToggleIcon}"
+                Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeEndLineCap="Round"
+                StrokeStartLineCap="Round"
+                StrokeThickness="1.8"
+              />
+            </Button>
+          </StackPanel>
+
+          <ListBox
+            ItemsSource="{Binding NavigationItems}"
+            SelectedItem="{Binding SelectedNavigationItem}"
+            Style="{StaticResource NavigationListStyle}"
+            ItemContainerStyle="{StaticResource NavigationItemStyle}"
+          >
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Orientation="Horizontal">
+                  <Path
+                    Width="16"
+                    Height="16"
+                    Margin="0,0,12,0"
+                    Data="{Binding Icon}"
+                    Fill="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
+                    Stretch="Uniform"
+                  />
+                  <TextBlock
+                    FontSize="14"
+                    Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
+                    Text="{Binding Title}"
+                  />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <DockPanel Visibility="{Binding IsSidebarCollapsed, Converter={StaticResource BooleanToVisibilityConverter}}">
+          <StackPanel
+            DockPanel.Dock="Top"
+            Width="44"
+            Margin="0,0,0,22"
+            HorizontalAlignment="Center"
+          >
+            <Image
+              Width="30"
+              Height="30"
+              Margin="0,2,0,28"
+              HorizontalAlignment="Center"
+              RenderOptions.BitmapScalingMode="HighQuality"
+              Source="Assets/favicon.ico"
+              ToolTip="PullWatch"
+            />
+
+            <Button
+              Command="{Binding Recordings.ManualRecordingCommand}"
+              Style="{StaticResource CollapsedStatusButtonStyle}"
+              ToolTip="{Binding Recordings.CollapsedStatusToolTip}"
+              ToolTipService.InitialShowDelay="250"
+              ToolTipService.ShowDuration="12000"
+            >
+              <Ellipse Style="{StaticResource CollapsedStatusDotStyle}" />
+            </Button>
+          </StackPanel>
+
+          <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Center">
+            <TextBlock
+              Margin="0,0,0,10"
+              HorizontalAlignment="Center"
+              FontSize="10"
+              Style="{StaticResource SecondaryTextStyle}"
+              Text="{Binding AppVersion}"
+              TextAlignment="Center"
+              TextWrapping="NoWrap"
+              ToolTip="{Binding AppVersionLabel}"
+            />
+            <Button
+              Command="{Binding ToggleSidebarCommand}"
+              Style="{StaticResource SidebarIconButtonStyle}"
+              ToolTip="{Binding SidebarToggleToolTip}"
+            >
+              <Path
+                Width="13"
+                Height="13"
+                Data="{Binding SidebarToggleIcon}"
+                Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeEndLineCap="Round"
+                StrokeStartLineCap="Round"
+                StrokeThickness="1.8"
+              />
+            </Button>
+          </StackPanel>
+
+          <ListBox
+            HorizontalAlignment="Center"
+            ItemsSource="{Binding NavigationItems}"
+            SelectedItem="{Binding SelectedNavigationItem}"
+            Style="{StaticResource NavigationListStyle}"
+            ItemContainerStyle="{StaticResource CollapsedNavigationItemStyle}"
+          >
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Path
+                  Width="18"
+                  Height="18"
+                  Data="{Binding Icon}"
+                  Fill="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
+                  Stretch="Uniform"
                 />
-                <TextBlock
-                  FontSize="14"
-                  Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
-                  Text="{Binding Title}"
-                />
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Grid>
     </Border>
 
     <ContentControl Grid.Column="1" Content="{Binding SelectedNavigationItem.Content}" />

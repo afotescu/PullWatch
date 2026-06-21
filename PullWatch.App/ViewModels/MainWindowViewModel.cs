@@ -1,13 +1,26 @@
+using System.Windows;
+using System.Windows.Media;
+
 namespace PullWatch;
 
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
+    private const double ExpandedSidebarWidth = 230;
+    private const double CollapsedSidebarWidth = 76;
+
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
     private readonly InMemoryLogProvider _logs;
 
     [ObservableProperty]
     private NavigationItemViewModel _selectedNavigationItem;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSidebarExpanded))]
+    [NotifyPropertyChangedFor(nameof(SidebarWidth))]
+    [NotifyPropertyChangedFor(nameof(SidebarToggleToolTip))]
+    [NotifyPropertyChangedFor(nameof(SidebarToggleIcon))]
+    private bool _isSidebarCollapsed;
 
     public MainWindowViewModel(
         ApplicationController controller,
@@ -39,18 +52,36 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
         [
-            new NavigationItemViewModel("Recordings", "\uE80F", Recordings),
-            new NavigationItemViewModel("Settings", "\uE713", Settings),
-            new NavigationItemViewModel("Diagnostics", "\uE9D9", Diagnostics),
+            new NavigationItemViewModel("Recordings", ShellIconGeometries.Recordings, Recordings),
+            new NavigationItemViewModel("Settings", ShellIconGeometries.Settings, Settings),
+            new NavigationItemViewModel(
+                "Diagnostics",
+                ShellIconGeometries.Diagnostics,
+                Diagnostics
+            ),
         ];
         _selectedNavigationItem = showSettingsOnStartup ? NavigationItems[1] : NavigationItems[0];
+        _isSidebarCollapsed = controller.Status.EffectiveSettings?.Ui.SidebarCollapsed ?? false;
         _controller.StatusChanged += OnStatusChanged;
         _logs.LogsChanged += OnLogsChanged;
     }
 
     public IReadOnlyList<NavigationItemViewModel> NavigationItems { get; }
 
-    public string AppVersionLabel { get; } = $"Version {ApplicationVersion.Current}";
+    public bool IsSidebarExpanded => !IsSidebarCollapsed;
+
+    public GridLength SidebarWidth =>
+        new(IsSidebarCollapsed ? CollapsedSidebarWidth : ExpandedSidebarWidth);
+
+    public string SidebarToggleToolTip =>
+        IsSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+
+    public Geometry SidebarToggleIcon =>
+        IsSidebarCollapsed ? ShellIconGeometries.Expand : ShellIconGeometries.Collapse;
+
+    public string AppVersion { get; } = ApplicationVersion.Current;
+
+    public string AppVersionLabel => $"Version {AppVersion}";
 
     public RecordingsViewModel Recordings { get; }
 
@@ -67,6 +98,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private Task OpenRecordingsFolderAsync()
     {
         return _controller.OpenRecordingsFolderAsync();
+    }
+
+    [RelayCommand]
+    private async Task ToggleSidebarAsync()
+    {
+        IsSidebarCollapsed = !IsSidebarCollapsed;
+
+        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
+
+        try
+        {
+            await _controller.SaveUiSettingsAsync(
+                currentUi with
+                {
+                    SidebarCollapsed = IsSidebarCollapsed,
+                }
+            );
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // The visual preference can safely remain in-memory during shutdown.
+        }
     }
 
     private void OnStatusChanged(ApplicationStatus status)

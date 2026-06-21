@@ -67,6 +67,11 @@ public sealed partial class RecordingsViewModel : ObservableObject
     public RecordingStatusHealth StatusHealth =>
         GetStatusHealth(_recording, _combatLog, _wowProcess);
 
+    public bool IsRecordingActive => _recording.State == RecordingCoordinatorState.Recording;
+
+    public bool IsRecordingPulseActive =>
+        IsRecordingActive && StatusHealth == RecordingStatusHealth.Active;
+
     public string Duration
     {
         get => _duration;
@@ -125,6 +130,15 @@ public sealed partial class RecordingsViewModel : ObservableObject
     public bool IsManualStopMode => _recording.State == RecordingCoordinatorState.Recording;
 
     public string ManualRecordingButtonText => IsManualStopMode ? "Manual stop" : "Manual start";
+
+    public string CollapsedStatusToolTip =>
+        _recording.State switch
+        {
+            RecordingCoordinatorState.Recording => "Recording. Click to stop.",
+            RecordingCoordinatorState.Idle when _wowProcess.IsWindowAvailable =>
+                "Idle. Click to start manual recording.",
+            _ => ReadinessDetail,
+        };
 
     public void ApplyStatus(ApplicationStatus status)
     {

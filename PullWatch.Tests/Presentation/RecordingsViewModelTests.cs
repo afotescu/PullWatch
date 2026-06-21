@@ -3,16 +3,45 @@ namespace PullWatch.Tests;
 public sealed class RecordingsViewModelTests
 {
     [Theory]
-    [InlineData(RecordingCoordinatorState.Idle, "Ready", true, false, "Manual start")]
-    [InlineData(RecordingCoordinatorState.Starting, "Processing", false, false, "Manual start")]
-    [InlineData(RecordingCoordinatorState.Recording, "Recording", true, true, "Manual stop")]
-    [InlineData(RecordingCoordinatorState.Stopping, "Processing", false, false, "Manual start")]
+    [InlineData(
+        RecordingCoordinatorState.Idle,
+        "Ready",
+        true,
+        false,
+        "Manual start",
+        "Idle. Click to start manual recording."
+    )]
+    [InlineData(
+        RecordingCoordinatorState.Starting,
+        "Processing",
+        false,
+        false,
+        "Manual start",
+        "WoW is running.\r\nStarting recording."
+    )]
+    [InlineData(
+        RecordingCoordinatorState.Recording,
+        "Recording",
+        true,
+        true,
+        "Manual stop",
+        "Recording. Click to stop."
+    )]
+    [InlineData(
+        RecordingCoordinatorState.Stopping,
+        "Processing",
+        false,
+        false,
+        "Manual start",
+        "WoW recording is being saved."
+    )]
     public void AppliesEveryRecordingState(
         RecordingCoordinatorState state,
         string expectedTitle,
         bool canRunManualCommand,
         bool isManualStopMode,
-        string expectedManualButtonText
+        string expectedManualButtonText,
+        string expectedCollapsedStatusToolTip
     )
     {
         var viewModel = CreateViewModel(Status(state));
@@ -21,6 +50,10 @@ public sealed class RecordingsViewModelTests
         Assert.Equal(canRunManualCommand, viewModel.ManualRecordingCommand.CanExecute(null));
         Assert.Equal(isManualStopMode, viewModel.IsManualStopMode);
         Assert.Equal(expectedManualButtonText, viewModel.ManualRecordingButtonText);
+        Assert.Equal(
+            expectedCollapsedStatusToolTip.Replace("\r\n", Environment.NewLine),
+            viewModel.CollapsedStatusToolTip
+        );
     }
 
     [Fact]

@@ -635,6 +635,7 @@ public sealed class ApplicationControllerTests
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
         var ui = new UiSettings
         {
+            SidebarCollapsed = true,
             WindowPlacement = new WindowPlacementSettings
             {
                 Left = 25,

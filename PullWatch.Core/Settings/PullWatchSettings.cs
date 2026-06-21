@@ -51,6 +51,7 @@ public sealed record AudioSettings
 public sealed record UiSettings
 {
     public WindowPlacementSettings WindowPlacement { get; init; } = new();
+    public bool SidebarCollapsed { get; init; }
 }
 
 public sealed record WindowPlacementSettings
