@@ -44,6 +44,7 @@ public sealed class DiagnosticsViewModelTests
                     wowProcess.Rows,
                     ("State", "WaitingForProcess"),
                     ("Process id", "(none)"),
+                    ("Process started at", "(none)"),
                     ("Window title", "(none)"),
                     ("Last process error", "(none)")
                 );
@@ -77,7 +78,7 @@ public sealed class DiagnosticsViewModelTests
                 null
             ),
             new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
-            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
         );
     }
 

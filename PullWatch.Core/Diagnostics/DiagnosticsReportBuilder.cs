@@ -36,6 +36,9 @@ public static class DiagnosticsReportBuilder
             $"Process id: {DiagnosticsValueFormatter.Format(status.WowProcess.ProcessId)}"
         );
         report.AppendLine(
+            $"Process started at: {DiagnosticsValueFormatter.Format(status.WowProcess.ProcessStartedAtUtc)}"
+        );
+        report.AppendLine(
             $"Window title: {DiagnosticsValueFormatter.Format(status.WowProcess.MainWindowTitle)}"
         );
         report.AppendLine(

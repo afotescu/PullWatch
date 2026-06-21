@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -13,7 +14,13 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
     private readonly object _statusLock = new();
     private readonly object _processLock = new();
     private readonly object _exitSignalLock = new();
-    private WowProcessStatus _status = new(WowProcessState.WaitingForProcess, null, null, null);
+    private WowProcessStatus _status = new(
+        WowProcessState.WaitingForProcess,
+        null,
+        null,
+        null,
+        null
+    );
     private Process? _observedProcess;
     private TaskCompletionSource _targetExited = CreateCompletionSource();
     private bool _disposed;
@@ -86,6 +93,7 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
         var processes = Process.GetProcessesByName(WowProcessName);
         Process? selectedProcess = null;
         int? firstProcessId = null;
+        DateTimeOffset? firstProcessStartedAtUtc = null;
 
         try
         {
@@ -93,7 +101,13 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
             {
                 try
                 {
-                    firstProcessId ??= process.Id;
+                    var processId = process.Id;
+                    var processStartedAtUtc = TryGetProcessStartedAtUtc(process);
+                    if (firstProcessId is null)
+                    {
+                        firstProcessId = processId;
+                        firstProcessStartedAtUtc = processStartedAtUtc;
+                    }
                     var windowHandle = process.MainWindowHandle;
 
                     if (windowHandle == nint.Zero)
@@ -106,7 +120,8 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
                     TrackObservedProcess(selectedProcess);
                     return new WowProcessStatus(
                         WowProcessState.WindowAvailable,
-                        selectedProcess.Id,
+                        processId,
+                        processStartedAtUtc,
                         string.IsNullOrWhiteSpace(title) ? null : title,
                         null
                     );
@@ -119,10 +134,11 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
 
             ClearObservedProcess();
             return firstProcessId is null
-                ? new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+                ? new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
                 : new WowProcessStatus(
                     WowProcessState.WaitingForWindow,
                     firstProcessId,
+                    firstProcessStartedAtUtc,
                     null,
                     null
                 );
@@ -218,11 +234,39 @@ public sealed class WowProcessMonitor : IWowProcessMonitor, IDisposable
             handlers = StatusChanged;
         }
 
+        _logger.LogInformation(
+            "WoW process status changed to {WowProcessState}; process id {WowProcessId}; started at {WowProcessStartedAtUtc}; window title {WowWindowTitle}",
+            status.State,
+            status.ProcessId,
+            status.ProcessStartedAtUtc,
+            status.MainWindowTitle
+        );
+        if (status.ProcessId is not null && status.ProcessStartedAtUtc is null)
+        {
+            _logger.LogInformation(
+                "WoW process start time is unavailable; combat-log discovery will use latest-file fallback for process id {WowProcessId}",
+                status.ProcessId
+            );
+        }
+
         handlers?.Invoke(status);
     }
 
     private static TaskCompletionSource CreateCompletionSource()
     {
         return new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private static DateTimeOffset? TryGetProcessStartedAtUtc(Process process)
+    {
+        try
+        {
+            return process.StartTime.ToUniversalTime();
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
     }
 }

@@ -283,6 +283,7 @@ public sealed class ApplicationControllerTests
         var status = new WowProcessStatus(
             WowProcessState.WindowAvailable,
             1234,
+            DateTimeOffset.Parse("2026-06-15T10:00:00Z"),
             "World of Warcraft",
             null
         );
@@ -313,11 +314,80 @@ public sealed class ApplicationControllerTests
 
         await WaitForAsync(() => monitor.Started);
         wowMonitor.Publish(
-            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
         );
         await WaitForAsync(() => monitor.Stopped);
         await WaitForAsync(() =>
             controller.Status.CombatLog.State == CombatLogReaderState.WaitingForWow
+        );
+    }
+
+    [Fact]
+    public async Task CombatLogMonitoringRestartsWhenWowSessionChanges()
+    {
+        using var directory = new TemporaryDirectory();
+        var logsDirectory = Directory
+            .CreateDirectory(Path.Combine(directory.Path, "Logs"))
+            .FullName;
+        var firstStartedAtUtc = DateTimeOffset.Parse("2026-06-15T10:00:00Z");
+        var secondStartedAtUtc = DateTimeOffset.Parse("2026-06-15T11:00:00Z");
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                WowLogsDirectory = logsDirectory,
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        var firstMonitor = new FakeCombatLogMonitor();
+        var secondMonitor = new FakeCombatLogMonitor();
+        var monitors = new Queue<FakeCombatLogMonitor>([firstMonitor, secondMonitor]);
+        var processStartedAtUtcValues = new List<DateTimeOffset?>();
+        var wowMonitor = new FakeWowProcessMonitor(
+            new WowProcessStatus(
+                WowProcessState.WindowAvailable,
+                1234,
+                firstStartedAtUtc,
+                "World of Warcraft",
+                null
+            )
+        );
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => new FakeRecordingService(),
+            (_, processStartedAtUtc, _) =>
+            {
+                processStartedAtUtcValues.Add(processStartedAtUtc);
+                return monitors.Dequeue();
+            },
+            NullLoggerFactory.Instance,
+            () => wowMonitor
+        );
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+        await WaitForAsync(() => firstMonitor.Started);
+
+        wowMonitor.Publish(
+            new WowProcessStatus(
+                WowProcessState.WindowAvailable,
+                5678,
+                secondStartedAtUtc,
+                "World of Warcraft",
+                null
+            )
+        );
+
+        await WaitForAsync(() => firstMonitor.Stopped && secondMonitor.Started);
+
+        Assert.Equal(
+            new DateTimeOffset?[] { firstStartedAtUtc, secondStartedAtUtc },
+            processStartedAtUtcValues
         );
     }
 
@@ -677,7 +747,13 @@ public sealed class ApplicationControllerTests
     private static FakeWowProcessMonitor AvailableWowMonitor()
     {
         return new FakeWowProcessMonitor(
-            new WowProcessStatus(WowProcessState.WindowAvailable, 1234, "World of Warcraft", null)
+            new WowProcessStatus(
+                WowProcessState.WindowAvailable,
+                1234,
+                DateTimeOffset.Parse("2026-06-15T10:00:00Z"),
+                "World of Warcraft",
+                null
+            )
         );
     }
 

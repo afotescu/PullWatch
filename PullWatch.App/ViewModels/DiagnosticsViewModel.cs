@@ -47,6 +47,10 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
                         DiagnosticsValueFormatter.Format(_status.WowProcess.ProcessId)
                     ),
                     new(
+                        "Process started at",
+                        DiagnosticsValueFormatter.Format(_status.WowProcess.ProcessStartedAtUtc)
+                    ),
+                    new(
                         "Window title",
                         DiagnosticsValueFormatter.Format(_status.WowProcess.MainWindowTitle)
                     ),

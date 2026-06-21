@@ -124,6 +124,104 @@ public sealed class CombatLogReaderTests
     }
 
     [Fact]
+    public async Task IgnoresLogsCreatedBeforeWowSession()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var processStartedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var stalePath = Path.Combine(directory.Path, "WoWCombatLog-stale.txt");
+        await File.WriteAllTextAsync(stalePath, FirstLine + Environment.NewLine, cancellationToken);
+        File.SetCreationTimeUtc(stalePath, processStartedAtUtc.AddMinutes(-1).UtcDateTime);
+        File.SetLastWriteTimeUtc(stalePath, DateTime.UtcNow);
+        var events = new ConcurrentQueue<CombatLogEvent>();
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
+        var reader = CreateReader(directory.Path, wowProcessStartedAtUtc: processStartedAtUtc);
+
+        var readTask = reader.ReadAsync(
+            (combatLogEvent, _) =>
+            {
+                events.Enqueue(combatLogEvent);
+                return Task.CompletedTask;
+            },
+            readerCancellation.Token
+        );
+        await WaitForStateAsync(reader, CombatLogReaderState.WaitingForCombatLog);
+
+        var currentPath = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(
+            currentPath,
+            SecondLine + Environment.NewLine,
+            cancellationToken
+        );
+        await WaitForCountAsync(events, 1);
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+        Assert.Equal(currentPath, reader.Status.CurrentPath);
+        Assert.Equal(WowEvents.EncounterEnd, events.Single().Name);
+    }
+
+    [Fact]
+    public async Task KeepsSelectedLogForKnownWowSession()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var processStartedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var currentPath = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(currentPath, "", cancellationToken);
+        File.SetCreationTimeUtc(currentPath, processStartedAtUtc.AddSeconds(1).UtcDateTime);
+        File.SetLastWriteTimeUtc(currentPath, DateTime.UtcNow.AddMinutes(-2));
+        var events = new ConcurrentQueue<CombatLogEvent>();
+        var switchingCount = 0;
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
+        var reader = CreateReader(directory.Path, wowProcessStartedAtUtc: processStartedAtUtc);
+        reader.StatusChanged += status =>
+        {
+            if (status.State == CombatLogReaderState.SwitchingCombatLog)
+            {
+                Interlocked.Increment(ref switchingCount);
+            }
+        };
+
+        var readTask = reader.ReadAsync(
+            (combatLogEvent, _) =>
+            {
+                events.Enqueue(combatLogEvent);
+                return Task.CompletedTask;
+            },
+            readerCancellation.Token
+        );
+        await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
+
+        var newerPath = Path.Combine(directory.Path, "WoWCombatLog-new.txt");
+        await File.WriteAllTextAsync(newerPath, FirstLine + Environment.NewLine, cancellationToken);
+        File.SetCreationTimeUtc(newerPath, processStartedAtUtc.AddSeconds(2).UtcDateTime);
+        File.SetLastWriteTimeUtc(newerPath, DateTime.UtcNow);
+        await Task.Delay(150, cancellationToken);
+
+        Assert.Equal(currentPath, reader.Status.CurrentPath);
+        Assert.Empty(events);
+        Assert.Equal(0, switchingCount);
+
+        await File.AppendAllTextAsync(
+            currentPath,
+            SecondLine + Environment.NewLine,
+            cancellationToken
+        );
+        await WaitForCountAsync(events, 1);
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+        Assert.Equal(currentPath, reader.Status.CurrentPath);
+        Assert.Equal(SecondLine, events.Single().RawLine);
+        Assert.Equal(0, switchingCount);
+    }
+
+    [Fact]
     public async Task DoesNotRediscoverNewerLogBeforeDiscoveryInterval()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -435,7 +533,8 @@ public sealed class CombatLogReaderTests
     private static CombatLogReader CreateReader(
         string logsDirectory,
         Func<bool>? canDiscoverCombatLog = null,
-        TimeSpan? discoveryInterval = null
+        TimeSpan? discoveryInterval = null,
+        DateTimeOffset? wowProcessStartedAtUtc = null
     )
     {
         return new CombatLogReader(
@@ -444,7 +543,8 @@ public sealed class CombatLogReaderTests
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromMilliseconds(40),
             canDiscoverCombatLog,
-            discoveryInterval ?? TimeSpan.FromMilliseconds(10)
+            discoveryInterval ?? TimeSpan.FromMilliseconds(10),
+            wowProcessStartedAtUtc
         );
     }
 

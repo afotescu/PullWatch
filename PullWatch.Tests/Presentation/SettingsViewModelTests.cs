@@ -368,7 +368,7 @@ public sealed class SettingsViewModelTests
                 },
             new RecordingCoordinatorStatus(state, null, null, null, null, null, null, null),
             new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
-            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
         );
     }
 

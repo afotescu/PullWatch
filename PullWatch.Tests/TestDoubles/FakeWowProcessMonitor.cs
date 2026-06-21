@@ -6,7 +6,7 @@ internal sealed class FakeWowProcessMonitor : IWowProcessMonitor
     private TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public FakeWowProcessMonitor()
-        : this(new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)) { }
+        : this(new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)) { }
 
     public FakeWowProcessMonitor(WowProcessStatus status)
     {

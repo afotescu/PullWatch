@@ -10,11 +10,13 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan DefaultDiscoveryInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultMaximumRetryDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DefaultSessionStartTolerance = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(30);
 
     private readonly string _logsDirectory;
     private readonly ILogger<CombatLogReader> _logger;
     private readonly Func<bool> _canDiscoverCombatLog;
+    private readonly DateTimeOffset? _wowProcessStartedAtUtc;
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _discoveryInterval;
     private readonly TimeSpan _maximumRetryDelay;
@@ -28,6 +30,7 @@ public sealed class CombatLogReader : ICombatLogMonitor
     private string? _lastLoggedErrorMessage;
     private long _lastDiscoveryTimestamp;
     private bool _hasPublishedState;
+    private bool _hasLoggedSessionFilteredFiles;
 
     public CombatLogReader(
         string logsDirectory,
@@ -35,12 +38,14 @@ public sealed class CombatLogReader : ICombatLogMonitor
         TimeSpan? pollInterval = null,
         TimeSpan? maximumRetryDelay = null,
         Func<bool>? canDiscoverCombatLog = null,
-        TimeSpan? discoveryInterval = null
+        TimeSpan? discoveryInterval = null,
+        DateTimeOffset? wowProcessStartedAtUtc = null
     )
     {
         _logsDirectory = logsDirectory;
         _logger = logger;
         _canDiscoverCombatLog = canDiscoverCombatLog ?? (() => true);
+        _wowProcessStartedAtUtc = wowProcessStartedAtUtc;
         _pollInterval = pollInterval ?? DefaultPollInterval;
         _discoveryInterval = discoveryInterval ?? DefaultDiscoveryInterval;
         _maximumRetryDelay = maximumRetryDelay ?? DefaultMaximumRetryDelay;
@@ -109,7 +114,7 @@ public sealed class CombatLogReader : ICombatLogMonitor
     )
     {
         await using var stream = OpenSessionStream(session);
-        PublishReadableStatus(session.Candidate.FullName);
+        PublishReadableStatus(session.Candidate);
 
         var buffer = new byte[4096];
 
@@ -132,8 +137,14 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
             if (CanDiscoverCombatLog() && ShouldDiscoverCombatLog())
             {
-                var discovery = DiscoverLatestCombatLog();
+                if (ShouldKeepCurrentSessionFile(session))
+                {
+                    MarkDiscoveryAttempt();
+                    await Task.Delay(_pollInterval, cancellationToken);
+                    continue;
+                }
 
+                var discovery = DiscoverLatestCombatLog();
                 if (discovery.Error is not null)
                 {
                     PublishError(discovery.Error, session.Candidate.FullName);
@@ -145,16 +156,9 @@ public sealed class CombatLogReader : ICombatLogMonitor
                         ? null
                         : SwitchTo(discovery.Candidate, session.Candidate.FullName);
                 }
-                else if (
-                    discovery.Candidate is not null
-                    && !PathComparer.Equals(
-                        discovery.Candidate.FullName,
-                        session.Candidate.FullName
-                    )
-                    && discovery.Candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc
-                )
+                else if (CanSwitchToNewerCombatLog(session, discovery.Candidate))
                 {
-                    return SwitchTo(discovery.Candidate, session.Candidate.FullName);
+                    return SwitchTo(discovery.Candidate!, session.Candidate.FullName);
                 }
             }
             await Task.Delay(_pollInterval, cancellationToken);
@@ -262,16 +266,28 @@ public sealed class CombatLogReader : ICombatLogMonitor
             || Stopwatch.GetElapsedTime(lastDiscoveryTimestamp) >= _discoveryInterval;
     }
 
-    private DiscoveryResult DiscoverLatestCombatLog()
+    private void MarkDiscoveryAttempt()
     {
         Volatile.Write(ref _lastDiscoveryTimestamp, Stopwatch.GetTimestamp());
+    }
+
+    private DiscoveryResult DiscoverLatestCombatLog()
+    {
+        MarkDiscoveryAttempt();
 
         try
         {
             FileInfo? latestCombatLog = null;
+            var sessionFilteredCount = 0;
 
             foreach (var file in new DirectoryInfo(_logsDirectory).EnumerateFiles(CombatLogPattern))
             {
+                if (!CanBelongToCurrentWowSession(file))
+                {
+                    sessionFilteredCount++;
+                    continue;
+                }
+
                 if (
                     latestCombatLog is null
                     || file.LastWriteTimeUtc > latestCombatLog.LastWriteTimeUtc
@@ -283,13 +299,16 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
             if (latestCombatLog is null)
             {
+                LogSessionFilteredFiles(sessionFilteredCount);
                 return new DiscoveryResult(true, null, null);
             }
 
+            _hasLoggedSessionFilteredFiles = false;
             return new DiscoveryResult(
                 true,
                 new FileCandidate(
                     latestCombatLog.FullName,
+                    latestCombatLog.CreationTimeUtc,
                     latestCombatLog.LastWriteTimeUtc,
                     latestCombatLog.Length
                 ),
@@ -304,6 +323,51 @@ public sealed class CombatLogReader : ICombatLogMonitor
         {
             return new DiscoveryResult(true, null, exception);
         }
+    }
+
+    private bool ShouldKeepCurrentSessionFile(FileSession session)
+    {
+        return _wowProcessStartedAtUtc is not null && File.Exists(session.Candidate.FullName);
+    }
+
+    private bool CanSwitchToNewerCombatLog(FileSession session, FileCandidate? candidate)
+    {
+        return _wowProcessStartedAtUtc is null
+            && candidate is not null
+            && !PathComparer.Equals(candidate.FullName, session.Candidate.FullName)
+            && candidate.LastWriteTimeUtc > session.Candidate.LastWriteTimeUtc;
+    }
+
+    private bool CanBelongToCurrentWowSession(FileInfo file)
+    {
+        if (_wowProcessStartedAtUtc is not { } processStartedAtUtc)
+        {
+            return true;
+        }
+
+        var minimumCreationTimeUtc = (
+            processStartedAtUtc - DefaultSessionStartTolerance
+        ).UtcDateTime;
+        return file.CreationTimeUtc >= minimumCreationTimeUtc;
+    }
+
+    private void LogSessionFilteredFiles(int sessionFilteredCount)
+    {
+        if (
+            sessionFilteredCount == 0
+            || _wowProcessStartedAtUtc is null
+            || _hasLoggedSessionFilteredFiles
+        )
+        {
+            return;
+        }
+
+        _hasLoggedSessionFilteredFiles = true;
+        _logger.LogInformation(
+            "Ignored {CombatLogFileCount} combat-log file(s) created before WoW process started at {WowProcessStartedAtUtc}",
+            sessionFilteredCount,
+            _wowProcessStartedAtUtc
+        );
     }
 
     private FileSession SwitchTo(FileCandidate candidate, string currentPath)
@@ -340,13 +404,13 @@ public sealed class CombatLogReader : ICombatLogMonitor
         );
     }
 
-    private void PublishReadableStatus(string path)
+    private void PublishReadableStatus(FileCandidate candidate)
     {
         var current = Status;
         if (
             _hasPublishedState
             && current.State == CombatLogReaderState.ReadingCombatLog
-            && PathComparer.Equals(current.CurrentPath, path)
+            && PathComparer.Equals(current.CurrentPath, candidate.FullName)
             && current.LastFileSystemError is null
         )
         {
@@ -358,15 +422,18 @@ public sealed class CombatLogReader : ICombatLogMonitor
             current with
             {
                 State = CombatLogReaderState.ReadingCombatLog,
-                CurrentPath = path,
+                CurrentPath = candidate.FullName,
                 LastFileSystemError = null,
             }
         );
 
         _logger.LogInformation(
-            "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}",
+            "Combat log reader state changed to {CombatLogReaderState}; path {CombatLogPath}; file created at {CombatLogCreatedAtUtc}; last write at {CombatLogLastWriteAtUtc}; WoW process started at {WowProcessStartedAtUtc}",
             CombatLogReaderState.ReadingCombatLog,
-            path
+            candidate.FullName,
+            candidate.CreationTimeUtc,
+            candidate.LastWriteTimeUtc,
+            _wowProcessStartedAtUtc
         );
     }
 
@@ -461,7 +528,12 @@ public sealed class CombatLogReader : ICombatLogMonitor
 
     private static StringComparer PathComparer { get; } = StringComparer.OrdinalIgnoreCase;
 
-    private sealed record FileCandidate(string FullName, DateTime LastWriteTimeUtc, long Length);
+    private sealed record FileCandidate(
+        string FullName,
+        DateTime CreationTimeUtc,
+        DateTime LastWriteTimeUtc,
+        long Length
+    );
 
     private sealed class FileSession(FileCandidate candidate, long offset, List<byte> pendingLine)
     {

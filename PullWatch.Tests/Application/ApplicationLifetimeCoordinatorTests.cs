@@ -123,7 +123,7 @@ public sealed class ApplicationLifetimeCoordinatorTests
                 null
             ),
             new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
-            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null)
+            new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
         );
     }
 }

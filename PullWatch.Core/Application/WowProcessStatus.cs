@@ -10,6 +10,7 @@ public enum WowProcessState
 public sealed record WowProcessStatus(
     WowProcessState State,
     int? ProcessId,
+    DateTimeOffset? ProcessStartedAtUtc,
     string? MainWindowTitle,
     Exception? LastError
 )

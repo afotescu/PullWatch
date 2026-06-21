@@ -747,7 +747,7 @@ public sealed class RecordingsViewModelTests
                 Statistics = new RecordingStatistics(0, savedCount),
             },
             new CombatLogReaderStatus(combatLogState, combatLogPath, null, combatLogError),
-            new WowProcessStatus(wowProcessState, wowProcessId, wowWindowTitle, null)
+            new WowProcessStatus(wowProcessState, wowProcessId, null, wowWindowTitle, null)
         );
     }
 

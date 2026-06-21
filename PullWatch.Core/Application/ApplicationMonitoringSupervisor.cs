@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace PullWatch;
 
 internal sealed class ApplicationMonitoringSupervisor(
-    Func<string, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
+    Func<string, DateTimeOffset?, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
     Func<IWowProcessMonitor> createWowProcessMonitor,
     RecordingCoordinator recordingCoordinator,
     SettingsProvider settingsProvider,
@@ -20,6 +20,7 @@ internal sealed class ApplicationMonitoringSupervisor(
     private CancellationTokenSource? _wowProcessCancellation;
     private Task? _combatLogTask;
     private Task? _wowProcessTask;
+    private WowProcessSession? _combatLogSession;
     private bool _isActive = true;
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -98,9 +99,29 @@ internal sealed class ApplicationMonitoringSupervisor(
         );
     }
 
-    private void StartCombatLogMonitoring(string logsDirectory)
+    private void StartCombatLogMonitoring(string logsDirectory, WowProcessSession wowProcessSession)
     {
-        var monitor = createCombatLogMonitor(logsDirectory, CanDiscoverCombatLog);
+        if (wowProcessSession.ProcessStartedAtUtc is null)
+        {
+            _logger.LogInformation(
+                "Starting combat-log monitoring for WoW process {WowProcessId}; process start time unavailable, using latest-file discovery fallback",
+                wowProcessSession.ProcessId
+            );
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Starting combat-log monitoring for WoW process {WowProcessId} started at {WowProcessStartedAtUtc}; filtering combat logs by creation time",
+                wowProcessSession.ProcessId,
+                wowProcessSession.ProcessStartedAtUtc
+            );
+        }
+
+        var monitor = createCombatLogMonitor(
+            logsDirectory,
+            wowProcessSession.ProcessStartedAtUtc,
+            CanDiscoverCombatLog
+        );
         var eventHandler = new CombatLogEventHandler(
             recordingCoordinator,
             settingsProvider,
@@ -110,6 +131,7 @@ internal sealed class ApplicationMonitoringSupervisor(
 
         monitor.StatusChanged += OnCombatLogStatusChanged;
         _combatLogMonitor = monitor;
+        _combatLogSession = wowProcessSession;
         _combatLogCancellation = cancellation;
         statusPublisher.Update(status => status with { CombatLog = monitor.Status });
         _combatLogTask = Task.Run(
@@ -192,6 +214,7 @@ internal sealed class ApplicationMonitoringSupervisor(
         _combatLogCancellation = null;
         _combatLogTask = null;
         _combatLogMonitor = null;
+        _combatLogSession = null;
 
         if (monitor is not null)
         {
@@ -307,12 +330,9 @@ internal sealed class ApplicationMonitoringSupervisor(
     {
         var status = statusPublisher.Status;
         var settings = status.EffectiveSettings;
+        var wowProcessSession = GetWowProcessSession(status.WowProcess);
 
-        if (
-            settings is null
-            || !status.WowProcess.IsWindowAvailable
-            || settings.WowLogsDirectory is null
-        )
+        if (settings is null || wowProcessSession is null || settings.WowLogsDirectory is null)
         {
             await StopCombatLogMonitoringAsync();
             statusPublisher.Update(current =>
@@ -326,14 +346,35 @@ internal sealed class ApplicationMonitoringSupervisor(
 
         if (_combatLogMonitor is not null)
         {
-            return;
+            if (_combatLogSession == wowProcessSession)
+            {
+                return;
+            }
+
+            _logger.LogInformation(
+                "Restarting combat-log monitoring because the WoW session changed from process {PreviousWowProcessId} started at {PreviousWowProcessStartedAtUtc} to process {WowProcessId} started at {WowProcessStartedAtUtc}",
+                _combatLogSession?.ProcessId,
+                _combatLogSession?.ProcessStartedAtUtc,
+                wowProcessSession.ProcessId,
+                wowProcessSession.ProcessStartedAtUtc
+            );
+            await StopCombatLogMonitoringAsync();
         }
 
-        StartCombatLogMonitoring(settings.WowLogsDirectory);
+        StartCombatLogMonitoring(settings.WowLogsDirectory, wowProcessSession);
     }
 
     private bool CanDiscoverCombatLog()
     {
         return recordingCoordinator.Status.State == RecordingCoordinatorState.Idle;
     }
+
+    private static WowProcessSession? GetWowProcessSession(WowProcessStatus status)
+    {
+        return status is { IsWindowAvailable: true, ProcessId: { } processId }
+            ? new WowProcessSession(processId, status.ProcessStartedAtUtc)
+            : null;
+    }
+
+    private sealed record WowProcessSession(int ProcessId, DateTimeOffset? ProcessStartedAtUtc);
 }
