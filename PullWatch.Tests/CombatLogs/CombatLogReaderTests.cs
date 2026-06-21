@@ -6,10 +6,10 @@ namespace PullWatch.Tests;
 
 public sealed class CombatLogReaderTests
 {
-    private const string FirstLine =
-        "6/15/2026 00:15:10.0373  ENCOUNTER_START,3129,\"Plexus Sentinel\",14,10,2810";
-    private const string SecondLine =
-        "6/15/2026 00:16:10.0373  ENCOUNTER_END,3129,\"Plexus Sentinel\",14,10,1";
+    private static readonly string FirstLine =
+        $"6/15/2026 00:15:10.0373  ENCOUNTER_START,3129,\"Plexus Sentinel\",{WowDifficultyIds.NormalRaid},10,2810";
+    private static readonly string SecondLine =
+        $"6/15/2026 00:16:10.0373  ENCOUNTER_END,3129,\"Plexus Sentinel\",{WowDifficultyIds.NormalRaid},10,1";
     private const string MalformedChallengeStartLine =
         "6/15/2026 00:17:10.0373  CHALLENGE_MODE_START,\"Magisters' Terrace\",2811,558";
     private const string ValidChallengeStartLine =

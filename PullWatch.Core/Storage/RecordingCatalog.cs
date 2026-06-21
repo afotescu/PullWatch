@@ -28,6 +28,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 null,
                 null
             ),
+            CreateRaidEncounterSave(id, context),
             cancellationToken
         );
 
@@ -37,6 +38,16 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
     public async Task CompleteRecordingAsync(
         Guid id,
         DateTimeOffset endedAtUtc,
+        CancellationToken cancellationToken
+    )
+    {
+        await CompleteRecordingAsync(id, endedAtUtc, null, cancellationToken);
+    }
+
+    public async Task CompleteRecordingAsync(
+        Guid id,
+        DateTimeOffset endedAtUtc,
+        EncounterRecordingEnd? encounterEnd,
         CancellationToken cancellationToken
     )
     {
@@ -68,6 +79,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 file.Length,
                 new DateTimeOffset(file.LastWriteTimeUtc)
             ),
+            CreateRaidEncounterCompletionSave(entry, encounterEnd),
             cancellationToken
         );
     }
@@ -175,6 +187,42 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 "Unknown recording context."
             ),
         };
+    }
+
+    private static RaidEncounterSave? CreateRaidEncounterSave(
+        Guid recordingId,
+        RecordingContext context
+    )
+    {
+        return context is EncounterRecordingContext encounter
+            ? new RaidEncounterSave(
+                recordingId,
+                encounter.EncounterId,
+                encounter.EncounterName,
+                encounter.DifficultyId,
+                encounter.GroupSize,
+                encounter.InstanceId,
+                encounter.StartedAt.ToUniversalTime(),
+                RaidEncounterOutcome.Unknown,
+                null,
+                null
+            )
+            : null;
+    }
+
+    private static RaidEncounterCompletionSave? CreateRaidEncounterCompletionSave(
+        RecordingCatalogEntry entry,
+        EncounterRecordingEnd? encounterEnd
+    )
+    {
+        return entry.Kind == RecordingCatalogKind.Encounter && encounterEnd is not null
+            ? new RaidEncounterCompletionSave(
+                entry.Id,
+                encounterEnd.Outcome,
+                encounterEnd.EndedAt.ToUniversalTime(),
+                encounterEnd.DurationMilliseconds
+            )
+            : null;
     }
 
     private static bool IsTopLevelFileInDirectory(string filePath, string recordingsDirectory)

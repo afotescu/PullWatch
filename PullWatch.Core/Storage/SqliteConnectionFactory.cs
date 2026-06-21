@@ -14,6 +14,7 @@ public sealed class SqliteConnectionFactory
             DataSource = DatabasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = false,
+            ForeignKeys = true,
         }.ToString();
     }
 

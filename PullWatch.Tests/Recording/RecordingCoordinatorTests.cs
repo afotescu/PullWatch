@@ -503,7 +503,7 @@ public sealed class RecordingCoordinatorTests
             DateTimeOffset.Now,
             encounterId,
             "Plexus Sentinel",
-            16
+            WowDifficultyIds.MythicRaid
         );
     }
 

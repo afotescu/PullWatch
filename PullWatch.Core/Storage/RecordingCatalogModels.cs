@@ -47,3 +47,38 @@ public sealed record RecordingCatalogFile(
     long SizeBytes,
     DateTimeOffset ModifiedAtUtc
 );
+
+public sealed record RaidEncounterEntry(
+    Guid RecordingId,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc,
+    int EncounterId,
+    string EncounterName,
+    int DifficultyId,
+    int? GroupSize,
+    int? InstanceId,
+    DateTimeOffset EncounterStartedAtUtc,
+    RaidEncounterOutcome Outcome,
+    DateTimeOffset? EncounterEndedAtUtc,
+    int? DurationMilliseconds
+);
+
+public sealed record RaidEncounterSave(
+    Guid RecordingId,
+    int EncounterId,
+    string EncounterName,
+    int DifficultyId,
+    int? GroupSize,
+    int? InstanceId,
+    DateTimeOffset EncounterStartedAtUtc,
+    RaidEncounterOutcome Outcome,
+    DateTimeOffset? EncounterEndedAtUtc,
+    int? DurationMilliseconds
+);
+
+public sealed record RaidEncounterCompletionSave(
+    Guid RecordingId,
+    RaidEncounterOutcome Outcome,
+    DateTimeOffset EncounterEndedAtUtc,
+    int? DurationMilliseconds
+);

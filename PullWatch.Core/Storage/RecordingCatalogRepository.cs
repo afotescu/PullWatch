@@ -1,4 +1,5 @@
 using Dapper;
+using Microsoft.Data.Sqlite;
 
 namespace PullWatch;
 
@@ -15,6 +16,20 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         EndedAtUtc,
         FileSizeBytes,
         FileModifiedAtUtc
+        """;
+    private const string RaidEncounterSelectColumns = """
+        RecordingId,
+        CreatedAtUtc,
+        UpdatedAtUtc,
+        EncounterId,
+        EncounterName,
+        DifficultyId,
+        GroupSize,
+        InstanceId,
+        EncounterStartedAtUtc,
+        Outcome,
+        EncounterEndedAtUtc,
+        DurationMilliseconds
         """;
 
     private readonly SqliteConnectionFactory _connectionFactory =
@@ -62,29 +77,41 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken
     )
     {
+        return await UpdateAsync(recording, null, cancellationToken);
+    }
+
+    public async Task<bool> UpdateAsync(
+        RecordingCatalogSave recording,
+        RaidEncounterCompletionSave? raidEncounterCompletion,
+        CancellationToken cancellationToken
+    )
+    {
         Validate(recording);
+        Validate(raidEncounterCompletion);
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(
             cancellationToken
         );
-        var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(
-                """
-                UPDATE Recordings
-                SET
-                    FilePath = @FilePath,
-                    Status = @Status,
-                    Kind = @Kind,
-                    StartedAtUtc = @StartedAtUtc,
-                    EndedAtUtc = @EndedAtUtc,
-                    FileSizeBytes = @FileSizeBytes,
-                    FileModifiedAtUtc = @FileModifiedAtUtc
-                WHERE Id = @Id;
-                """,
-                ToParameters(recording),
-                cancellationToken: cancellationToken
-            )
+        using var transaction = connection.BeginTransaction();
+
+        var affectedRows = await ExecuteRecordingUpdateAsync(
+            connection,
+            transaction,
+            recording,
+            cancellationToken
         );
+
+        if (affectedRows > 0 && raidEncounterCompletion is not null)
+        {
+            await ExecuteRaidEncounterCompletionUpdateAsync(
+                connection,
+                transaction,
+                raidEncounterCompletion,
+                cancellationToken
+            );
+        }
+
+        transaction.Commit();
 
         return affectedRows > 0;
     }
@@ -94,47 +121,59 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken
     )
     {
+        await UpsertAsync(recording, null, cancellationToken);
+    }
+
+    public async Task UpsertAsync(
+        RecordingCatalogSave recording,
+        RaidEncounterSave? raidEncounter,
+        CancellationToken cancellationToken
+    )
+    {
         Validate(recording);
+        Validate(raidEncounter);
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(
             cancellationToken
         );
-        await connection.ExecuteAsync(
+        using var transaction = connection.BeginTransaction();
+
+        await ExecuteRecordingUpsertAsync(connection, transaction, recording, cancellationToken);
+
+        if (raidEncounter is not null)
+        {
+            await ExecuteRaidEncounterUpsertAsync(
+                connection,
+                transaction,
+                raidEncounter,
+                cancellationToken
+            );
+        }
+
+        transaction.Commit();
+    }
+
+    public async Task<RaidEncounterEntry?> GetRaidEncounterByRecordingIdAsync(
+        Guid recordingId,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var row = await connection.QuerySingleOrDefaultAsync<RaidEncounterRow>(
             new CommandDefinition(
-                """
-                INSERT INTO Recordings (
-                    Id,
-                    FilePath,
-                    Status,
-                    Kind,
-                    StartedAtUtc,
-                    EndedAtUtc,
-                    FileSizeBytes,
-                    FileModifiedAtUtc
-                )
-                VALUES (
-                    @Id,
-                    @FilePath,
-                    @Status,
-                    @Kind,
-                    @StartedAtUtc,
-                    @EndedAtUtc,
-                    @FileSizeBytes,
-                    @FileModifiedAtUtc
-                )
-                ON CONFLICT(Id) DO UPDATE SET
-                    FilePath = excluded.FilePath,
-                    Status = excluded.Status,
-                    Kind = excluded.Kind,
-                    StartedAtUtc = excluded.StartedAtUtc,
-                    EndedAtUtc = excluded.EndedAtUtc,
-                    FileSizeBytes = excluded.FileSizeBytes,
-                    FileModifiedAtUtc = excluded.FileModifiedAtUtc;
+                $"""
+                SELECT {RaidEncounterSelectColumns}
+                FROM RecordingRaidEncounters
+                WHERE RecordingId = @RecordingId;
                 """,
-                ToParameters(recording),
+                new { RecordingId = FormatId(recordingId) },
                 cancellationToken: cancellationToken
             )
         );
+
+        return row is null ? null : FromRow(row);
     }
 
     public async Task<RecordingCatalogEntry?> GetByIdAsync(
@@ -225,10 +264,186 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         return affectedRows > 0;
     }
 
+    private static async Task<int> ExecuteRecordingUpdateAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        RecordingCatalogSave recording,
+        CancellationToken cancellationToken
+    )
+    {
+        return await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE Recordings
+                SET
+                    FilePath = @FilePath,
+                    Status = @Status,
+                    Kind = @Kind,
+                    StartedAtUtc = @StartedAtUtc,
+                    EndedAtUtc = @EndedAtUtc,
+                    FileSizeBytes = @FileSizeBytes,
+                    FileModifiedAtUtc = @FileModifiedAtUtc
+                WHERE Id = @Id;
+                """,
+                ToParameters(recording),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
+    private static async Task ExecuteRecordingUpsertAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        RecordingCatalogSave recording,
+        CancellationToken cancellationToken
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO Recordings (
+                    Id,
+                    FilePath,
+                    Status,
+                    Kind,
+                    StartedAtUtc,
+                    EndedAtUtc,
+                    FileSizeBytes,
+                    FileModifiedAtUtc
+                )
+                VALUES (
+                    @Id,
+                    @FilePath,
+                    @Status,
+                    @Kind,
+                    @StartedAtUtc,
+                    @EndedAtUtc,
+                    @FileSizeBytes,
+                    @FileModifiedAtUtc
+                )
+                ON CONFLICT(Id) DO UPDATE SET
+                    FilePath = excluded.FilePath,
+                    Status = excluded.Status,
+                    Kind = excluded.Kind,
+                    StartedAtUtc = excluded.StartedAtUtc,
+                    EndedAtUtc = excluded.EndedAtUtc,
+                    FileSizeBytes = excluded.FileSizeBytes,
+                    FileModifiedAtUtc = excluded.FileModifiedAtUtc;
+                """,
+                ToParameters(recording),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
+    private static async Task ExecuteRaidEncounterUpsertAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        RaidEncounterSave raidEncounter,
+        CancellationToken cancellationToken
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO RecordingRaidEncounters (
+                    RecordingId,
+                    EncounterId,
+                    EncounterName,
+                    DifficultyId,
+                    GroupSize,
+                    InstanceId,
+                    EncounterStartedAtUtc,
+                    Outcome,
+                    EncounterEndedAtUtc,
+                    DurationMilliseconds
+                )
+                VALUES (
+                    @RecordingId,
+                    @EncounterId,
+                    @EncounterName,
+                    @DifficultyId,
+                    @GroupSize,
+                    @InstanceId,
+                    @EncounterStartedAtUtc,
+                    @Outcome,
+                    @EncounterEndedAtUtc,
+                    @DurationMilliseconds
+                )
+                ON CONFLICT(RecordingId) DO UPDATE SET
+                    EncounterId = excluded.EncounterId,
+                    EncounterName = excluded.EncounterName,
+                    DifficultyId = excluded.DifficultyId,
+                    GroupSize = excluded.GroupSize,
+                    InstanceId = excluded.InstanceId,
+                    EncounterStartedAtUtc = excluded.EncounterStartedAtUtc,
+                    Outcome = excluded.Outcome,
+                    EncounterEndedAtUtc = excluded.EncounterEndedAtUtc,
+                    DurationMilliseconds = excluded.DurationMilliseconds;
+                """,
+                ToParameters(raidEncounter),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
+    private static async Task ExecuteRaidEncounterCompletionUpdateAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        RaidEncounterCompletionSave raidEncounterCompletion,
+        CancellationToken cancellationToken
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE RecordingRaidEncounters
+                SET
+                    Outcome = @Outcome,
+                    EncounterEndedAtUtc = @EncounterEndedAtUtc,
+                    DurationMilliseconds = @DurationMilliseconds
+                WHERE RecordingId = @RecordingId;
+                """,
+                ToParameters(raidEncounterCompletion),
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
     private static void Validate(RecordingCatalogSave recording)
     {
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentException.ThrowIfNullOrWhiteSpace(recording.FilePath);
+    }
+
+    private static void Validate(RaidEncounterSave? raidEncounter)
+    {
+        if (raidEncounter is null)
+        {
+            return;
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(raidEncounter.EncounterName);
+    }
+
+    private static void Validate(RaidEncounterCompletionSave? raidEncounterCompletion)
+    {
+        if (raidEncounterCompletion is null)
+        {
+            return;
+        }
+
+        if (raidEncounterCompletion.Outcome == RaidEncounterOutcome.Unknown)
+        {
+            throw new ArgumentException(
+                "Raid encounter completion must have a kill or wipe outcome.",
+                nameof(raidEncounterCompletion)
+            );
+        }
     }
 
     private static RecordingCatalogParameters ToParameters(RecordingCatalogSave recording)
@@ -261,6 +476,24 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
     }
 
+    private static RaidEncounterEntry FromRow(RaidEncounterRow row)
+    {
+        return new RaidEncounterEntry(
+            Guid.Parse(row.RecordingId),
+            StorageTimestampFormatter.ParseUtc(row.CreatedAtUtc),
+            StorageTimestampFormatter.ParseUtc(row.UpdatedAtUtc),
+            ToInt32(row.EncounterId),
+            row.EncounterName,
+            ToInt32(row.DifficultyId),
+            ToNullableInt32(row.GroupSize),
+            ToNullableInt32(row.InstanceId),
+            StorageTimestampFormatter.ParseUtc(row.EncounterStartedAtUtc),
+            ParseEnum<RaidEncounterOutcome>(row.Outcome),
+            StorageTimestampFormatter.ParseNullableUtc(row.EncounterEndedAtUtc),
+            ToNullableInt32(row.DurationMilliseconds)
+        );
+    }
+
     private static TEnum ParseEnum<TEnum>(string value)
         where TEnum : struct, Enum
     {
@@ -276,6 +509,16 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         return id.ToString("D").ToLowerInvariant();
     }
 
+    private static int ToInt32(long value)
+    {
+        return checked((int)value);
+    }
+
+    private static int? ToNullableInt32(long? value)
+    {
+        return value is null ? null : ToInt32(value.Value);
+    }
+
     private sealed record RecordingCatalogParameters(
         string Id,
         string FilePath,
@@ -286,6 +529,34 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         long? FileSizeBytes,
         string? FileModifiedAtUtc
     );
+
+    private static RaidEncounterParameters ToParameters(RaidEncounterSave raidEncounter)
+    {
+        return new RaidEncounterParameters(
+            FormatId(raidEncounter.RecordingId),
+            raidEncounter.EncounterId,
+            raidEncounter.EncounterName,
+            raidEncounter.DifficultyId,
+            raidEncounter.GroupSize,
+            raidEncounter.InstanceId,
+            StorageTimestampFormatter.FormatUtc(raidEncounter.EncounterStartedAtUtc),
+            raidEncounter.Outcome.ToString(),
+            StorageTimestampFormatter.FormatNullableUtc(raidEncounter.EncounterEndedAtUtc),
+            raidEncounter.DurationMilliseconds
+        );
+    }
+
+    private static RaidEncounterCompletionParameters ToParameters(
+        RaidEncounterCompletionSave raidEncounterCompletion
+    )
+    {
+        return new RaidEncounterCompletionParameters(
+            FormatId(raidEncounterCompletion.RecordingId),
+            raidEncounterCompletion.Outcome.ToString(),
+            StorageTimestampFormatter.FormatUtc(raidEncounterCompletion.EncounterEndedAtUtc),
+            raidEncounterCompletion.DurationMilliseconds
+        );
+    }
 
     private sealed record RecordingCatalogRow(
         string Id,
@@ -298,5 +569,40 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string? EndedAtUtc,
         long? FileSizeBytes,
         string? FileModifiedAtUtc
+    );
+
+    private sealed record RaidEncounterParameters(
+        string RecordingId,
+        int EncounterId,
+        string EncounterName,
+        int DifficultyId,
+        int? GroupSize,
+        int? InstanceId,
+        string EncounterStartedAtUtc,
+        string Outcome,
+        string? EncounterEndedAtUtc,
+        int? DurationMilliseconds
+    );
+
+    private sealed record RaidEncounterCompletionParameters(
+        string RecordingId,
+        string Outcome,
+        string EncounterEndedAtUtc,
+        int? DurationMilliseconds
+    );
+
+    private sealed record RaidEncounterRow(
+        string RecordingId,
+        string CreatedAtUtc,
+        string UpdatedAtUtc,
+        long EncounterId,
+        string EncounterName,
+        long DifficultyId,
+        long? GroupSize,
+        long? InstanceId,
+        string EncounterStartedAtUtc,
+        string Outcome,
+        string? EncounterEndedAtUtc,
+        long? DurationMilliseconds
     );
 }

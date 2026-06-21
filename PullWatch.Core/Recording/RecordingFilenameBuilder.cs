@@ -70,10 +70,11 @@ internal static class RecordingFilenameBuilder
         // Blizzard Difficulty DB2 IDs: https://wago.tools/db2/Difficulty
         return difficultyId switch
         {
-            14 => "normal",
-            15 => "heroic",
-            16 => "mythic",
-            17 => "raid-finder",
+            WowDifficultyIds.NormalRaid => "normal",
+            WowDifficultyIds.HeroicRaid => "heroic",
+            WowDifficultyIds.MythicRaid => "mythic",
+            WowDifficultyIds.RaidFinder => "raid-finder",
+            WowDifficultyIds.FlexibleMythicRaid => "mythic",
             _ => $"difficulty-{difficultyId}",
         };
     }

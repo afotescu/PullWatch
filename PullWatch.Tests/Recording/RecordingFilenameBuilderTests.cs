@@ -20,7 +20,23 @@ public sealed class RecordingFilenameBuilderTests
         Assert.Equal(
             "20260615_001510_raid_plexus-sentinel_mythic",
             RecordingFilenameBuilder.BuildBaseName(
-                new EncounterRecordingContext(StartedAt, 3129, "Plexus Sentinel", 16)
+                new EncounterRecordingContext(
+                    StartedAt,
+                    3129,
+                    "Plexus Sentinel",
+                    WowDifficultyIds.MythicRaid
+                )
+            )
+        );
+        Assert.Equal(
+            "20260615_001510_raid_rotmire_mythic",
+            RecordingFilenameBuilder.BuildBaseName(
+                new EncounterRecordingContext(
+                    StartedAt,
+                    3159,
+                    "Rotmire",
+                    WowDifficultyIds.FlexibleMythicRaid
+                )
             )
         );
     }

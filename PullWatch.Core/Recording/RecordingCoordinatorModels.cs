@@ -14,14 +14,33 @@ public sealed record EncounterRecordingContext(
     DateTimeOffset StartedAt,
     int EncounterId,
     string EncounterName,
-    int DifficultyId
+    int DifficultyId,
+    int? GroupSize = null,
+    int? InstanceId = null
 ) : RecordingContext(StartedAt);
+
+public sealed record EncounterRecordingEnd(
+    DateTimeOffset EndedAt,
+    int EncounterId,
+    string EncounterName,
+    int DifficultyId,
+    int? GroupSize,
+    RaidEncounterOutcome Outcome,
+    int? DurationMilliseconds
+);
 
 public enum RecordingOwner
 {
     Manual,
     ChallengeMode,
     Encounter,
+}
+
+public enum RaidEncounterOutcome
+{
+    Unknown,
+    Wipe,
+    Kill,
 }
 
 public enum RecordingCoordinatorState

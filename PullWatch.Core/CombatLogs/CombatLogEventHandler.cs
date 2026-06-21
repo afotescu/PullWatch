@@ -85,6 +85,7 @@ public sealed class CombatLogEventHandler(
                     eventTimestamp,
                     RecordingOwner.ChallengeMode,
                     null,
+                    null,
                     cancellationToken
                 );
                 break;
@@ -93,6 +94,7 @@ public sealed class CombatLogEventHandler(
                     combatLogEvent,
                     out var encounterIdentity
                 );
+                EncounterRecordingEnd? encounterEnd = null;
 
                 if (!hasEncounterIdentity)
                 {
@@ -110,12 +112,26 @@ public sealed class CombatLogEventHandler(
                         break;
                     }
                 }
+                else if (
+                    !CombatLogEventMetadataParser.TryParseEncounterEnd(
+                        combatLogEvent,
+                        receivedAt,
+                        out encounterEnd
+                    )
+                )
+                {
+                    LogMalformedKnownEvent(
+                        combatLogEvent,
+                        "Encounter end is missing valid encounter completion metadata"
+                    );
+                }
 
                 await HandleEndAsync(
                     combatLogEvent,
                     eventTimestamp,
                     RecordingOwner.Encounter,
                     encounterIdentity,
+                    encounterEnd,
                     cancellationToken
                 );
                 break;
@@ -140,6 +156,7 @@ public sealed class CombatLogEventHandler(
         long eventTimestamp,
         RecordingOwner owner,
         string? identity,
+        EncounterRecordingEnd? encounterEnd,
         CancellationToken cancellationToken
     )
     {
@@ -147,6 +164,7 @@ public sealed class CombatLogEventHandler(
         var result = await recordingCoordinator.StopAutomaticAsync(
             owner,
             identity,
+            encounterEnd,
             cancellationToken
         );
         LogCommandResult(combatLogEvent.Name, result);

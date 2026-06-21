@@ -47,6 +47,77 @@ public sealed class RecordingCatalogTests
     }
 
     [Fact]
+    public async Task EncounterRecordingStoresRaidEncounterMetadata()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var outputPath = Path.Combine(directory.FullName, "rotmire.mp4");
+        var startedAt = new DateTimeOffset(2026, 6, 17, 23, 28, 32, TimeSpan.FromHours(3));
+        var context = new EncounterRecordingContext(
+            startedAt,
+            3159,
+            "Rotmire",
+            WowDifficultyIds.FlexibleMythicRaid,
+            20,
+            1592
+        );
+
+        var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
+        var startedEncounter = await database.Repository.GetRaidEncounterByRecordingIdAsync(
+            id,
+            cancellationToken
+        );
+
+        File.WriteAllText(outputPath, "recording");
+        var encounterEndedAt = new DateTimeOffset(2026, 6, 17, 23, 36, 19, TimeSpan.FromHours(3));
+        await catalog.CompleteRecordingAsync(
+            id,
+            encounterEndedAt.AddSeconds(1),
+            new EncounterRecordingEnd(
+                encounterEndedAt,
+                3159,
+                "Rotmire",
+                WowDifficultyIds.FlexibleMythicRaid,
+                20,
+                RaidEncounterOutcome.Kill,
+                466563
+            ),
+            cancellationToken
+        );
+
+        var completedEncounter = await database.Repository.GetRaidEncounterByRecordingIdAsync(
+            id,
+            cancellationToken
+        );
+
+        Assert.NotNull(startedEncounter);
+        Assert.Equal(3159, startedEncounter.EncounterId);
+        Assert.Equal("Rotmire", startedEncounter.EncounterName);
+        Assert.Equal(WowDifficultyIds.FlexibleMythicRaid, startedEncounter.DifficultyId);
+        Assert.Equal(20, startedEncounter.GroupSize);
+        Assert.Equal(1592, startedEncounter.InstanceId);
+        Assert.Equal(startedAt.ToUniversalTime(), startedEncounter.EncounterStartedAtUtc);
+        Assert.Equal(RaidEncounterOutcome.Unknown, startedEncounter.Outcome);
+        Assert.Null(startedEncounter.EncounterEndedAtUtc);
+        Assert.Null(startedEncounter.DurationMilliseconds);
+
+        Assert.NotNull(completedEncounter);
+        Assert.Equal(RaidEncounterOutcome.Kill, completedEncounter.Outcome);
+        Assert.Equal(encounterEndedAt.ToUniversalTime(), completedEncounter.EncounterEndedAtUtc);
+        Assert.Equal(466563, completedEncounter.DurationMilliseconds);
+
+        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+
+        Assert.Null(
+            await database.Repository.GetRaidEncounterByRecordingIdAsync(id, cancellationToken)
+        );
+    }
+
+    [Fact]
     public async Task ListAvailableFilesVerifiesRowsWithoutImportingLooseFiles()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

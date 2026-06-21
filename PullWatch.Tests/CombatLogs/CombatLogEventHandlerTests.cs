@@ -139,18 +139,25 @@ public sealed class CombatLogEventHandlerTests
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("invalid,\"Plexus Sentinel\",16,20,1,70964")]
-    public async Task MalformedEncounterEndStopsActiveEncounter(string arguments)
+    [Fact]
+    public async Task MalformedEncounterEndStopsActiveEncounter()
     {
-        var recorder = new FakeRecordingService();
-        var handler = CreateHandler(recorder);
+        string[] arguments =
+        [
+            "",
+            $"invalid,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,1,70964",
+        ];
 
-        await HandleAsync(handler, WowEvents.EncounterStart, "123");
-        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, arguments);
+        foreach (var value in arguments)
+        {
+            var recorder = new FakeRecordingService();
+            var handler = CreateHandler(recorder);
 
-        Assert.Equal(["start", "stop"], recorder.Calls);
+            await HandleAsync(handler, WowEvents.EncounterStart, "123");
+            await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, value);
+
+            Assert.Equal(["start", "stop"], recorder.Calls);
+        }
     }
 
     [Fact]
@@ -219,8 +226,10 @@ public sealed class CombatLogEventHandlerTests
         {
             WowEvents.ChallengeModeStart => "\"Magisters' Terrace\",2811,558,22,[9,10,147]",
             WowEvents.ChallengeModeEnd => "2811,0,0,0,0.000000,0.000000",
-            WowEvents.EncounterStart => "3129,\"Plexus Sentinel\",16,20,2810",
-            WowEvents.EncounterEnd => "3129,\"Plexus Sentinel\",16,20,1,70964",
+            WowEvents.EncounterStart =>
+                $"3129,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,2810",
+            WowEvents.EncounterEnd =>
+                $"3129,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,1,70964",
             _ => "",
         };
         var rawLine = $"{eventName},{arguments}";
@@ -239,8 +248,10 @@ public sealed class CombatLogEventHandlerTests
     {
         var arguments = eventName switch
         {
-            WowEvents.EncounterStart => $"{firstArgument},\"Plexus Sentinel\",16,20,2810",
-            WowEvents.EncounterEnd => $"{firstArgument},\"Plexus Sentinel\",16,20,1,70964",
+            WowEvents.EncounterStart =>
+                $"{firstArgument},\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,2810",
+            WowEvents.EncounterEnd =>
+                $"{firstArgument},\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,1,70964",
             _ => firstArgument,
         };
         var rawLine = $"{eventName},{arguments}";
