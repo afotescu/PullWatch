@@ -1,0 +1,15 @@
+<Window
+  x:Class="PullWatch.FullscreenPlayerWindow"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="PullWatch player"
+  Background="{StaticResource PlayerSurfaceBrush}"
+  KeyDown="OnKeyDown"
+  ResizeMode="NoResize"
+  ShowInTaskbar="False"
+  WindowStartupLocation="CenterOwner"
+  WindowState="Maximized"
+  WindowStyle="None"
+>
+  <ContentControl x:Name="PlayerHost" />
+</Window>
