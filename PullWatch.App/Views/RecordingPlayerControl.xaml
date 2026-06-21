@@ -21,6 +21,12 @@
     <Geometry x:Key="ExitFullScreenIconGeometry">
       M 6 1 L 6 6 L 1 6 M 10 1 L 10 6 L 15 6 M 1 10 L 6 10 L 6 15 M 15 10 L 10 10 L 10 15
     </Geometry>
+    <Geometry x:Key="VolumeIconGeometry">
+      M 2 6 L 5 6 L 9 2 L 9 14 L 5 10 L 2 10 Z M 12 5 C 13 6.8 13 9.2 12 11 M 14 3 C 16.4 6.1 16.4 9.9 14 13
+    </Geometry>
+    <Geometry x:Key="MutedIconGeometry">
+      M 2 6 L 5 6 L 9 2 L 9 14 L 5 10 L 2 10 Z M 12 6 L 16 10 M 16 6 L 12 10
+    </Geometry>
   </UserControl.Resources>
 
   <Grid>
@@ -61,6 +67,8 @@
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
@@ -106,8 +114,45 @@
         TextAlignment="Right"
       />
       <Button
-        x:Name="FullScreenButton"
+        x:Name="MuteButton"
         Grid.Column="3"
+        Margin="12,0,0,0"
+        Click="OnMuteClicked"
+        Style="{StaticResource PlayerIconButtonStyle}"
+        ToolTip="Mute"
+      >
+        <Path
+          x:Name="MuteIcon"
+          Width="18"
+          Height="18"
+          Data="{StaticResource VolumeIconGeometry}"
+          Fill="Transparent"
+          SnapsToDevicePixels="True"
+          Stretch="Uniform"
+          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+          StrokeEndLineCap="Round"
+          StrokeLineJoin="Round"
+          StrokeStartLineCap="Round"
+          StrokeThickness="1.6"
+        />
+      </Button>
+      <Slider
+        x:Name="VolumeSlider"
+        Grid.Column="4"
+        Width="96"
+        Margin="10,0,0,0"
+        VerticalAlignment="Center"
+        IsMoveToPointEnabled="True"
+        LargeChange="10"
+        Maximum="100"
+        Minimum="0"
+        SmallChange="10"
+        ToolTip="Volume"
+        ValueChanged="OnVolumeSliderValueChanged"
+      />
+      <Button
+        x:Name="FullScreenButton"
+        Grid.Column="5"
         Margin="12,0,0,0"
         Click="OnFullScreenClicked"
         IsEnabled="False"

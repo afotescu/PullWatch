@@ -1,4 +1,5 @@
 using System.Windows;
+using WpfButtonBase = System.Windows.Controls.Primitives.ButtonBase;
 using WpfKey = System.Windows.Input.Key;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 
@@ -32,7 +33,7 @@ public partial class FullscreenPlayerWindow : Window
         return player;
     }
 
-    private void OnKeyDown(object sender, WpfKeyEventArgs eventArgs)
+    private void OnPreviewKeyDown(object sender, WpfKeyEventArgs eventArgs)
     {
         if (eventArgs.Key == WpfKey.Escape)
         {
@@ -43,13 +44,37 @@ public partial class FullscreenPlayerWindow : Window
 
         if (
             eventArgs.Handled
-            || eventArgs.Key != WpfKey.Space
+            || (eventArgs.Key == WpfKey.Space && IsFocusedButton(eventArgs.OriginalSource))
             || PlayerHost.Content is not RecordingPlayerControl player
         )
         {
             return;
         }
 
-        eventArgs.Handled = player.TogglePlayback();
+        eventArgs.Handled = player.HandlePlaybackKey(eventArgs.Key);
+    }
+
+    private static bool IsFocusedButton(object? source)
+    {
+        for (
+            var current = source as DependencyObject;
+            current is not null;
+            current = GetParent(current)
+        )
+        {
+            if (current is WpfButtonBase)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? GetParent(DependencyObject current)
+    {
+        return current is FrameworkElement frameworkElement
+            ? frameworkElement.Parent ?? LogicalTreeHelper.GetParent(frameworkElement)
+            : LogicalTreeHelper.GetParent(current);
     }
 }

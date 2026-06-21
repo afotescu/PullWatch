@@ -13,6 +13,12 @@ public partial class RecordingPlayerControl : UserControl
     private const string StopIconGeometryKey = "StopIconGeometry";
     private const string EnterFullScreenIconGeometryKey = "EnterFullScreenIconGeometry";
     private const string ExitFullScreenIconGeometryKey = "ExitFullScreenIconGeometry";
+    private const string VolumeIconGeometryKey = "VolumeIconGeometry";
+    private const string MutedIconGeometryKey = "MutedIconGeometry";
+    private const double SeekStepSeconds = 5;
+    private const double VolumeStep = 0.1;
+    private const double VolumeSliderScale = 100;
+    private const double FallbackUnmuteVolume = 0.5;
 
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(
         nameof(Source),
@@ -39,6 +45,8 @@ public partial class RecordingPlayerControl : UserControl
     private bool _hasMedia;
     private bool _isPlaying;
     private bool _isSeeking;
+    private bool _isUpdatingVolumeControls;
+    private double _lastAudibleVolume;
     private int _sourceLoadVersion;
     private string? _playbackErrorText;
 
@@ -60,6 +68,8 @@ public partial class RecordingPlayerControl : UserControl
             Thumb.DragCompletedEvent,
             new DragCompletedEventHandler(OnPlaybackThumbDragCompleted)
         );
+        _lastAudibleVolume = GetInitialAudibleVolume();
+        UpdateVolumeControls();
         Loaded += OnLoaded;
     }
 
@@ -108,6 +118,47 @@ public partial class RecordingPlayerControl : UserControl
         {
             StartPlayback();
         }
+
+        return true;
+    }
+
+    public bool HandlePlaybackKey(Key key)
+    {
+        return key switch
+        {
+            Key.Space => TogglePlayback(),
+            Key.Left => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds)),
+            Key.Right => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds)),
+            Key.Up => AdjustVolume(VolumeStep),
+            Key.Down => AdjustVolume(-VolumeStep),
+            _ => false,
+        };
+    }
+
+    public bool SeekBy(TimeSpan offset)
+    {
+        if (!_hasMedia)
+        {
+            return false;
+        }
+
+        var duration = GetDuration();
+        if (duration <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        var position = Clamp(MediaPlayer.Position + offset, TimeSpan.Zero, duration);
+        MediaPlayer.Position = position;
+        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
+        UpdatePlaybackTimeText(position, duration);
+
+        return true;
+    }
+
+    public bool AdjustVolume(double delta)
+    {
+        SetVolume(MediaPlayer.Volume + delta, unmute: true);
 
         return true;
     }
@@ -212,6 +263,11 @@ public partial class RecordingPlayerControl : UserControl
         FullScreenRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnMuteClicked(object sender, RoutedEventArgs eventArgs)
+    {
+        ToggleMute();
+    }
+
     private void OnPlayerMediaOpened(object sender, RoutedEventArgs eventArgs)
     {
         _hasMedia = true;
@@ -310,6 +366,19 @@ public partial class RecordingPlayerControl : UserControl
         }
     }
 
+    private void OnVolumeSliderValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> eventArgs
+    )
+    {
+        if (_isUpdatingVolumeControls)
+        {
+            return;
+        }
+
+        SetVolume(eventArgs.NewValue / VolumeSliderScale, unmute: eventArgs.NewValue > 0);
+    }
+
     private void SeekToSliderValue()
     {
         if (!_hasMedia)
@@ -320,6 +389,44 @@ public partial class RecordingPlayerControl : UserControl
         var position = TimeSpan.FromSeconds(PlaybackSlider.Value);
         MediaPlayer.Position = position;
         UpdatePlaybackTimeText(position, GetDuration());
+    }
+
+    private void ToggleMute()
+    {
+        if (IsEffectivelyMuted())
+        {
+            MediaPlayer.Volume = _lastAudibleVolume;
+            MediaPlayer.IsMuted = false;
+        }
+        else
+        {
+            _lastAudibleVolume = MediaPlayer.Volume;
+            MediaPlayer.IsMuted = true;
+        }
+
+        UpdateVolumeControls();
+    }
+
+    private void SetVolume(double volume, bool unmute)
+    {
+        var clampedVolume = Math.Clamp(volume, 0, 1);
+        MediaPlayer.Volume = clampedVolume;
+
+        if (clampedVolume > 0)
+        {
+            _lastAudibleVolume = clampedVolume;
+        }
+
+        if (unmute && clampedVolume > 0)
+        {
+            MediaPlayer.IsMuted = false;
+        }
+        else if (clampedVolume <= 0)
+        {
+            MediaPlayer.IsMuted = true;
+        }
+
+        UpdateVolumeControls();
     }
 
     private void SeekToPoint(System.Windows.Point point)
@@ -410,6 +517,24 @@ public partial class RecordingPlayerControl : UserControl
         FullScreenButton.ToolTip = "Enter fullscreen";
     }
 
+    private void UpdateVolumeControls()
+    {
+        _isUpdatingVolumeControls = true;
+        VolumeSlider.Value = Math.Round(MediaPlayer.Volume * VolumeSliderScale);
+        VolumeSlider.ToolTip = $"{VolumeSlider.Value:0}% volume";
+        _isUpdatingVolumeControls = false;
+
+        if (IsEffectivelyMuted())
+        {
+            MuteIcon.Data = (Geometry)FindResource(MutedIconGeometryKey);
+            MuteButton.ToolTip = "Unmute";
+            return;
+        }
+
+        MuteIcon.Data = (Geometry)FindResource(VolumeIconGeometryKey);
+        MuteButton.ToolTip = "Mute";
+    }
+
     private void UpdatePlaceholderText()
     {
         PlayerPlaceholder.SetCurrentValue(
@@ -429,5 +554,25 @@ public partial class RecordingPlayerControl : UserControl
         return MediaPlayer.NaturalDuration.HasTimeSpan
             ? MediaPlayer.NaturalDuration.TimeSpan
             : TimeSpan.Zero;
+    }
+
+    private bool IsEffectivelyMuted()
+    {
+        return MediaPlayer.IsMuted || MediaPlayer.Volume <= 0;
+    }
+
+    private double GetInitialAudibleVolume()
+    {
+        return MediaPlayer.Volume > 0 ? MediaPlayer.Volume : FallbackUnmuteVolume;
+    }
+
+    private static TimeSpan Clamp(TimeSpan value, TimeSpan minimum, TimeSpan maximum)
+    {
+        if (value < minimum)
+        {
+            return minimum;
+        }
+
+        return value > maximum ? maximum : value;
     }
 }

@@ -69,14 +69,13 @@ public partial class RecordingsView : UserControl
     {
         if (
             eventArgs.Handled
-            || eventArgs.Key != WpfKey.Space
-            || ShouldLeaveSpaceToFocusedControl(eventArgs.OriginalSource)
+            || ShouldLeaveShortcutToFocusedControl(eventArgs.OriginalSource, eventArgs.Key)
         )
         {
             return;
         }
 
-        eventArgs.Handled = RecordingPlayer.TogglePlayback();
+        eventArgs.Handled = RecordingPlayer.HandlePlaybackKey(eventArgs.Key);
     }
 
     private void OnPlayerFullScreenRequested(object? sender, EventArgs eventArgs)
@@ -159,7 +158,7 @@ public partial class RecordingsView : UserControl
         _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
     }
 
-    private static bool ShouldLeaveSpaceToFocusedControl(object? source)
+    private static bool ShouldLeaveShortcutToFocusedControl(object? source, WpfKey key)
     {
         for (
             var current = source as DependencyObject;
@@ -167,7 +166,12 @@ public partial class RecordingsView : UserControl
             current = GetParent(current)
         )
         {
-            if (current is WpfTextBoxBase or WpfPasswordBox or WpfComboBox or WpfButtonBase)
+            if (current is WpfTextBoxBase or WpfPasswordBox or WpfComboBox)
+            {
+                return true;
+            }
+
+            if (key == WpfKey.Space && current is WpfButtonBase)
             {
                 return true;
             }
