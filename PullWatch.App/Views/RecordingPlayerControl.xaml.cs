@@ -39,6 +39,7 @@ public partial class RecordingPlayerControl : UserControl
     private bool _hasMedia;
     private bool _isPlaying;
     private bool _isSeeking;
+    private int _sourceLoadVersion;
     private string? _playbackErrorText;
 
     public RecordingPlayerControl()
@@ -86,9 +87,29 @@ public partial class RecordingPlayerControl : UserControl
 
     public void StopPlayback()
     {
+        _sourceLoadVersion++;
         StopPlaybackCore();
         MediaPlayer.Source = null;
         FullScreenButton.IsEnabled = false;
+    }
+
+    public bool TogglePlayback()
+    {
+        if (MediaPlayer.Source is null || !_hasMedia)
+        {
+            return false;
+        }
+
+        if (_isPlaying)
+        {
+            PausePlayback();
+        }
+        else
+        {
+            StartPlayback();
+        }
+
+        return true;
     }
 
     private static void OnSourceChanged(
@@ -97,7 +118,7 @@ public partial class RecordingPlayerControl : UserControl
     )
     {
         var player = (RecordingPlayerControl)dependencyObject;
-        player.LoadSource((Uri?)eventArgs.NewValue);
+        player.ScheduleLoadSource((Uri?)eventArgs.NewValue);
     }
 
     private static void OnPlaceholderTextChanged(
@@ -122,8 +143,35 @@ public partial class RecordingPlayerControl : UserControl
     {
         if (Source is not null && MediaPlayer.Source is null)
         {
-            LoadSource(Source);
+            ScheduleLoadSource(Source);
         }
+    }
+
+    private void ScheduleLoadSource(Uri? source)
+    {
+        var loadVersion = ++_sourceLoadVersion;
+        Dispatcher.InvokeAsync(
+            () =>
+            {
+                if (loadVersion != _sourceLoadVersion)
+                {
+                    return;
+                }
+
+                if (source is not null && !IsReadyToLoadSource())
+                {
+                    return;
+                }
+
+                LoadSource(source);
+            },
+            DispatcherPriority.Loaded
+        );
+    }
+
+    private bool IsReadyToLoadSource()
+    {
+        return IsLoaded && PresentationSource.FromVisual(MediaPlayer) is not null;
     }
 
     private void LoadSource(Uri? source)
@@ -141,28 +189,16 @@ public partial class RecordingPlayerControl : UserControl
         UpdatePlaceholderText();
         PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Visible);
         MediaPlayer.Source = source;
+
+        if (source is not null)
+        {
+            MediaPlayer.Play();
+        }
     }
 
     private void OnPlayPauseClicked(object sender, RoutedEventArgs eventArgs)
     {
-        if (MediaPlayer.Source is null)
-        {
-            return;
-        }
-
-        if (_isPlaying)
-        {
-            MediaPlayer.Pause();
-            _positionTimer.Stop();
-            _isPlaying = false;
-            UpdatePlayPauseButton();
-            return;
-        }
-
-        MediaPlayer.Play();
-        _isPlaying = true;
-        UpdatePlayPauseButton();
-        _positionTimer.Start();
+        TogglePlayback();
     }
 
     private void OnFullScreenClicked(object sender, RoutedEventArgs eventArgs)
@@ -330,6 +366,22 @@ public partial class RecordingPlayerControl : UserControl
         {
             MediaPlayer.Stop();
         }
+    }
+
+    private void StartPlayback()
+    {
+        MediaPlayer.Play();
+        _isPlaying = true;
+        UpdatePlayPauseButton();
+        _positionTimer.Start();
+    }
+
+    private void PausePlayback()
+    {
+        MediaPlayer.Pause();
+        _positionTimer.Stop();
+        _isPlaying = false;
+        UpdatePlayPauseButton();
     }
 
     private void UpdatePlayPauseButton()

@@ -1,4 +1,6 @@
 using System.Windows;
+using WpfKey = System.Windows.Input.Key;
+using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace PullWatch;
 
@@ -30,14 +32,24 @@ public partial class FullscreenPlayerWindow : Window
         return player;
     }
 
-    private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs eventArgs)
+    private void OnKeyDown(object sender, WpfKeyEventArgs eventArgs)
     {
-        if (eventArgs.Key != System.Windows.Input.Key.Escape)
+        if (eventArgs.Key == WpfKey.Escape)
+        {
+            eventArgs.Handled = true;
+            ExitRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        if (
+            eventArgs.Handled
+            || eventArgs.Key != WpfKey.Space
+            || PlayerHost.Content is not RecordingPlayerControl player
+        )
         {
             return;
         }
 
-        eventArgs.Handled = true;
-        ExitRequested?.Invoke(this, EventArgs.Empty);
+        eventArgs.Handled = player.TogglePlayback();
     }
 }
