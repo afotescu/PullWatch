@@ -9,6 +9,12 @@ public sealed class RecordingsViewModel : ObservableObject
     private const string NoRecordingsDirectoryMessage =
         "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
+    private const string MissingMetadataValue = "-";
+    private const int NormalRaidDifficultyId = 14;
+    private const int HeroicRaidDifficultyId = 15;
+    private const int MythicRaidDifficultyId = 16;
+    private const int RaidFinderDifficultyId = 17;
+    private const int FlexibleMythicRaidDifficultyId = 233;
 
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
@@ -246,10 +252,87 @@ public sealed class RecordingsViewModel : ObservableObject
                 file.Id,
                 file.FilePath,
                 Path.GetFileNameWithoutExtension(file.FilePath),
+                FormatStartedAt(file),
+                GetEncounterName(file),
+                FormatDifficulty(file.RaidEncounter),
+                FormatOutcome(file.RaidEncounter),
+                FormatFightDuration(file.RaidEncounter),
                 file.ModifiedAtUtc.ToLocalTime(),
                 file.SizeBytes
             ))
             .ToList();
+    }
+
+    private static string FormatStartedAt(RecordingCatalogFile file)
+    {
+        var startedAtUtc = file.RaidEncounter?.EncounterStartedAtUtc ?? file.StartedAtUtc;
+
+        return startedAtUtc is null
+            ? MissingMetadataValue
+            : $"{startedAtUtc.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+    }
+
+    private static string GetEncounterName(RecordingCatalogFile file)
+    {
+        if (file.RaidEncounter is { } raidEncounter)
+        {
+            return raidEncounter.EncounterName;
+        }
+
+        return file.Kind switch
+        {
+            RecordingCatalogKind.Encounter => "Unknown encounter",
+            RecordingCatalogKind.ChallengeMode => "Mythic+ recording",
+            RecordingCatalogKind.Manual => "Manual recording",
+            _ => "Recording",
+        };
+    }
+
+    private static string FormatDifficulty(RaidEncounterEntry? raidEncounter)
+    {
+        return raidEncounter is null
+            ? MissingMetadataValue
+            : raidEncounter.DifficultyId switch
+            {
+                NormalRaidDifficultyId => "Normal",
+                HeroicRaidDifficultyId => "Heroic",
+                MythicRaidDifficultyId => "Mythic",
+                RaidFinderDifficultyId => "Raid Finder",
+                FlexibleMythicRaidDifficultyId => "Mythic",
+                _ => $"Difficulty {raidEncounter.DifficultyId}",
+            };
+    }
+
+    private static string FormatOutcome(RaidEncounterEntry? raidEncounter)
+    {
+        return raidEncounter?.Outcome switch
+        {
+            null => MissingMetadataValue,
+            RaidEncounterOutcome.Kill => "Kill",
+            RaidEncounterOutcome.Wipe => "Wipe",
+            _ => "Unknown",
+        };
+    }
+
+    private static string FormatFightDuration(RaidEncounterEntry? raidEncounter)
+    {
+        if (raidEncounter is null)
+        {
+            return MissingMetadataValue;
+        }
+
+        var duration =
+            raidEncounter.DurationMilliseconds is { } durationMilliseconds
+                ? TimeSpan.FromMilliseconds(Math.Max(0, durationMilliseconds))
+            : raidEncounter.EncounterEndedAtUtc is { } endedAt
+                ? endedAt - raidEncounter.EncounterStartedAtUtc
+            : (TimeSpan?)null;
+
+        return duration is null
+            ? MissingMetadataValue
+            : RecordingTimeFormatter.FormatPlaybackTime(
+                duration.Value < TimeSpan.Zero ? TimeSpan.Zero : duration.Value
+            );
     }
 
     private async Task DeleteSelectedRecordingAsync()

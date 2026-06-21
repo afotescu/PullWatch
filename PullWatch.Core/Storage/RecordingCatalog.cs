@@ -124,6 +124,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         var normalizedDirectory = NormalizeDirectoryPath(recordingsDirectory);
         var recordings = new List<RecordingCatalogFile>();
         var entries = await _repository.ListAsync(cancellationToken);
+        var raidEncounters = await LoadRaidEncountersAsync(entries, cancellationToken);
 
         foreach (var entry in entries)
         {
@@ -160,7 +161,8 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                     entry.StartedAtUtc,
                     entry.EndedAtUtc,
                     file.Length,
-                    new DateTimeOffset(file.LastWriteTimeUtc)
+                    new DateTimeOffset(file.LastWriteTimeUtc),
+                    raidEncounters.GetValueOrDefault(entry.Id)
                 )
             );
         }
@@ -172,6 +174,23 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 StringComparer.OrdinalIgnoreCase
             )
             .ToList();
+    }
+
+    private async Task<Dictionary<Guid, RaidEncounterEntry>> LoadRaidEncountersAsync(
+        IReadOnlyList<RecordingCatalogEntry> entries,
+        CancellationToken cancellationToken
+    )
+    {
+        var encounterRecordingIds = entries
+            .Where(entry => entry.Kind == RecordingCatalogKind.Encounter)
+            .Select(entry => entry.Id)
+            .ToArray();
+        var raidEncounters = await _repository.ListRaidEncountersByRecordingIdsAsync(
+            encounterRecordingIds,
+            cancellationToken
+        );
+
+        return raidEncounters.ToDictionary(encounter => encounter.RecordingId);
     }
 
     private static RecordingCatalogKind GetKind(RecordingContext context)

@@ -176,6 +176,34 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         return row is null ? null : FromRow(row);
     }
 
+    public async Task<IReadOnlyList<RaidEncounterEntry>> ListRaidEncountersByRecordingIdsAsync(
+        IReadOnlyCollection<Guid> recordingIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (recordingIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var rows = await connection.QueryAsync<RaidEncounterRow>(
+            new CommandDefinition(
+                $"""
+                SELECT {RaidEncounterSelectColumns}
+                FROM RecordingRaidEncounters
+                WHERE RecordingId IN @RecordingIds;
+                """,
+                new { RecordingIds = recordingIds.Select(FormatId).ToArray() },
+                cancellationToken: cancellationToken
+            )
+        );
+
+        return rows.Select(FromRow).ToList();
+    }
+
     public async Task<RecordingCatalogEntry?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken

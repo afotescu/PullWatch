@@ -110,6 +110,17 @@ public sealed class RecordingCatalogTests
         Assert.Equal(encounterEndedAt.ToUniversalTime(), completedEncounter.EncounterEndedAtUtc);
         Assert.Equal(466563, completedEncounter.DurationMilliseconds);
 
+        var recordings = await catalog.ListAvailableFilesAsync(
+            directory.FullName,
+            cancellationToken
+        );
+        var recording = Assert.Single(recordings);
+        Assert.NotNull(recording.RaidEncounter);
+        Assert.Equal("Rotmire", recording.RaidEncounter.EncounterName);
+        Assert.Equal(WowDifficultyIds.FlexibleMythicRaid, recording.RaidEncounter.DifficultyId);
+        Assert.Equal(RaidEncounterOutcome.Kill, recording.RaidEncounter.Outcome);
+        Assert.Equal(466563, recording.RaidEncounter.DurationMilliseconds);
+
         await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
 
         Assert.Null(

@@ -45,7 +45,8 @@ public sealed record RecordingCatalogFile(
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? EndedAtUtc,
     long SizeBytes,
-    DateTimeOffset ModifiedAtUtc
+    DateTimeOffset ModifiedAtUtc,
+    RaidEncounterEntry? RaidEncounter = null
 );
 
 public sealed record RaidEncounterEntry(

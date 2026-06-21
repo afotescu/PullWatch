@@ -290,9 +290,14 @@ public sealed class RecordingsViewModelTests
         {
             var older = Path.Combine(directory, "older.mp4");
             var newer = Path.Combine(directory, "newer.mp4");
+            var newerStartedAtUtc = new DateTimeOffset(2026, 6, 15, 10, 58, 0, TimeSpan.Zero);
             var recordings = new[]
             {
-                CatalogFile(newer, new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)),
+                CatalogFile(
+                    newer,
+                    new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                    startedAtUtc: newerStartedAtUtc
+                ),
                 CatalogFile(older, new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)),
             };
             var viewModel = CreateViewModel(
@@ -308,6 +313,14 @@ public sealed class RecordingsViewModelTests
                     Assert.Equal(recordings[0].Id, first.Id);
                     Assert.Equal(newer, first.Path);
                     Assert.Equal("newer", first.DisplayName);
+                    Assert.Equal(
+                        $"{newerStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",
+                        first.StartedAt
+                    );
+                    Assert.Equal("Manual recording", first.EncounterName);
+                    Assert.Equal("-", first.Difficulty);
+                    Assert.Equal("-", first.Outcome);
+                    Assert.Equal("-", first.FightDuration);
                 },
                 second =>
                 {
@@ -317,6 +330,56 @@ public sealed class RecordingsViewModelTests
             );
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
             Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FormatsRaidEncounterColumns()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var id = Guid.Parse("F16B49B4-C7B3-4B5E-8E4F-E8843088DE7A");
+            var encounterStartedAtUtc = new DateTimeOffset(2026, 6, 17, 20, 28, 32, TimeSpan.Zero);
+            var recording = CatalogFile(
+                Path.Combine(directory, "rotmire.mp4"),
+                new DateTimeOffset(2026, 6, 17, 20, 36, 20, TimeSpan.Zero),
+                id: id,
+                kind: RecordingCatalogKind.Encounter,
+                raidEncounter: new RaidEncounterEntry(
+                    id,
+                    new DateTimeOffset(2026, 6, 17, 20, 28, 32, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 6, 17, 20, 36, 19, TimeSpan.Zero),
+                    3159,
+                    "Rotmire",
+                    WowDifficultyIds.FlexibleMythicRaid,
+                    20,
+                    1592,
+                    encounterStartedAtUtc,
+                    RaidEncounterOutcome.Kill,
+                    new DateTimeOffset(2026, 6, 17, 20, 36, 19, TimeSpan.Zero),
+                    466563
+                )
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording])
+            );
+
+            var item = Assert.Single(viewModel.Recordings);
+
+            Assert.Equal("rotmire", item.DisplayName);
+            Assert.Equal($"{encounterStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}", item.StartedAt);
+            Assert.Equal("Rotmire", item.EncounterName);
+            Assert.Equal("Mythic", item.Difficulty);
+            Assert.Equal("Kill", item.Outcome);
+            Assert.Equal("07:46", item.FightDuration);
         }
         finally
         {
@@ -628,17 +691,21 @@ public sealed class RecordingsViewModelTests
         string path,
         DateTimeOffset modifiedAtUtc,
         long sizeBytes = 1024,
-        Guid? id = null
+        Guid? id = null,
+        RecordingCatalogKind kind = RecordingCatalogKind.Manual,
+        RaidEncounterEntry? raidEncounter = null,
+        DateTimeOffset? startedAtUtc = null
     )
     {
         return new RecordingCatalogFile(
             id ?? Guid.NewGuid(),
             path,
-            RecordingCatalogKind.Manual,
-            null,
+            kind,
+            startedAtUtc,
             null,
             sizeBytes,
-            modifiedAtUtc
+            modifiedAtUtc,
+            raidEncounter
         );
     }
 

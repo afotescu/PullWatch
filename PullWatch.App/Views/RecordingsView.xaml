@@ -139,6 +139,7 @@
       <Grid Grid.Row="2" Margin="18,0,18,18">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
           <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -185,8 +186,64 @@
           </Button>
         </Grid>
 
+        <Grid Grid.Row="1" Margin="15,0,15,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="132" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="120" />
+            <ColumnDefinition Width="92" />
+            <ColumnDefinition Width="108" />
+          </Grid.ColumnDefinitions>
+
+          <TextBlock
+            Grid.Column="0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
+            Text="Started"
+            TextWrapping="NoWrap"
+          />
+          <TextBlock
+            Grid.Column="1"
+            Margin="14,0,0,0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
+            Text="Encounter"
+            TextWrapping="NoWrap"
+          />
+          <TextBlock
+            Grid.Column="2"
+            Margin="14,0,0,0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
+            Text="Difficulty"
+            TextWrapping="NoWrap"
+          />
+          <TextBlock
+            Grid.Column="3"
+            Margin="14,0,0,0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
+            Text="Outcome"
+            TextWrapping="NoWrap"
+          />
+          <TextBlock
+            Grid.Column="4"
+            Margin="14,0,0,0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
+            Text="Duration"
+            TextAlignment="Right"
+            TextWrapping="NoWrap"
+          />
+        </Grid>
+
         <ListBox
-          Grid.Row="1"
+          Grid.Row="2"
           Background="{StaticResource SurfaceRaisedBrush}"
           BorderBrush="{StaticResource BorderBrush}"
           BorderThickness="1"
@@ -198,25 +255,56 @@
         >
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid Margin="4">
+              <Grid Margin="4" ToolTip="{Binding ToolTip}">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="132" />
                   <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="120" />
+                  <ColumnDefinition Width="92" />
+                  <ColumnDefinition Width="108" />
                 </Grid.ColumnDefinitions>
 
                 <TextBlock
                   Grid.Column="0"
-                  FontWeight="SemiBold"
-                  Text="{Binding DisplayName}"
-                  TextTrimming="CharacterEllipsis"
-                  ToolTip="{Binding DisplayName}"
+                  FontSize="12"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding StartedAt}"
+                  TextWrapping="NoWrap"
                 />
                 <TextBlock
                   Grid.Column="1"
-                  Margin="18,0,0,0"
+                  Margin="14,0,0,0"
+                  FontWeight="SemiBold"
+                  Text="{Binding EncounterName}"
+                  TextTrimming="CharacterEllipsis"
+                  TextWrapping="NoWrap"
+                />
+                <TextBlock
+                  Grid.Column="2"
+                  Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
-                  Text="{Binding Detail}"
+                  Text="{Binding Difficulty}"
+                  TextTrimming="CharacterEllipsis"
+                  TextWrapping="NoWrap"
+                />
+                <TextBlock
+                  Grid.Column="3"
+                  Margin="14,0,0,0"
+                  FontSize="12"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding Outcome}"
+                  TextTrimming="CharacterEllipsis"
+                  TextWrapping="NoWrap"
+                />
+                <TextBlock
+                  Grid.Column="4"
+                  Margin="14,0,0,0"
+                  FontSize="12"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding FightDuration}"
+                  TextAlignment="Right"
+                  TextWrapping="NoWrap"
                 />
               </Grid>
             </DataTemplate>

@@ -4,6 +4,11 @@ public sealed record RecordingListItem(
     Guid Id,
     string Path,
     string DisplayName,
+    string StartedAt,
+    string EncounterName,
+    string Difficulty,
+    string Outcome,
+    string FightDuration,
     DateTimeOffset ModifiedAt,
     long SizeBytes
 )
@@ -11,6 +16,8 @@ public sealed record RecordingListItem(
     public Uri Source { get; } = new(Path, UriKind.Absolute);
 
     public string Detail => $"{ModifiedAt:yyyy-MM-dd HH:mm} · {FormatSize(SizeBytes)}";
+
+    public string ToolTip => $"{DisplayName}{Environment.NewLine}{Detail}";
 
     private static string FormatSize(long bytes)
     {
