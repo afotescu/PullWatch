@@ -3,7 +3,7 @@ using System.IO;
 
 namespace PullWatch;
 
-public sealed class RecordingsViewModel : ObservableObject
+public sealed partial class RecordingsViewModel : ObservableObject
 {
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string NoRecordingsDirectoryMessage =
@@ -54,31 +54,11 @@ public sealed class RecordingsViewModel : ObservableObject
         _deleteRecording = deleteRecording;
         _confirmPermanentDelete = confirmPermanentDelete;
         _openRecordingsFolder = openRecordingsFolder;
-        ManualRecordingCommand = new AsyncRelayCommand(
-            () => ExecuteCommandAsync(ToggleManualRecordingAsync),
-            () => CanRunManualCommand
-        );
-        OpenRecordingsFolderCommand = new AsyncRelayCommand(() =>
-            ExecuteCommandAsync(OpenRecordingsFolderAsync)
-        );
-        DeleteSelectedRecordingCommand = new AsyncRelayCommand(
-            () => ExecuteCommandAsync(DeleteSelectedRecordingAsync),
-            () => SelectedRecording is not null
-        );
-        DismissFailureCommand = new RelayCommand(DismissFailure, () => IsFailureVisible);
         ApplyStatus(initialStatus);
         _ = RefreshRecordingsAsync();
     }
 
     public ObservableCollection<RecordingListItem> Recordings { get; } = new();
-
-    public IAsyncRelayCommand ManualRecordingCommand { get; }
-
-    public IAsyncRelayCommand OpenRecordingsFolderCommand { get; }
-
-    public IAsyncRelayCommand DeleteSelectedRecordingCommand { get; }
-
-    public IRelayCommand DismissFailureCommand { get; }
 
     public string StateTitle => GetStateTitle(_recording, _wowProcess);
 
@@ -194,6 +174,8 @@ public sealed class RecordingsViewModel : ObservableObject
     private bool CanRunManualCommand =>
         _recording.State == RecordingCoordinatorState.Recording
         || (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
+
+    private bool CanDeleteSelectedRecording => SelectedRecording is not null;
 
     internal async Task RefreshRecordingsAsync(
         string? preferredSelectionPath = null,
@@ -372,7 +354,13 @@ public sealed class RecordingsViewModel : ObservableObject
             );
     }
 
-    private async Task DeleteSelectedRecordingAsync()
+    [RelayCommand(CanExecute = nameof(CanDeleteSelectedRecording))]
+    private Task DeleteSelectedRecordingAsync()
+    {
+        return ExecuteCommandAsync(DeleteSelectedRecordingCoreAsync);
+    }
+
+    private async Task DeleteSelectedRecordingCoreAsync()
     {
         var recording = SelectedRecording;
 
@@ -462,6 +450,12 @@ public sealed class RecordingsViewModel : ObservableObject
             : StartManualAsync();
     }
 
+    [RelayCommand(CanExecute = nameof(CanRunManualCommand))]
+    private Task ManualRecordingAsync()
+    {
+        return ExecuteCommandAsync(ToggleManualRecordingAsync);
+    }
+
     private async Task ExecuteCommandAsync(Func<Task> command)
     {
         try
@@ -492,6 +486,7 @@ public sealed class RecordingsViewModel : ObservableObject
         );
     }
 
+    [RelayCommand]
     private async Task OpenRecordingsFolderAsync()
     {
         try
@@ -505,6 +500,7 @@ public sealed class RecordingsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand(CanExecute = nameof(IsFailureVisible))]
     private void DismissFailure()
     {
         _dismissedFailure = _recording.LastFailure;

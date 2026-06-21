@@ -1,10 +1,12 @@
 namespace PullWatch;
 
-public sealed class MainWindowViewModel : ObservableObject, IDisposable
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
     private readonly InMemoryLogProvider _logs;
+
+    [ObservableProperty]
     private NavigationItemViewModel _selectedNavigationItem;
 
     public MainWindowViewModel(
@@ -55,20 +57,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public SettingsViewModel Settings { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
-
-    public NavigationItemViewModel SelectedNavigationItem
-    {
-        get => _selectedNavigationItem;
-        set
-        {
-            if (ReferenceEquals(value, _selectedNavigationItem))
-            {
-                return;
-            }
-
-            SetProperty(ref _selectedNavigationItem, value);
-        }
-    }
 
     public void Dispose()
     {

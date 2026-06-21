@@ -4,7 +4,7 @@ using Forms = System.Windows.Forms;
 
 namespace PullWatch;
 
-public sealed class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject
 {
     private const string SettingsSavedMessage = "Settings saved.";
     private const string FixHighlightedSettingsMessage = "Fix the highlighted settings.";
@@ -45,14 +45,6 @@ public sealed class SettingsViewModel : ObservableObject
             () => ExecuteCommandAsync(CommitRecordingsDirectoryAsync),
             () => IsEditingEnabled
         );
-        PickWowLogsDirectoryCommand = new AsyncRelayCommand(
-            () => ExecuteCommandAsync(PickWowLogsDirectoryAsync),
-            () => IsEditingEnabled
-        );
-        PickRecordingsDirectoryCommand = new AsyncRelayCommand(
-            () => ExecuteCommandAsync(PickRecordingsDirectoryAsync),
-            () => IsEditingEnabled
-        );
         LoadSettings(_savedSettings);
         ApplyStatus(initialStatus);
     }
@@ -60,10 +52,6 @@ public sealed class SettingsViewModel : ObservableObject
     public IAsyncRelayCommand CommitWowLogsDirectoryCommand { get; }
 
     public IAsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
-
-    public IAsyncRelayCommand PickWowLogsDirectoryCommand { get; }
-
-    public IAsyncRelayCommand PickRecordingsDirectoryCommand { get; }
 
     public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
     [
@@ -282,28 +270,47 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand(CanExecute = nameof(IsEditingEnabled))]
     private async Task PickWowLogsDirectoryAsync()
     {
-        var selected = _dialogs.PickFolder(
-            "Select the World of Warcraft logs directory",
-            WowLogsDirectory
-        );
-
-        if (selected is not null)
+        try
         {
-            WowLogsDirectory = selected;
-            await CommitWowLogsDirectoryAsync();
+            var selected = _dialogs.PickFolder(
+                "Select the World of Warcraft logs directory",
+                WowLogsDirectory
+            );
+
+            if (selected is not null)
+            {
+                WowLogsDirectory = selected;
+                await CommitWowLogsDirectoryAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            HandleCommandFailure(exception);
         }
     }
 
+    [RelayCommand(CanExecute = nameof(IsEditingEnabled))]
     private async Task PickRecordingsDirectoryAsync()
     {
-        var selected = _dialogs.PickFolder("Select the recordings directory", RecordingsDirectory);
-
-        if (selected is not null)
+        try
         {
-            RecordingsDirectory = selected;
-            await CommitRecordingsDirectoryAsync();
+            var selected = _dialogs.PickFolder(
+                "Select the recordings directory",
+                RecordingsDirectory
+            );
+
+            if (selected is not null)
+            {
+                RecordingsDirectory = selected;
+                await CommitRecordingsDirectoryAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            HandleCommandFailure(exception);
         }
     }
 

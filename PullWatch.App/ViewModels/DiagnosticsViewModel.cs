@@ -1,6 +1,6 @@
 namespace PullWatch;
 
-public sealed class DiagnosticsViewModel : ObservableObject
+public sealed partial class DiagnosticsViewModel : ObservableObject
 {
     private readonly InMemoryLogProvider _logs;
     private readonly IDiagnosticsDialogs _dialogs;
@@ -16,13 +16,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         _status = initialStatus;
         _logs = logs;
         _dialogs = dialogs;
-        CopyDiagnosticsCommand = new RelayCommand(CopyDiagnostics);
-        ExportDiagnosticsCommand = new AsyncRelayCommand(ExportDiagnosticsAsync);
     }
-
-    public IRelayCommand CopyDiagnosticsCommand { get; }
-
-    public IAsyncRelayCommand ExportDiagnosticsCommand { get; }
 
     public IReadOnlyList<DiagnosticsSectionViewModel> Sections =>
         [
@@ -98,6 +92,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         OnPropertyChanged(nameof(RecentLogs));
     }
 
+    [RelayCommand]
     private void CopyDiagnostics()
     {
         try
@@ -111,6 +106,7 @@ public sealed class DiagnosticsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
     private async Task ExportDiagnosticsAsync()
     {
         try
