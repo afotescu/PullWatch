@@ -636,6 +636,7 @@ public sealed class ApplicationControllerTests
         var ui = new UiSettings
         {
             SidebarCollapsed = true,
+            SelectedRecordingCategory = RecordingListCategory.Manual,
             WindowPlacement = new WindowPlacementSettings
             {
                 Left = 25,

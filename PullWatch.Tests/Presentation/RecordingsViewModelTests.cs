@@ -338,6 +338,7 @@ public sealed class RecordingsViewModelTests
                 loadRecordings: _ =>
                     Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
+            SelectCategory(viewModel, RecordingListCategory.Manual);
 
             Assert.Collection(
                 viewModel.Recordings,
@@ -363,6 +364,118 @@ public sealed class RecordingsViewModelTests
             );
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
             Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FiltersRecordingsBySelectedCategoryAndTracksCounts()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var challengeMode = CatalogFile(
+                Path.Combine(directory, "key.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                kind: RecordingCatalogKind.ChallengeMode
+            );
+            var raid = CatalogFile(
+                Path.Combine(directory, "boss.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                kind: RecordingCatalogKind.Encounter
+            );
+            var manual = CatalogFile(
+                Path.Combine(directory, "manual.mp4"),
+                new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([
+                        challengeMode,
+                        raid,
+                        manual,
+                    ])
+            );
+
+            Assert.Equal(1, CountFor(viewModel, RecordingListCategory.ChallengeMode));
+            Assert.Equal(1, CountFor(viewModel, RecordingListCategory.RaidEncounter));
+            Assert.Equal(1, CountFor(viewModel, RecordingListCategory.Manual));
+            Assert.Equal(
+                RecordingListCategory.ChallengeMode,
+                viewModel.SelectedRecordingCategory.Category
+            );
+            Assert.Equal(challengeMode.Id, Assert.Single(viewModel.Recordings).Id);
+
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            Assert.Equal(raid.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(raid.Id, viewModel.SelectedRecording?.Id);
+
+            SelectCategory(viewModel, RecordingListCategory.Manual);
+
+            Assert.Equal(manual.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(manual.Id, viewModel.SelectedRecording?.Id);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task InitializesSelectedCategoryFromSettingsAndSavesChanges()
+    {
+        var savedCategories = new List<RecordingListCategory>();
+        var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                selectedRecordingCategory: RecordingListCategory.Manual
+            ),
+            saveSelectedRecordingCategory: category =>
+            {
+                savedCategories.Add(category);
+                saved.SetResult();
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal(RecordingListCategory.Manual, viewModel.SelectedRecordingCategory.Category);
+
+        SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+        await saved.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        Assert.Equal([RecordingListCategory.RaidEncounter], savedCategories);
+    }
+
+    [Fact]
+    public void ReportsEmptySelectedCategory()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var challengeMode = CatalogFile(
+                Path.Combine(directory, "key.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                kind: RecordingCatalogKind.ChallengeMode
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([challengeMode])
+            );
+
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            Assert.Empty(viewModel.Recordings);
+            Assert.Null(viewModel.SelectedRecording);
+            Assert.Equal("No Raid recordings found yet.", viewModel.RecordingLibraryStatus);
         }
         finally
         {
@@ -404,6 +517,7 @@ public sealed class RecordingsViewModelTests
                 loadRecordings: _ =>
                     Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording])
             );
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
 
             var item = Assert.Single(viewModel.Recordings);
 
@@ -518,6 +632,7 @@ public sealed class RecordingsViewModelTests
                 },
                 confirmPermanentDelete: _ => true
             );
+            SelectCategory(viewModel, RecordingListCategory.Manual);
 
             var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
             await deleteStarted.Task.WaitAsync(
@@ -567,6 +682,7 @@ public sealed class RecordingsViewModelTests
                 },
                 confirmPermanentDelete: _ => false
             );
+            SelectCategory(viewModel, RecordingListCategory.Manual);
 
             await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
 
@@ -581,31 +697,107 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
-    public async Task DeleteSelectedRecordingFailureKeepsVisibleSelectionAndReportsError()
+    public async Task DeleteSelectedRecordingFailureRestoresItemWithoutStealingSelection()
     {
         var directory = CreateTempDirectory();
 
         try
         {
-            var recording = CatalogFile(
+            var deletedId = Guid.Parse("A818D7C1-A424-4F3D-A3F4-AC6D1E08D0D8");
+            var keptId = Guid.Parse("6A41D8E0-FA61-4AE8-BED6-2D36D0221494");
+            var deleted = CatalogFile(
                 Path.Combine(directory, "locked.mp4"),
-                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                id: deletedId
+            );
+            var kept = CatalogFile(
+                Path.Combine(directory, "kept.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                id: keptId
             );
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
                 loadRecordings: _ =>
-                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording]),
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([deleted, kept]),
                 deleteRecording: _ => Task.FromException(new IOException("file is locked")),
                 confirmPermanentDelete: _ => true
             );
+            SelectCategory(viewModel, RecordingListCategory.Manual);
 
             await viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
 
-            var visibleRecording = Assert.Single(viewModel.Recordings);
-            Assert.Equal(recording.Id, visibleRecording.Id);
-            Assert.Equal(recording.Id, viewModel.SelectedRecording?.Id);
+            Assert.Collection(
+                viewModel.Recordings,
+                first => Assert.Equal(deletedId, first.Id),
+                second => Assert.Equal(keptId, second.Id)
+            );
+            Assert.Equal(keptId, viewModel.SelectedRecording?.Id);
             Assert.Equal("Could not delete recording: file is locked", viewModel.CommandMessage);
             Assert.True(viewModel.IsCommandMessageVisible);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteSelectedRecordingFailureAfterCategoryChangeDoesNotSelectHiddenRecording()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var deleteStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var manualId = Guid.Parse("F3750848-10E7-4191-8F70-69E52E09C183");
+            var raidId = Guid.Parse("352D60D6-7C74-45C9-9E23-C4F6BA5E390B");
+            var manual = CatalogFile(
+                Path.Combine(directory, "manual.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                id: manualId
+            );
+            var raid = CatalogFile(
+                Path.Combine(directory, "raid.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                id: raidId,
+                kind: RecordingCatalogKind.Encounter
+            );
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([manual, raid]),
+                deleteRecording: _ =>
+                {
+                    deleteStarted.SetResult();
+                    return deleteCompletion.Task;
+                },
+                confirmPermanentDelete: _ => true
+            );
+
+            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
+            await deleteStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
+
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            deleteCompletion.SetException(new IOException("file is locked"));
+            await deleteTask;
+
+            Assert.Equal(1, CountFor(viewModel, RecordingListCategory.Manual));
+            Assert.Equal(raidId, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(raidId, viewModel.SelectedRecording?.Id);
+            Assert.Equal("Could not delete recording: file is locked", viewModel.CommandMessage);
         }
         finally
         {
@@ -621,6 +813,15 @@ public sealed class RecordingsViewModelTests
         Assert.Empty(viewModel.Recordings);
         Assert.Null(viewModel.SelectedRecording);
         Assert.False(viewModel.DeleteSelectedRecordingCommand.CanExecute(null));
+        Assert.Equal(
+            "Choose a recordings directory in settings to review videos here.",
+            viewModel.RecordingLibraryStatus
+        );
+
+        SelectCategory(viewModel, RecordingListCategory.Manual);
+
+        Assert.Empty(viewModel.Recordings);
+        Assert.Null(viewModel.SelectedRecording);
         Assert.Equal(
             "Choose a recordings directory in settings to review videos here.",
             viewModel.RecordingLibraryStatus
@@ -660,6 +861,7 @@ public sealed class RecordingsViewModelTests
                 loadRecordings: _ =>
                     Task.FromResult<IReadOnlyList<RecordingCatalogFile>>(recordings)
             );
+            SelectCategory(viewModel, RecordingListCategory.Manual);
             viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
                 recording.Path == older
             );
@@ -719,13 +921,29 @@ public sealed class RecordingsViewModelTests
         Assert.Equal(expected, viewModel.Duration);
     }
 
+    private static void SelectCategory(
+        RecordingsViewModel viewModel,
+        RecordingListCategory category
+    )
+    {
+        viewModel.SelectedRecordingCategory = viewModel.RecordingCategories.Single(tab =>
+            tab.Category == category
+        );
+    }
+
+    private static int CountFor(RecordingsViewModel viewModel, RecordingListCategory category)
+    {
+        return viewModel.RecordingCategories.Single(tab => tab.Category == category).Count;
+    }
+
     private static RecordingsViewModel CreateViewModel(
         ApplicationStatus status,
         Func<Task<RecordingCommandResult>>? startManual = null,
         Func<Task<RecordingCommandResult>>? stopManual = null,
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null,
         Func<Guid, Task>? deleteRecording = null,
-        Func<RecordingListItem, bool>? confirmPermanentDelete = null
+        Func<RecordingListItem, bool>? confirmPermanentDelete = null,
+        Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null
     )
     {
         return new RecordingsViewModel(
@@ -735,7 +953,8 @@ public sealed class RecordingsViewModelTests
             loadRecordings ?? (_ => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
             deleteRecording ?? (_ => Task.CompletedTask),
             confirmPermanentDelete ?? (_ => true),
-            () => Task.CompletedTask
+            () => Task.CompletedTask,
+            saveSelectedRecordingCategory ?? (_ => Task.CompletedTask)
         );
     }
 
@@ -751,7 +970,8 @@ public sealed class RecordingsViewModelTests
         WowProcessState wowProcessState = WowProcessState.WindowAvailable,
         int? wowProcessId = 10,
         string? wowWindowTitle = "World of Warcraft",
-        string? activeOutputPath = null
+        string? activeOutputPath = null,
+        RecordingListCategory selectedRecordingCategory = RecordingListCategory.ChallengeMode
     )
     {
         RecordingOwner? owner = context switch
@@ -763,7 +983,11 @@ public sealed class RecordingsViewModelTests
         };
 
         return new ApplicationStatus(
-            new PullWatchSettings { RecordingsDirectory = recordingsDirectory },
+            new PullWatchSettings
+            {
+                RecordingsDirectory = recordingsDirectory,
+                Ui = new UiSettings { SelectedRecordingCategory = selectedRecordingCategory },
+            },
             new RecordingCoordinatorStatus(
                 state,
                 owner,

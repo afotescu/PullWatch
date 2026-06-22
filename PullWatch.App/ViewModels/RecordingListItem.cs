@@ -2,6 +2,7 @@ namespace PullWatch;
 
 public sealed record RecordingListItem(
     Guid Id,
+    RecordingListCategory Category,
     string Path,
     string DisplayName,
     string StartedAt,

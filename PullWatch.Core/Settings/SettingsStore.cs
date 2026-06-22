@@ -170,6 +170,8 @@ public sealed class SettingsStore
     {
         public WindowPlacementSettings? WindowPlacement { get; init; } = new();
         public bool SidebarCollapsed { get; init; }
+        public RecordingListCategory SelectedRecordingCategory { get; init; } =
+            RecordingListCategory.ChallengeMode;
 
         public UiSettings ToSettings()
         {
@@ -179,6 +181,7 @@ public sealed class SettingsStore
                     WindowPlacement
                     ?? throw new JsonException("Window placement settings are required."),
                 SidebarCollapsed = SidebarCollapsed,
+                SelectedRecordingCategory = SelectedRecordingCategory,
             };
         }
     }

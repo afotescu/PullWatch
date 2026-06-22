@@ -52,6 +52,8 @@ public sealed record UiSettings
 {
     public WindowPlacementSettings WindowPlacement { get; init; } = new();
     public bool SidebarCollapsed { get; init; }
+    public RecordingListCategory SelectedRecordingCategory { get; init; } =
+        RecordingListCategory.ChallengeMode;
 }
 
 public sealed record WindowPlacementSettings

@@ -45,6 +45,21 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsEntireSettingsObjectWhenSelectedRecordingCategoryIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Ui = new UiSettings { SelectedRecordingCategory = (RecordingListCategory)999 },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.NotEmpty(result.Errors);
+    }
+
+    [Fact]
     public void AllowsConfiguredLogsDirectoryToBeTemporarilyUnavailable()
     {
         var unavailablePath = Path.Combine(

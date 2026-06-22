@@ -35,6 +35,13 @@ public static class SettingsValidator
             errors.Add("Video quality must be Compact, Balanced, or High.");
         }
 
+        if (!Enum.IsDefined(settings.Ui.SelectedRecordingCategory))
+        {
+            errors.Add(
+                "Selected recording category must be ChallengeMode, RaidEncounter, or Manual."
+            );
+        }
+
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",

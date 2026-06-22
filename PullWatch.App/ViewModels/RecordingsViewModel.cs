@@ -22,6 +22,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private readonly Func<Guid, Task> _deleteRecording;
     private readonly Func<RecordingListItem, bool> _confirmPermanentDelete;
     private readonly Func<Task> _openRecordingsFolder;
+    private readonly Func<RecordingListCategory, Task> _saveSelectedRecordingCategory;
+    private readonly List<RecordingListItem> _allRecordings = new();
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
     private WowProcessStatus _wowProcess;
@@ -31,6 +33,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private string _recordingLibraryStatus = NoRecordingsDirectoryMessage;
     private string? _commandMessage;
     private RecordingListItem? _selectedRecording;
+    private RecordingCategoryTab _selectedRecordingCategory = null!;
     private int _knownSavedCount;
 
     public RecordingsViewModel(
@@ -40,7 +43,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
         Func<Guid, Task> deleteRecording,
         Func<RecordingListItem, bool> confirmPermanentDelete,
-        Func<Task> openRecordingsFolder
+        Func<Task> openRecordingsFolder,
+        Func<RecordingListCategory, Task> saveSelectedRecordingCategory
     )
     {
         _recording = initialStatus.Recording;
@@ -54,11 +58,38 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _deleteRecording = deleteRecording;
         _confirmPermanentDelete = confirmPermanentDelete;
         _openRecordingsFolder = openRecordingsFolder;
+        _saveSelectedRecordingCategory = saveSelectedRecordingCategory;
+        RecordingCategories =
+        [
+            new RecordingCategoryTab(RecordingListCategory.ChallengeMode, "Mythic+"),
+            new RecordingCategoryTab(RecordingListCategory.RaidEncounter, "Raid"),
+            new RecordingCategoryTab(RecordingListCategory.Manual, "Manual"),
+        ];
+        _selectedRecordingCategory =
+            GetRecordingCategoryTab(
+                initialStatus.EffectiveSettings?.Ui.SelectedRecordingCategory
+                    ?? RecordingListCategory.ChallengeMode
+            ) ?? RecordingCategories[0];
         ApplyStatus(initialStatus);
         _ = RefreshRecordingsAsync();
     }
 
+    public ObservableCollection<RecordingCategoryTab> RecordingCategories { get; }
+
     public ObservableCollection<RecordingListItem> Recordings { get; } = new();
+
+    public RecordingCategoryTab SelectedRecordingCategory
+    {
+        get => _selectedRecordingCategory;
+        set
+        {
+            if (value is not null && SetProperty(ref _selectedRecordingCategory, value))
+            {
+                ApplyRecordingFilter();
+                _ = SaveSelectedRecordingCategoryAsync(value.Category);
+            }
+        }
+    }
 
     public string StateTitle => GetStateTitle(_recording, _wowProcess);
 
@@ -197,7 +228,9 @@ public sealed partial class RecordingsViewModel : ObservableObject
     )
     {
         var existingSelectionPath = SelectedRecording?.Path;
+        _allRecordings.Clear();
         Recordings.Clear();
+        UpdateCategoryCounts();
 
         if (string.IsNullOrWhiteSpace(_recordingsDirectory))
         {
@@ -212,22 +245,25 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
             foreach (var recording in CreateRecordingListItems(recordings))
             {
-                Recordings.Add(recording);
+                _allRecordings.Add(recording);
             }
 
-            var preferredRecording = string.IsNullOrWhiteSpace(preferredSelectionPath)
-                ? null
-                : Recordings.FirstOrDefault(recording =>
-                    PathsEqual(recording.Path, preferredSelectionPath)
-                );
-            var existingSelection = preferMostRecent
-                ? null
-                : Recordings.FirstOrDefault(recording =>
-                    PathsEqual(recording.Path, existingSelectionPath)
-                );
-            SelectedRecording =
-                preferredRecording ?? existingSelection ?? Recordings.FirstOrDefault();
-            RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
+            UpdateCategoryCounts();
+
+            var preferredRecording = FindAllRecordingByPath(preferredSelectionPath);
+            if (
+                preferredRecording is not null
+                && preferredRecording.Category != SelectedRecordingCategory.Category
+            )
+            {
+                SelectRecordingCategory(preferredRecording.Category);
+            }
+
+            ApplyRecordingFilter(
+                preferredRecording?.Path,
+                preferMostRecent,
+                preferMostRecent ? null : existingSelectionPath
+            );
         }
         catch (Exception exception)
         {
@@ -243,6 +279,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return recordings
             .Select(file => new RecordingListItem(
                 file.Id,
+                GetRecordingCategory(file),
                 file.FilePath,
                 Path.GetFileNameWithoutExtension(file.FilePath),
                 FormatStartedAt(file),
@@ -256,6 +293,81 @@ public sealed partial class RecordingsViewModel : ObservableObject
             .ToList();
     }
 
+    private void ApplyRecordingFilter(
+        string? preferredSelectionPath = null,
+        bool preferMostRecent = false,
+        string? existingSelectionPath = null
+    )
+    {
+        existingSelectionPath ??= SelectedRecording?.Path;
+        Recordings.Clear();
+
+        if (string.IsNullOrWhiteSpace(_recordingsDirectory))
+        {
+            SelectedRecording = null;
+            RecordingLibraryStatus = NoRecordingsDirectoryMessage;
+            return;
+        }
+
+        foreach (
+            var recording in _allRecordings.Where(recording =>
+                recording.Category == SelectedRecordingCategory.Category
+            )
+        )
+        {
+            Recordings.Add(recording);
+        }
+
+        var preferredRecording = string.IsNullOrWhiteSpace(preferredSelectionPath)
+            ? null
+            : Recordings.FirstOrDefault(recording =>
+                PathsEqual(recording.Path, preferredSelectionPath)
+            );
+        var existingSelection = preferMostRecent
+            ? null
+            : Recordings.FirstOrDefault(recording =>
+                PathsEqual(recording.Path, existingSelectionPath)
+            );
+        SelectedRecording = preferredRecording ?? existingSelection ?? Recordings.FirstOrDefault();
+        UpdateRecordingLibraryStatus();
+    }
+
+    private void UpdateCategoryCounts()
+    {
+        foreach (var tab in RecordingCategories)
+        {
+            tab.Count = _allRecordings.Count(recording => recording.Category == tab.Category);
+        }
+    }
+
+    private void SelectRecordingCategory(RecordingListCategory category)
+    {
+        var tab = GetRecordingCategoryTab(category);
+
+        if (tab is not null)
+        {
+            SelectedRecordingCategory = tab;
+        }
+    }
+
+    private RecordingCategoryTab? GetRecordingCategoryTab(RecordingListCategory category)
+    {
+        return RecordingCategories.FirstOrDefault(tab => tab.Category == category);
+    }
+
+    private async Task SaveSelectedRecordingCategoryAsync(RecordingListCategory category)
+    {
+        try
+        {
+            await _saveSelectedRecordingCategory(category);
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // The visual preference can safely remain in-memory during shutdown.
+        }
+    }
+
     private static string FormatStartedAt(RecordingCatalogFile file)
     {
         var startedAtUtc =
@@ -266,6 +378,16 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return startedAtUtc is null
             ? MissingMetadataValue
             : $"{startedAtUtc.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+    }
+
+    private static RecordingListCategory GetRecordingCategory(RecordingCatalogFile file)
+    {
+        return file.Kind switch
+        {
+            RecordingCatalogKind.ChallengeMode => RecordingListCategory.ChallengeMode,
+            RecordingCatalogKind.Encounter => RecordingListCategory.RaidEncounter,
+            _ => RecordingListCategory.Manual,
+        };
     }
 
     private static string GetEncounterName(RecordingCatalogFile file)
@@ -383,48 +505,64 @@ public sealed partial class RecordingsViewModel : ObservableObject
             return;
         }
 
-        var removedIndex = Recordings.IndexOf(recording);
+        var removal = RemoveRecording(recording);
         SelectedRecording = null;
-        removedIndex = RemoveRecording(recording.Id, removedIndex);
         UpdateRecordingLibraryStatus();
 
         try
         {
-            SelectRecordingNear(removedIndex);
+            SelectRecordingNear(removal.VisibleIndex);
             await _deleteRecording(recording.Id);
             CommandMessage = "Recording deleted.";
         }
         catch (Exception exception)
         {
-            RestoreRecording(recording, removedIndex);
-            SelectedRecording = recording;
+            RestoreRecording(recording, removal);
             CommandMessage = $"Could not delete recording: {exception.Message}";
         }
     }
 
-    private int RemoveRecording(Guid id, int fallbackIndex)
+    private RecordingRemoval RemoveRecording(RecordingListItem recording)
     {
-        var index = FindRecordingIndex(id);
-
-        if (index < 0)
+        var visibleIndex = FindRecordingIndex(recording.Id);
+        if (visibleIndex >= 0)
         {
-            return fallbackIndex;
+            Recordings.RemoveAt(visibleIndex);
         }
 
-        Recordings.RemoveAt(index);
-        return index;
+        var allIndex = FindAllRecordingIndex(recording.Id);
+        if (allIndex >= 0)
+        {
+            _allRecordings.RemoveAt(allIndex);
+        }
+
+        UpdateCategoryCounts();
+        return new RecordingRemoval(visibleIndex, allIndex);
     }
 
-    private void RestoreRecording(RecordingListItem recording, int removedIndex)
+    private void RestoreRecording(RecordingListItem recording, RecordingRemoval removal)
     {
-        if (FindRecordingIndex(recording.Id) >= 0)
+        if (FindAllRecordingIndex(recording.Id) >= 0)
         {
             return;
         }
 
-        var insertIndex =
-            removedIndex < 0 || removedIndex > Recordings.Count ? Recordings.Count : removedIndex;
-        Recordings.Insert(insertIndex, recording);
+        var allInsertIndex =
+            removal.AllIndex < 0 || removal.AllIndex > _allRecordings.Count
+                ? _allRecordings.Count
+                : removal.AllIndex;
+        _allRecordings.Insert(allInsertIndex, recording);
+
+        if (recording.Category == SelectedRecordingCategory.Category)
+        {
+            var visibleInsertIndex =
+                removal.VisibleIndex < 0 || removal.VisibleIndex > Recordings.Count
+                    ? Recordings.Count
+                    : removal.VisibleIndex;
+            Recordings.Insert(visibleInsertIndex, recording);
+        }
+
+        UpdateCategoryCounts();
         UpdateRecordingLibraryStatus();
     }
 
@@ -452,10 +590,41 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return -1;
     }
 
+    private int FindAllRecordingIndex(Guid id)
+    {
+        for (var index = 0; index < _allRecordings.Count; index++)
+        {
+            if (_allRecordings[index].Id == id)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private RecordingListItem? FindAllRecordingByPath(string? path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? null
+            : _allRecordings.FirstOrDefault(recording => PathsEqual(recording.Path, path));
+    }
+
     private void UpdateRecordingLibraryStatus()
     {
-        RecordingLibraryStatus = Recordings.Count == 0 ? NoRecordingsMessage : string.Empty;
+        if (Recordings.Count > 0)
+        {
+            RecordingLibraryStatus = string.Empty;
+            return;
+        }
+
+        RecordingLibraryStatus =
+            _allRecordings.Count == 0
+                ? NoRecordingsMessage
+                : $"No {SelectedRecordingCategory.Title} recordings found yet.";
     }
+
+    private sealed record RecordingRemoval(int VisibleIndex, int AllIndex);
 
     private Task ToggleManualRecordingAsync()
     {

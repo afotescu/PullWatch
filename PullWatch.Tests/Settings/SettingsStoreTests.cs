@@ -33,6 +33,11 @@ public sealed class SettingsStoreTests
                 ShowCaptureBorder = true,
             },
             Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
+            Ui = new UiSettings
+            {
+                SidebarCollapsed = true,
+                SelectedRecordingCategory = RecordingListCategory.Manual,
+            },
         };
 
         await store.SaveAsync(settings, CancellationToken.None);
