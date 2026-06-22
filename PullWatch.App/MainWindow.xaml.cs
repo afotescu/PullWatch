@@ -16,6 +16,7 @@ public partial class MainWindow : Window
         ApplicationController controller,
         ApplicationLifetimeCoordinator lifetime,
         InMemoryLogProvider logs,
+        IWindowsStartupShortcut windowsStartupShortcut,
         bool showSettingsOnStartup
     )
     {
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
             logs,
             new WpfDiagnosticsDialogs(),
             new WpfRecordingDialogs(),
+            windowsStartupShortcut,
             showSettingsOnStartup
         );
         DataContext = _viewModel;

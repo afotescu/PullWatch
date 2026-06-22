@@ -29,6 +29,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         InMemoryLogProvider logs,
         IDiagnosticsDialogs diagnosticsDialogs,
         IRecordingDialogs recordingDialogs,
+        IWindowsStartupShortcut windowsStartupShortcut,
         bool showSettingsOnStartup = false
     )
     {
@@ -48,7 +49,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(
             controller.Status,
             controller.SaveSettingsAsync,
-            settingsDialogs
+            settingsDialogs,
+            windowsStartupShortcut: windowsStartupShortcut
         );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =

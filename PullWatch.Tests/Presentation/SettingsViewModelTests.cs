@@ -46,7 +46,98 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.IsEditingEnabled);
         Assert.False(viewModel.PickWowLogsDirectoryCommand.CanExecute(null));
         Assert.False(viewModel.CommitWowLogsDirectoryCommand.CanExecute(null));
+        Assert.False(viewModel.CanStartMinimizedToTray);
         Assert.Equal("Settings are locked while recording.", viewModel.SaveMessage);
+    }
+
+    [Fact]
+    public async Task StartupOptionsAutosaveAndSyncShortcut()
+    {
+        var saves = new List<PullWatchSettings>();
+        var shortcut = new FakeWindowsStartupShortcut();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            windowsStartupShortcut: shortcut
+        );
+
+        Assert.False(viewModel.CanStartMinimizedToTray);
+
+        viewModel.StartWithWindows = true;
+
+        await WaitForAsync(() => shortcut.SyncedSettings.Count == 1);
+
+        Assert.True(saves.Last().Startup.StartWithWindows);
+        Assert.False(saves.Last().Startup.StartMinimizedToTray);
+        Assert.True(viewModel.CanStartMinimizedToTray);
+        Assert.Equal(saves.Last().Startup, shortcut.SyncedSettings.Last());
+
+        viewModel.StartMinimizedToTray = true;
+
+        await WaitForAsync(() =>
+            shortcut.SyncedSettings.Count == 2
+            && shortcut.SyncedSettings.Last().StartMinimizedToTray
+        );
+
+        Assert.True(saves.Last().Startup.StartWithWindows);
+        Assert.True(saves.Last().Startup.StartMinimizedToTray);
+        Assert.Equal(saves.Last().Startup, shortcut.SyncedSettings.Last());
+    }
+
+    [Fact]
+    public async Task DisablingWindowsStartupClearsMinimizedToTray()
+    {
+        var shortcut = new FakeWindowsStartupShortcut();
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                new PullWatchSettings
+                {
+                    Startup = new StartupSettings
+                    {
+                        StartWithWindows = true,
+                        StartMinimizedToTray = true,
+                    },
+                }
+            ),
+            windowsStartupShortcut: shortcut
+        );
+
+        viewModel.StartWithWindows = false;
+
+        await WaitForAsync(() => shortcut.SyncedSettings.Count == 1);
+
+        Assert.False(viewModel.StartWithWindows);
+        Assert.False(viewModel.StartMinimizedToTray);
+        Assert.False(viewModel.CanStartMinimizedToTray);
+        Assert.False(shortcut.SyncedSettings.Last().StartWithWindows);
+        Assert.False(shortcut.SyncedSettings.Last().StartMinimizedToTray);
+    }
+
+    [Fact]
+    public async Task StartupShortcutFailureIsDisplayed()
+    {
+        var shortcut = new FakeWindowsStartupShortcut
+        {
+            Exception = new IOException("startup folder denied"),
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            windowsStartupShortcut: shortcut
+        );
+
+        viewModel.StartWithWindows = true;
+
+        await WaitForAsync(() => viewModel.IsSaveError);
+
+        Assert.Equal(
+            "Settings saved, but Windows startup could not be updated: startup folder denied",
+            viewModel.SaveMessage
+        );
     }
 
     [Fact]
@@ -336,14 +427,16 @@ public sealed class SettingsViewModelTests
         ApplicationStatus status,
         Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null,
         VideoCaptureSize? estimateCaptureSize = null,
-        ISettingsDialogs? dialogs = null
+        ISettingsDialogs? dialogs = null,
+        IWindowsStartupShortcut? windowsStartupShortcut = null
     )
     {
         return new SettingsViewModel(
             status,
             settings => save?.Invoke(settings) ?? Saved(settings),
             dialogs ?? new FakeSettingsDialogs(),
-            () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080)
+            () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080),
+            windowsStartupShortcut
         );
     }
 
@@ -389,6 +482,20 @@ public sealed class SettingsViewModelTests
         public string? PickFolder(string title, string? initialDirectory)
         {
             return SelectedFolder;
+        }
+    }
+
+    private sealed class FakeWindowsStartupShortcut : IWindowsStartupShortcut
+    {
+        public List<StartupSettings> SyncedSettings { get; } = [];
+
+        public Exception? Exception { get; init; }
+
+        public Task SyncAsync(StartupSettings settings)
+        {
+            SyncedSettings.Add(settings);
+
+            return Exception is null ? Task.CompletedTask : Task.FromException(Exception);
         }
     }
 }

@@ -57,6 +57,12 @@ public static class SettingsValidator
                 {
                     WowLogsDirectory = wowLogsDirectory,
                     RecordingsDirectory = recordingsDirectory,
+                    Startup = settings.Startup with
+                    {
+                        StartMinimizedToTray =
+                            settings.Startup.StartWithWindows
+                            && settings.Startup.StartMinimizedToTray,
+                    },
                 },
                 errors
             )

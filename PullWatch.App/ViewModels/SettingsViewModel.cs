@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Forms = System.Windows.Forms;
 
 namespace PullWatch;
@@ -16,6 +17,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
     private readonly ISettingsDialogs _dialogs;
     private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
+    private readonly IWindowsStartupShortcut _windowsStartupShortcut;
     private readonly object _autosaveSync = new();
     private PullWatchSettings _savedSettings;
     private Task? _autosaveTask;
@@ -24,18 +26,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     private bool _queuedSaveIncludesRecordingsDirectory;
     private bool _retryWowLogsDirectoryOnNextAutosave;
     private bool _retryRecordingsDirectoryOnNextAutosave;
+    private bool _retryStartupShortcutOnNextAutosave;
     private bool _isLoading;
 
     public SettingsViewModel(
         ApplicationStatus initialStatus,
         Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings,
         ISettingsDialogs dialogs,
-        Func<VideoCaptureSize>? getEstimateCaptureSize = null
+        Func<VideoCaptureSize>? getEstimateCaptureSize = null,
+        IWindowsStartupShortcut? windowsStartupShortcut = null
     )
     {
         _saveSettings = saveSettings;
         _dialogs = dialogs;
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
+        _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
             () => ExecuteCommandAsync(CommitWowLogsDirectoryAsync),
@@ -89,6 +94,33 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => SetEditableProperty(ref field, value);
     }
 
+    public bool StartWithWindows
+    {
+        get;
+        set
+        {
+            if (!SetEditableProperty(ref field, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(CanStartMinimizedToTray));
+
+            if (!value && StartMinimizedToTray)
+            {
+                StartMinimizedToTray = false;
+            }
+        }
+    }
+
+    public bool StartMinimizedToTray
+    {
+        get;
+        set => SetEditableProperty(ref field, StartWithWindows && value);
+    }
+
+    public bool CanStartMinimizedToTray => IsEditingEnabled && StartWithWindows;
+
     public VideoQuality SelectedVideoQuality
     {
         get;
@@ -133,6 +165,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (SetProperty(ref field, value))
             {
                 NotifyCommandStatesChanged();
+                OnPropertyChanged(nameof(CanStartMinimizedToTray));
             }
         }
     }
@@ -365,6 +398,11 @@ public sealed partial class SettingsViewModel : ObservableObject
                 CaptureSystemAudio = CaptureSystemAudio,
                 CaptureMicrophone = CaptureMicrophone,
             },
+            Startup = _savedSettings.Startup with
+            {
+                StartWithWindows = StartWithWindows,
+                StartMinimizedToTray = StartWithWindows && StartMinimizedToTray,
+            },
         };
     }
 
@@ -428,6 +466,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         var settings = BuildSettings(includeWowLogsDirectory, includeRecordingsDirectory);
+        var shouldSyncStartupShortcut =
+            _retryStartupShortcutOnNextAutosave || settings.Startup != _savedSettings.Startup;
 
         try
         {
@@ -445,6 +485,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
 
             ApplySaveSuccess(result, includeWowLogsDirectory, includeRecordingsDirectory);
+
+            if (shouldSyncStartupShortcut)
+            {
+                await SyncStartupShortcutAsync(result.Settings!.Startup);
+            }
         }
         catch (Exception exception)
         {
@@ -506,6 +551,28 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         SaveMessage =
             IsWowLogsDirectoryPending || IsRecordingsDirectoryPending ? null : SettingsSavedMessage;
+    }
+
+    private async Task SyncStartupShortcutAsync(StartupSettings settings)
+    {
+        try
+        {
+            await _windowsStartupShortcut.SyncAsync(settings);
+            _retryStartupShortcutOnNextAutosave = false;
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or InvalidOperationException
+                        or COMException
+            )
+        {
+            _retryStartupShortcutOnNextAutosave = true;
+            IsSaveError = true;
+            SaveMessage =
+                $"Settings saved, but Windows startup could not be updated: {exception.Message}";
+        }
     }
 
     private void ApplySaveFailure(
@@ -584,6 +651,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordingsDirectory = settings.RecordingsDirectory;
             RecordMythicPlus = settings.RecordMythicPlus;
             RecordRaidEncounters = settings.RecordRaidEncounters;
+            StartWithWindows = settings.Startup.StartWithWindows;
+            StartMinimizedToTray =
+                settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;
             SelectedVideoQuality = settings.Video.Quality;
             SelectedFrameRate = settings.Video.FrameRate;
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
@@ -601,7 +671,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         RecordingsDirectoryError = null;
     }
 
-    private void SetEditableProperty<T>(
+    private bool SetEditableProperty<T>(
         ref T field,
         T value,
         [CallerMemberName] string? propertyName = null
@@ -609,7 +679,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         if (!SetProperty(ref field, value, propertyName))
         {
-            return;
+            return false;
         }
 
         if (!_isLoading)
@@ -637,6 +707,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(EstimatedRecordingSize));
         }
+
+        return true;
     }
 
     private bool MarkPendingPath(string? propertyName)
@@ -823,6 +895,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         return bounds is { Width: > 0, Height: > 0 }
             ? new VideoCaptureSize(bounds.Value.Width, bounds.Value.Height)
             : FallbackEstimateCaptureSize;
+    }
+
+    private sealed class NoOpWindowsStartupShortcut : IWindowsStartupShortcut
+    {
+        public static NoOpWindowsStartupShortcut Instance { get; } = new();
+
+        public Task SyncAsync(StartupSettings settings)
+        {
+            return Task.CompletedTask;
+        }
     }
 }
 

@@ -33,6 +33,7 @@ public sealed class SettingsStoreTests
                 ShowCaptureBorder = true,
             },
             Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
+            Startup = new StartupSettings { StartWithWindows = true, StartMinimizedToTray = true },
             Ui = new UiSettings
             {
                 SidebarCollapsed = true,
@@ -89,6 +90,7 @@ public sealed class SettingsStoreTests
     [Theory]
     [InlineData("""{ "Version": 1, "Video": null }""")]
     [InlineData("""{ "Version": 1, "Audio": null }""")]
+    [InlineData("""{ "Version": 1, "Startup": null }""")]
     [InlineData("""{ "Version": 1, "Ui": null }""")]
     [InlineData("""{ "Version": 1, "Ui": { "WindowPlacement": null } }""")]
     public async Task ExplicitNullRequiredSettingsSectionsAreRejected(string json)

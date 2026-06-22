@@ -79,6 +79,23 @@
         </Border>
 
         <Border Margin="0,0,0,18" Style="{StaticResource CardStyle}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Startup" />
+            <CheckBox
+              Margin="0,18,0,0"
+              IsChecked="{Binding StartWithWindows}"
+              Content="Start PullWatch when Windows starts"
+            />
+            <CheckBox
+              Margin="0,10,0,0"
+              IsChecked="{Binding StartMinimizedToTray}"
+              IsEnabled="{Binding CanStartMinimizedToTray}"
+              Content="Start minimized to tray when launched by Windows"
+            />
+          </StackPanel>
+        </Border>
+
+        <Border Margin="0,0,0,18" Style="{StaticResource CardStyle}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />

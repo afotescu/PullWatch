@@ -60,6 +60,17 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void ClearsStartMinimizedToTrayWhenWindowsStartupIsDisabled()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Startup = new StartupSettings { StartMinimizedToTray = true } }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.False(result.Settings!.Startup.StartMinimizedToTray);
+    }
+
+    [Fact]
     public void AllowsConfiguredLogsDirectoryToBeTemporarilyUnavailable()
     {
         var unavailablePath = Path.Combine(

@@ -11,6 +11,7 @@ public sealed record PullWatchSettings
     public bool RecordRaidEncounters { get; init; } = true;
     public VideoSettings Video { get; init; } = new();
     public AudioSettings Audio { get; init; } = new();
+    public StartupSettings Startup { get; init; } = new();
     public UiSettings Ui { get; init; } = new();
 }
 
@@ -46,6 +47,12 @@ public sealed record AudioSettings
 {
     public bool CaptureSystemAudio { get; init; } = true;
     public bool CaptureMicrophone { get; init; }
+}
+
+public sealed record StartupSettings
+{
+    public bool StartWithWindows { get; init; }
+    public bool StartMinimizedToTray { get; init; }
 }
 
 public sealed record UiSettings

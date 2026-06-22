@@ -51,6 +51,7 @@ public partial class App : Application
                 _controller,
                 _lifetime,
                 _logs,
+                new WindowsStartupShortcut(),
                 _controller.StartedWithCreatedSettingsFile
             );
             _trayIcon = new TrayIconManager(
@@ -59,7 +60,11 @@ public partial class App : Application
                 RequestExplicitExitAsync,
                 _loggerFactory.CreateLogger<TrayIconManager>()
             );
-            _mainWindow.Show();
+
+            if (!ShouldStartMinimizedToTray(e.Args, _controller.Status.EffectiveSettings))
+            {
+                _mainWindow.Show();
+            }
         }
         catch (Exception exception)
         {
@@ -111,6 +116,18 @@ public partial class App : Application
         }
 
         base.OnExit(e);
+    }
+
+    private static bool ShouldStartMinimizedToTray(
+        string[] launchArguments,
+        PullWatchSettings? settings
+    )
+    {
+        return launchArguments.Contains(
+                ApplicationLaunchArguments.WindowsStartup,
+                StringComparer.OrdinalIgnoreCase
+            )
+            && settings?.Startup.StartMinimizedToTray == true;
     }
 
     private bool ConfirmExitWhileRecording()

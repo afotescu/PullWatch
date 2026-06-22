@@ -148,6 +148,7 @@ public sealed class SettingsStore
         public bool RecordRaidEncounters { get; init; } = true;
         public VideoSettings? Video { get; init; } = new();
         public AudioSettings? Audio { get; init; } = new();
+        public StartupSettings? Startup { get; init; } = new();
         public PersistedUiSettings? Ui { get; init; } = new();
 
         public PullWatchSettings ToSettings()
@@ -161,6 +162,7 @@ public sealed class SettingsStore
                 RecordRaidEncounters = RecordRaidEncounters,
                 Video = Video ?? throw new JsonException("Video settings are required."),
                 Audio = Audio ?? throw new JsonException("Audio settings are required."),
+                Startup = Startup ?? throw new JsonException("Startup settings are required."),
                 Ui = Ui?.ToSettings() ?? throw new JsonException("UI settings are required."),
             };
         }
