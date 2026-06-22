@@ -340,6 +340,11 @@ public sealed class RecordingsViewModelTests
             );
             SelectCategory(viewModel, RecordingListCategory.Manual);
 
+            Assert.Equal("Recording", viewModel.ActivityColumnHeader);
+            Assert.Equal("Length", viewModel.DurationColumnHeader);
+            Assert.False(viewModel.IsContextColumnVisible);
+            Assert.False(viewModel.IsResultColumnVisible);
+            Assert.True(viewModel.IsDurationColumnVisible);
             Assert.Collection(
                 viewModel.Recordings,
                 first =>
@@ -351,10 +356,12 @@ public sealed class RecordingsViewModelTests
                         $"{newerStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",
                         first.StartedAt
                     );
-                    Assert.Equal("Manual recording", first.EncounterName);
-                    Assert.Equal("-", first.Difficulty);
-                    Assert.Equal("-", first.Outcome);
-                    Assert.Equal("-", first.FightDuration);
+                    Assert.Equal("newer", first.Activity);
+                    Assert.Equal(string.Empty, first.ActivityDetail);
+                    Assert.False(first.IsContextVisible);
+                    Assert.False(first.IsResultVisible);
+                    Assert.True(first.IsDurationVisible);
+                    Assert.Equal("-", first.Duration);
                 },
                 second =>
                 {
@@ -521,12 +528,23 @@ public sealed class RecordingsViewModelTests
 
             var item = Assert.Single(viewModel.Recordings);
 
+            Assert.Equal("Boss", viewModel.ActivityColumnHeader);
+            Assert.Equal("Difficulty", viewModel.ContextColumnHeader);
+            Assert.Equal("Result", viewModel.ResultColumnHeader);
+            Assert.Equal("Pull Time", viewModel.DurationColumnHeader);
+            Assert.True(viewModel.IsContextColumnVisible);
+            Assert.True(viewModel.IsResultColumnVisible);
+            Assert.True(viewModel.IsDurationColumnVisible);
             Assert.Equal("rotmire", item.DisplayName);
             Assert.Equal($"{encounterStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}", item.StartedAt);
-            Assert.Equal("Rotmire", item.EncounterName);
-            Assert.Equal("Mythic", item.Difficulty);
-            Assert.Equal("Kill", item.Outcome);
-            Assert.Equal("07:46", item.FightDuration);
+            Assert.Equal("Rotmire", item.Activity);
+            Assert.Equal(string.Empty, item.ActivityDetail);
+            Assert.True(item.IsContextVisible);
+            Assert.True(item.IsResultVisible);
+            Assert.True(item.IsDurationVisible);
+            Assert.Equal("Mythic", item.Context);
+            Assert.Equal("Kill", item.Result);
+            Assert.Equal("07:46", item.Duration);
         }
         finally
         {
@@ -563,7 +581,9 @@ public sealed class RecordingsViewModelTests
                     1850000,
                     32.5,
                     1800
-                )
+                ),
+                startedAtUtc: new DateTimeOffset(2026, 6, 14, 20, 37, 45, TimeSpan.Zero),
+                endedAtUtc: new DateTimeOffset(2026, 6, 14, 21, 9, 5, TimeSpan.Zero)
             );
             var viewModel = CreateViewModel(
                 Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
@@ -573,12 +593,24 @@ public sealed class RecordingsViewModelTests
 
             var item = Assert.Single(viewModel.Recordings);
 
+            Assert.Equal("Dungeon", viewModel.ActivityColumnHeader);
+            Assert.Equal("Key", viewModel.ContextColumnHeader);
+            Assert.Equal("Result", viewModel.ResultColumnHeader);
+            Assert.Equal("Length", viewModel.DurationColumnHeader);
+            Assert.True(viewModel.IsDurationColumnVisible);
+            Assert.True(viewModel.IsContextColumnVisible);
+            Assert.True(viewModel.IsResultColumnVisible);
             Assert.Equal("magisters-terrace", item.DisplayName);
             Assert.Equal($"{challengeStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}", item.StartedAt);
-            Assert.Equal("Magisters' Terrace", item.EncounterName);
-            Assert.Equal("+22", item.Difficulty);
-            Assert.Equal("Timed", item.Outcome);
-            Assert.Equal("30:50", item.FightDuration);
+            Assert.Equal("Magisters' Terrace", item.Activity);
+            Assert.Equal("Affix IDs 9, 10, 147", item.ActivityDetail);
+            Assert.DoesNotContain("Affix IDs", item.ToolTip);
+            Assert.True(item.IsContextVisible);
+            Assert.True(item.IsResultVisible);
+            Assert.True(item.IsDurationVisible);
+            Assert.Equal("+22", item.Context);
+            Assert.Equal("Timed", item.Result);
+            Assert.Equal("31:20", item.Duration);
         }
         finally
         {
@@ -1027,7 +1059,8 @@ public sealed class RecordingsViewModelTests
         RecordingCatalogKind kind = RecordingCatalogKind.Manual,
         RaidEncounterEntry? raidEncounter = null,
         ChallengeModeEntry? challengeMode = null,
-        DateTimeOffset? startedAtUtc = null
+        DateTimeOffset? startedAtUtc = null,
+        DateTimeOffset? endedAtUtc = null
     )
     {
         return new RecordingCatalogFile(
@@ -1035,7 +1068,7 @@ public sealed class RecordingsViewModelTests
             path,
             kind,
             startedAtUtc,
-            null,
+            endedAtUtc,
             sizeBytes,
             modifiedAtUtc,
             raidEncounter,

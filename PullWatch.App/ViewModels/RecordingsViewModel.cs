@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 
 namespace PullWatch;
 
@@ -15,6 +16,9 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private const int MythicRaidDifficultyId = 16;
     private const int RaidFinderDifficultyId = 17;
     private const int FlexibleMythicRaidDifficultyId = 233;
+    private const double ContextColumnWidthValue = 92;
+    private const double ResultColumnWidthValue = 92;
+    private const double DurationColumnWidthValue = 104;
 
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
@@ -78,6 +82,34 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     public ObservableCollection<RecordingListItem> Recordings { get; } = new();
 
+    public string ActivityColumnHeader => CurrentColumnHeaders.Activity;
+
+    public string ContextColumnHeader => CurrentColumnHeaders.Context;
+
+    public string ResultColumnHeader => CurrentColumnHeaders.Result;
+
+    public string DurationColumnHeader => CurrentColumnHeaders.Duration;
+
+    public bool IsContextColumnVisible => CurrentColumnHeaders.IsContextVisible;
+
+    public bool IsResultColumnVisible => CurrentColumnHeaders.IsResultVisible;
+
+    public bool IsDurationColumnVisible => CurrentColumnHeaders.IsDurationVisible;
+
+    public GridLength ContextColumnWidth =>
+        IsContextColumnVisible ? new GridLength(ContextColumnWidthValue) : new GridLength(0);
+
+    public GridLength ResultColumnWidth =>
+        IsResultColumnVisible ? new GridLength(ResultColumnWidthValue) : new GridLength(0);
+
+    public GridLength DurationColumnWidth =>
+        IsDurationColumnVisible ? new GridLength(DurationColumnWidthValue) : new GridLength(0);
+
+    public GridLength ScrollBarColumnWidth => new(SystemParameters.VerticalScrollBarWidth);
+
+    private RecordingListColumnHeaders CurrentColumnHeaders =>
+        GetColumnHeaders(SelectedRecordingCategory.Category);
+
     public RecordingCategoryTab SelectedRecordingCategory
     {
         get => _selectedRecordingCategory;
@@ -85,6 +117,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         {
             if (value is not null && SetProperty(ref _selectedRecordingCategory, value))
             {
+                NotifyRecordingColumnHeadersChanged();
                 ApplyRecordingFilter();
                 _ = SaveSelectedRecordingCategoryAsync(value.Category);
             }
@@ -277,19 +310,25 @@ public sealed partial class RecordingsViewModel : ObservableObject
     )
     {
         return recordings
-            .Select(file => new RecordingListItem(
-                file.Id,
-                GetRecordingCategory(file),
-                file.FilePath,
-                Path.GetFileNameWithoutExtension(file.FilePath),
-                FormatStartedAt(file),
-                GetEncounterName(file),
-                FormatDifficulty(file),
-                FormatOutcome(file),
-                FormatFightDuration(file),
-                file.ModifiedAtUtc.ToLocalTime(),
-                file.SizeBytes
-            ))
+            .Select(file =>
+            {
+                var displayName = Path.GetFileNameWithoutExtension(file.FilePath);
+
+                return new RecordingListItem(
+                    file.Id,
+                    GetRecordingCategory(file),
+                    file.FilePath,
+                    displayName,
+                    FormatStartedAt(file),
+                    GetActivity(file, displayName),
+                    GetActivityDetail(file),
+                    FormatContext(file),
+                    FormatResult(file),
+                    FormatActivityDuration(file),
+                    file.ModifiedAtUtc.ToLocalTime(),
+                    file.SizeBytes
+                );
+            })
             .ToList();
     }
 
@@ -355,6 +394,54 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return RecordingCategories.FirstOrDefault(tab => tab.Category == category);
     }
 
+    private void NotifyRecordingColumnHeadersChanged()
+    {
+        OnPropertyChanged(nameof(ActivityColumnHeader));
+        OnPropertyChanged(nameof(ContextColumnHeader));
+        OnPropertyChanged(nameof(ResultColumnHeader));
+        OnPropertyChanged(nameof(DurationColumnHeader));
+        OnPropertyChanged(nameof(IsContextColumnVisible));
+        OnPropertyChanged(nameof(IsResultColumnVisible));
+        OnPropertyChanged(nameof(IsDurationColumnVisible));
+        OnPropertyChanged(nameof(ContextColumnWidth));
+        OnPropertyChanged(nameof(ResultColumnWidth));
+        OnPropertyChanged(nameof(DurationColumnWidth));
+    }
+
+    private static RecordingListColumnHeaders GetColumnHeaders(RecordingListCategory category)
+    {
+        return category switch
+        {
+            RecordingListCategory.ChallengeMode => new RecordingListColumnHeaders(
+                "Dungeon",
+                "Key",
+                "Result",
+                "Length",
+                true,
+                true,
+                true
+            ),
+            RecordingListCategory.RaidEncounter => new RecordingListColumnHeaders(
+                "Boss",
+                "Difficulty",
+                "Result",
+                "Pull Time",
+                true,
+                true,
+                true
+            ),
+            _ => new RecordingListColumnHeaders(
+                "Recording",
+                string.Empty,
+                string.Empty,
+                "Length",
+                false,
+                false,
+                true
+            ),
+        };
+    }
+
     private async Task SaveSelectedRecordingCategoryAsync(RecordingListCategory category)
     {
         try
@@ -390,7 +477,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         };
     }
 
-    private static string GetEncounterName(RecordingCatalogFile file)
+    private static string GetActivity(RecordingCatalogFile file, string displayName)
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
@@ -406,12 +493,24 @@ public sealed partial class RecordingsViewModel : ObservableObject
         {
             RecordingCatalogKind.Encounter => "Unknown encounter",
             RecordingCatalogKind.ChallengeMode => "Mythic+ recording",
-            RecordingCatalogKind.Manual => "Manual recording",
-            _ => "Recording",
+            RecordingCatalogKind.Manual => string.IsNullOrWhiteSpace(displayName)
+                ? "Manual recording"
+                : displayName,
+            _ => string.IsNullOrWhiteSpace(displayName) ? "Recording" : displayName,
         };
     }
 
-    private static string FormatDifficulty(RecordingCatalogFile file)
+    private static string GetActivityDetail(RecordingCatalogFile file)
+    {
+        if (file.ChallengeMode is { AffixIds.Count: > 0 } challengeMode)
+        {
+            return $"Affix IDs {string.Join(", ", challengeMode.AffixIds)}";
+        }
+
+        return string.Empty;
+    }
+
+    private static string FormatContext(RecordingCatalogFile file)
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
@@ -426,12 +525,12 @@ public sealed partial class RecordingsViewModel : ObservableObject
             };
         }
 
-        return file.ChallengeMode is { } challengeMode
-            ? $"+{challengeMode.KeystoneLevel}"
+        return file.ChallengeMode is { } challengeMode ? $"+{challengeMode.KeystoneLevel}"
+            : file.Kind == RecordingCatalogKind.Manual ? "Manual"
             : MissingMetadataValue;
     }
 
-    private static string FormatOutcome(RecordingCatalogFile file)
+    private static string FormatResult(RecordingCatalogFile file)
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
@@ -443,42 +542,39 @@ public sealed partial class RecordingsViewModel : ObservableObject
             };
         }
 
-        return file.ChallengeMode?.Outcome switch
+        if (file.ChallengeMode is { } challengeMode)
         {
-            null => MissingMetadataValue,
-            ChallengeModeOutcome.Timed => "Timed",
-            ChallengeModeOutcome.Depleted => "Depleted",
-            _ => "Unknown",
-        };
+            return challengeMode.Outcome switch
+            {
+                ChallengeModeOutcome.Timed => "Timed",
+                ChallengeModeOutcome.Depleted => "Depleted",
+                _ => "Unknown",
+            };
+        }
+
+        return file.Kind == RecordingCatalogKind.Manual ? "Saved" : MissingMetadataValue;
     }
 
-    private static string FormatFightDuration(RecordingCatalogFile file)
+    private static string FormatActivityDuration(RecordingCatalogFile file)
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
             var duration =
                 raidEncounter.DurationMilliseconds is { } durationMilliseconds
                     ? TimeSpan.FromMilliseconds(Math.Max(0, durationMilliseconds))
-                : raidEncounter.EncounterEndedAtUtc is { } endedAt
-                    ? endedAt - raidEncounter.EncounterStartedAtUtc
+                : raidEncounter.EncounterEndedAtUtc is { } encounterEndedAt
+                    ? encounterEndedAt - raidEncounter.EncounterStartedAtUtc
                 : (TimeSpan?)null;
 
             return FormatNullableDuration(duration);
         }
 
-        if (file.ChallengeMode is { } challengeMode)
-        {
-            var duration =
-                challengeMode.TotalTimeMilliseconds is { } totalTimeMilliseconds
-                    ? TimeSpan.FromMilliseconds(Math.Max(0, totalTimeMilliseconds))
-                : challengeMode.ChallengeEndedAtUtc is { } endedAt
-                    ? endedAt - challengeMode.ChallengeStartedAtUtc
+        var recordingDuration =
+            file.StartedAtUtc is { } recordingStartedAt && file.EndedAtUtc is { } recordingEndedAt
+                ? recordingEndedAt - recordingStartedAt
                 : (TimeSpan?)null;
 
-            return FormatNullableDuration(duration);
-        }
-
-        return MissingMetadataValue;
+        return FormatNullableDuration(recordingDuration);
     }
 
     private static string FormatNullableDuration(TimeSpan? duration)
@@ -625,6 +721,16 @@ public sealed partial class RecordingsViewModel : ObservableObject
     }
 
     private sealed record RecordingRemoval(int VisibleIndex, int AllIndex);
+
+    private sealed record RecordingListColumnHeaders(
+        string Activity,
+        string Context,
+        string Result,
+        string Duration,
+        bool IsContextVisible,
+        bool IsResultVisible,
+        bool IsDurationVisible
+    );
 
     private Task ToggleManualRecordingAsync()
     {
