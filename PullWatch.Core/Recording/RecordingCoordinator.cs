@@ -218,14 +218,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             {
                 startTask = _recordingService.StartAsync(context, CancellationToken.None);
                 shouldStopAfterCatalogStartupFailure = _recordingCatalog is not null;
-                catalogRecordingId = await BeginCatalogRecordingAsync(context);
+                catalogRecordingId = await BeginCatalogRecordingAsync(context, startTask);
                 shouldStopAfterCatalogStartupFailure = false;
                 PublishStatus(
                     RecordingCoordinatorState.Starting,
                     owner,
                     identity,
                     context,
-                    activeOutputPath: _recordingService.ActiveOutputPath
+                    activeOutputPath: _recordingService.ActiveOutputPath,
+                    clearLastFailure: true
                 );
                 await startTask.WaitAsync(_startTimeout);
                 PublishStatus(
@@ -424,7 +425,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
     }
 
-    private async Task<Guid?> BeginCatalogRecordingAsync(RecordingContext context)
+    private async Task<Guid?> BeginCatalogRecordingAsync(RecordingContext context, Task startTask)
     {
         if (_recordingCatalog is null)
         {
@@ -432,6 +433,12 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
 
         var activeOutputPath = _recordingService.ActiveOutputPath;
+
+        if (string.IsNullOrWhiteSpace(activeOutputPath) && startTask.IsCompleted)
+        {
+            await startTask;
+            activeOutputPath = _recordingService.ActiveOutputPath;
+        }
 
         if (string.IsNullOrWhiteSpace(activeOutputPath))
         {

@@ -287,15 +287,33 @@ public sealed class ScreenRecordingService(
         );
     }
 
-    private static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
+    internal static string CreateOutputPath(RecordingContext context, PullWatchSettings settings)
     {
         var recordingsDirectory =
             settings.RecordingsDirectory
             ?? throw new InvalidOperationException("Recordings directory was not configured.");
 
-        Directory.CreateDirectory(recordingsDirectory);
+        try
+        {
+            Directory.CreateDirectory(recordingsDirectory);
+        }
+        catch (Exception exception) when (IsDirectoryUnavailableException(exception))
+        {
+            throw new RecordingOutputUnavailableException(recordingsDirectory, exception);
+        }
 
         return RecordingFilenameBuilder.CreateAvailablePath(recordingsDirectory, context);
+    }
+
+    private static bool IsDirectoryUnavailableException(Exception exception)
+    {
+        return exception
+            is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException
+                or PathTooLongException
+                or DirectoryNotFoundException;
     }
 
     private void OnRecordingComplete(object? sender, RecordingCompleteEventArgs eventArgs)

@@ -59,6 +59,26 @@ public static class RecordingFailureClassifier
         return IsTargetUnavailable(exception.InnerException);
     }
 
+    public static bool IsOutputUnavailable(Exception? exception)
+    {
+        if (exception is null)
+        {
+            return false;
+        }
+
+        if (exception is RecordingOutputUnavailableException)
+        {
+            return true;
+        }
+
+        if (exception is AggregateException aggregateException)
+        {
+            return aggregateException.InnerExceptions.Any(IsOutputUnavailable);
+        }
+
+        return IsOutputUnavailable(exception.InnerException);
+    }
+
     private static bool ContainsBadImageFormat(Exception exception)
     {
         return ContainsException<BadImageFormatException>(exception);

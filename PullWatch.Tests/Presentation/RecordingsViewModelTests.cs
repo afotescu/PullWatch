@@ -233,6 +233,25 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public async Task FailedManualCommandUsesOutputDirectoryMessageWhenStatusArrives()
+    {
+        var failure = new RecordingOutputUnavailableException(
+            @"C:\Recordings",
+            new IOException("Could not create folder.")
+        );
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            () => Task.FromResult(RecordingCommandResult.Failed)
+        );
+
+        await viewModel.ManualRecordingCommand.ExecuteAsync(null);
+        viewModel.ApplyStatus(Status(RecordingCoordinatorState.Idle, lastFailure: failure));
+
+        Assert.Equal(failure.Message, viewModel.CommandMessage);
+        Assert.Equal(failure.Message, viewModel.FailureMessage);
+    }
+
+    [Fact]
     public void FailureBannerPersistsUntilDismissedAndReturnsForNewFailure()
     {
         var firstFailure = new InvalidOperationException("capture failed");

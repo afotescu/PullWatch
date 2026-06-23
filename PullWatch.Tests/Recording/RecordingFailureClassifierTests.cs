@@ -55,4 +55,18 @@ public sealed class RecordingFailureClassifierTests
 
         Assert.Same(original, exception);
     }
+
+    [Fact]
+    public void DetectsOutputUnavailableFailures()
+    {
+        var exception = new InvalidOperationException(
+            "outer",
+            new RecordingOutputUnavailableException(
+                @"C:\Recordings",
+                new IOException("Could not create folder.")
+            )
+        );
+
+        Assert.True(RecordingFailureClassifier.IsOutputUnavailable(exception));
+    }
 }

@@ -254,8 +254,8 @@ public sealed class RecordingCoordinatorTests
         var retryResult = await coordinator.StartManualAsync(CancellationToken.None);
 
         Assert.Equal(RecordingCommandResult.Failed, stopResult);
-        Assert.Equal("finalization failed", coordinator.Status.LastFailure?.Message);
         Assert.Equal(RecordingCommandResult.Started, retryResult);
+        Assert.Null(coordinator.Status.LastFailure);
     }
 
     [Fact]
@@ -397,6 +397,34 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
+    public async Task StartupFailureBeforeOutputPathIsPreserved()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var failure = new RecordingOutputUnavailableException(
+            @"C:\Recordings",
+            new IOException("Could not create folder.")
+        );
+        var recorder = new FakeRecordingService
+        {
+            ActiveOutputPath = null,
+            StartException = failure,
+        };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            recordingCatalog: database.Catalog
+        );
+
+        Assert.Equal(
+            RecordingCommandResult.Failed,
+            await coordinator.StartManualAsync(cancellationToken)
+        );
+
+        Assert.Same(failure, coordinator.Status.LastFailure);
+        Assert.Empty(await database.Repository.ListAsync(cancellationToken));
+    }
+
+    [Fact]
     public async Task CatalogRowIsRemovedWhenFinalizationFails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -451,6 +479,33 @@ public sealed class RecordingCoordinatorTests
         await coordinator.StartManualAsync(CancellationToken.None);
 
         Assert.Equal(new RecordingStatistics(1, 0), coordinator.Status.Statistics);
+    }
+
+    [Fact]
+    public async Task SuccessfulStartClearsPreviousStartFailure()
+    {
+        var recorder = new FakeRecordingService
+        {
+            StartException = new RecordingOutputUnavailableException(
+                @"C:\Recordings",
+                new IOException("Could not create folder.")
+            ),
+        };
+        await using var coordinator = CreateCoordinator(recorder);
+
+        Assert.Equal(
+            RecordingCommandResult.Failed,
+            await coordinator.StartManualAsync(CancellationToken.None)
+        );
+        Assert.NotNull(coordinator.Status.LastFailure);
+
+        recorder.StartException = null;
+
+        Assert.Equal(
+            RecordingCommandResult.Started,
+            await coordinator.StartManualAsync(CancellationToken.None)
+        );
+        Assert.Null(coordinator.Status.LastFailure);
     }
 
     [Fact]

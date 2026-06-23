@@ -27,4 +27,38 @@ public sealed class ScreenRecordingServiceTests
         Assert.True(options.IsFixedFramerate);
         Assert.Equal(H264BitrateControlMode.CBR, encoder.BitrateMode);
     }
+
+    [Fact]
+    public void CreateOutputPathReportsUnavailableRecordingsDirectory()
+    {
+        using var directory = new TemporaryDirectory();
+        var blockedPath = Path.Combine(directory.Path, "blocked");
+        File.WriteAllText(blockedPath, "not a directory");
+        var settings = new PullWatchSettings { RecordingsDirectory = blockedPath };
+
+        var exception = Assert.Throws<RecordingOutputUnavailableException>(() =>
+            ScreenRecordingService.CreateOutputPath(
+                new ManualRecordingContext(DateTimeOffset.Now),
+                settings
+            )
+        );
+
+        Assert.Equal(Path.GetFullPath(blockedPath), exception.RecordingsDirectory);
+        Assert.Contains("recordings folder is unavailable", exception.Message);
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = Directory.CreateTempSubdirectory("PullWatchScreenRecorderTests-").FullName;
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            Directory.Delete(Path, true);
+        }
+    }
 }

@@ -962,6 +962,11 @@ public sealed partial class RecordingsViewModel : ObservableObject
             return TargetUnavailableMessage;
         }
 
+        if (RecordingFailureClassifier.IsOutputUnavailable(exception))
+        {
+            return exception.Message;
+        }
+
         var message = string.IsNullOrWhiteSpace(exception.Message)
             ? exception.GetType().Name
             : exception.Message;
