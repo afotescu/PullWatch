@@ -55,6 +55,43 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task StartupWithUnavailableRecordingsDirectoryKeepsApplicationRunning()
+    {
+        using var directory = new TemporaryDirectory();
+        var blockedPath = Path.Combine(directory.Path, "blocked");
+        await File.WriteAllTextAsync(
+            blockedPath,
+            "not a directory",
+            TestContext.Current.CancellationToken
+        );
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings { RecordingsDirectory = blockedPath },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance,
+            UnavailableWowMonitor
+        );
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(controller.Status.EffectiveSettings);
+        Assert.Equal(
+            Path.GetFullPath(blockedPath),
+            controller.Status.EffectiveSettings.RecordingsDirectory
+        );
+    }
+
+    [Fact]
     public async Task StartupInitializesStorageBeforeCreatingRecordingService()
     {
         using var directory = new TemporaryDirectory();

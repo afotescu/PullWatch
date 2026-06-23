@@ -13,6 +13,19 @@ in-app library.
 
 This project is in early development. Expect issues.
 
+The first public release focuses on World of Warcraft Retail. Automatic logs
+folder detection looks for Retail `_retail_\Logs` directories. Classic, PTR, and
+other variants may work only with manual folder configuration and are not the
+primary target yet.
+
+## Download
+
+Download the latest portable Windows x64 build from the
+[GitHub Releases page](https://github.com/afotescu/PullWatch/releases/latest).
+
+Release builds are currently unsigned, so Windows SmartScreen may show a warning
+for new downloads.
+
 ## Features
 
 - Automatic recording for Mythic+ runs from `CHALLENGE_MODE_START` and
@@ -68,6 +81,16 @@ PullWatch stores its settings and recording catalog under:
 
 The catalog database is `pullwatch.db`; it stores metadata for finished
 recordings, not the video files themselves.
+
+## Privacy
+
+PullWatch does not contain app telemetry or upload recordings, settings, combat
+logs, or diagnostics. Recording files, settings, and the recording catalog stay
+on your machine unless you share them yourself.
+
+Diagnostics can include local file paths, WoW window details, recent application
+log messages, and selected settings. Review copied or exported diagnostics
+before posting them publicly.
 
 ## Recording Behavior
 

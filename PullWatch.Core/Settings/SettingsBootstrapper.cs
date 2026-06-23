@@ -102,17 +102,6 @@ public sealed class SettingsBootstrapper
 
         settings = baseValidation.Settings;
 
-        var directoryErrors = SettingsValidator.ValidateRecordingsDirectoryWritable(settings);
-
-        if (directoryErrors.Count > 0)
-        {
-            _logger.LogError(
-                "Recordings directory is unavailable: {ValidationErrors}",
-                string.Join(" ", directoryErrors)
-            );
-            return null;
-        }
-
         if (shouldCreateSettingsFile)
         {
             try

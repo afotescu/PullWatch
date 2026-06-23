@@ -80,17 +80,24 @@ jobs:
         run: |
           $tag = "${{ steps.release-tag.outputs.tag }}"
           $archivePath = "artifacts/PullWatch-$tag-win-x64.zip"
+          $checksumPath = "$archivePath.sha256"
 
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Compress-Archive -Path "${{ env.PUBLISH_DIR }}/*" -DestinationPath $archivePath -Force
+          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath
+          $checksumLine = "{0}  {1}" -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $archivePath)
+          Set-Content -LiteralPath $checksumPath -Value $checksumLine -Encoding ASCII
 
           "archive_path=$archivePath" >> $env:GITHUB_OUTPUT
+          "checksum_path=$checksumPath" >> $env:GITHUB_OUTPUT
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
           name: PullWatch-${{ steps.release-tag.outputs.tag }}-win-x64
-          path: ${{ steps.package.outputs.archive_path }}
+          path: |
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.checksum_path }}
           if-no-files-found: error
 
       - name: Create or update GitHub Release
@@ -100,12 +107,13 @@ jobs:
         run: |
           $tag = "${{ steps.release-tag.outputs.tag }}"
           $archivePath = "${{ steps.package.outputs.archive_path }}"
+          $checksumPath = "${{ steps.package.outputs.checksum_path }}"
           $title = "PullWatch $tag"
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $archivePath --clobber
+            gh release upload $tag $archivePath $checksumPath --clobber
           }
           else {
-            gh release create $tag $archivePath --title $title --generate-notes --verify-tag
+            gh release create $tag $archivePath $checksumPath --title $title --generate-notes --verify-tag
           }

@@ -9,6 +9,16 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot "PullWatch.App/PullWatch.App.csproj"
 $publishPath = Join-Path $repoRoot $OutputPath
 $resolvedPublishPath = [System.IO.Path]::GetFullPath($publishPath)
+$artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "artifacts"))
+$artifactsRootWithSeparator = $artifactsRoot.TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+
+if (!$resolvedPublishPath.StartsWith(
+        $artifactsRootWithSeparator,
+        [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "OutputPath must resolve under the artifacts directory: $artifactsRoot"
+}
 
 $lockingProcesses = Get-Process |
     Where-Object {
