@@ -535,7 +535,8 @@ public sealed class RecordingsViewModelTests
                     encounterStartedAtUtc,
                     RaidEncounterOutcome.Kill,
                     new DateTimeOffset(2026, 6, 17, 20, 36, 19, TimeSpan.Zero),
-                    466563
+                    466563,
+                    4
                 )
             );
             var viewModel = CreateViewModel(
@@ -548,16 +549,20 @@ public sealed class RecordingsViewModelTests
             var item = Assert.Single(viewModel.Recordings);
 
             Assert.Equal("Boss", viewModel.ActivityColumnHeader);
+            Assert.Equal("Pull #", viewModel.PullNumberColumnHeader);
             Assert.Equal("Difficulty", viewModel.ContextColumnHeader);
             Assert.Equal("Result", viewModel.ResultColumnHeader);
             Assert.Equal("Pull Time", viewModel.DurationColumnHeader);
+            Assert.True(viewModel.IsPullNumberColumnVisible);
             Assert.True(viewModel.IsContextColumnVisible);
             Assert.True(viewModel.IsResultColumnVisible);
             Assert.True(viewModel.IsDurationColumnVisible);
             Assert.Equal("rotmire", item.DisplayName);
             Assert.Equal($"{encounterStartedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}", item.StartedAt);
+            Assert.Equal("4", item.PullNumber);
             Assert.Equal("Rotmire", item.Activity);
             Assert.Equal(string.Empty, item.ActivityDetail);
+            Assert.True(item.IsPullNumberVisible);
             Assert.True(item.IsContextVisible);
             Assert.True(item.IsResultVisible);
             Assert.True(item.IsDurationVisible);

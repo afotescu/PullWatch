@@ -103,6 +103,18 @@ public sealed class RecordingStorageInitializerTests
                 cancellationToken
             )
         );
+        Assert.Equal(
+            1L,
+            await ScalarLongAsync(
+                factory,
+                """
+                SELECT COUNT(*)
+                FROM pragma_table_info('RecordingRaidEncounters')
+                WHERE name = 'PullNumber';
+                """,
+                cancellationToken
+            )
+        );
     }
 
     private static SqliteConnectionFactory CreateFactory(string databasePath)

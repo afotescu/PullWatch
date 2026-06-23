@@ -62,7 +62,8 @@ public sealed record RaidEncounterEntry(
     DateTimeOffset EncounterStartedAtUtc,
     RaidEncounterOutcome Outcome,
     DateTimeOffset? EncounterEndedAtUtc,
-    int? DurationMilliseconds
+    int? DurationMilliseconds,
+    int? PullNumber = null
 );
 
 public sealed record RaidEncounterSave(
@@ -75,7 +76,8 @@ public sealed record RaidEncounterSave(
     DateTimeOffset EncounterStartedAtUtc,
     RaidEncounterOutcome Outcome,
     DateTimeOffset? EncounterEndedAtUtc,
-    int? DurationMilliseconds
+    int? DurationMilliseconds,
+    int? PullNumber = null
 );
 
 public sealed record RaidEncounterCompletionSave(

@@ -16,6 +16,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private const int MythicRaidDifficultyId = 16;
     private const int RaidFinderDifficultyId = 17;
     private const int FlexibleMythicRaidDifficultyId = 233;
+    private const double PullNumberColumnWidthValue = 64;
     private const double ContextColumnWidthValue = 92;
     private const double ResultColumnWidthValue = 92;
     private const double DurationColumnWidthValue = 104;
@@ -84,17 +85,25 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     public string ActivityColumnHeader => CurrentColumnHeaders.Activity;
 
+    public string PullNumberColumnHeader => "Pull #";
+
     public string ContextColumnHeader => CurrentColumnHeaders.Context;
 
     public string ResultColumnHeader => CurrentColumnHeaders.Result;
 
     public string DurationColumnHeader => CurrentColumnHeaders.Duration;
 
+    public bool IsPullNumberColumnVisible =>
+        SelectedRecordingCategory.Category == RecordingListCategory.RaidEncounter;
+
     public bool IsContextColumnVisible => CurrentColumnHeaders.IsContextVisible;
 
     public bool IsResultColumnVisible => CurrentColumnHeaders.IsResultVisible;
 
     public bool IsDurationColumnVisible => CurrentColumnHeaders.IsDurationVisible;
+
+    public GridLength PullNumberColumnWidth =>
+        IsPullNumberColumnVisible ? new GridLength(PullNumberColumnWidthValue) : new GridLength(0);
 
     public GridLength ContextColumnWidth =>
         IsContextColumnVisible ? new GridLength(ContextColumnWidthValue) : new GridLength(0);
@@ -320,6 +329,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
                     file.FilePath,
                     displayName,
                     FormatStartedAt(file),
+                    FormatPullNumber(file),
                     GetActivity(file, displayName),
                     GetActivityDetail(file),
                     FormatContext(file),
@@ -397,12 +407,15 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private void NotifyRecordingColumnHeadersChanged()
     {
         OnPropertyChanged(nameof(ActivityColumnHeader));
+        OnPropertyChanged(nameof(PullNumberColumnHeader));
         OnPropertyChanged(nameof(ContextColumnHeader));
         OnPropertyChanged(nameof(ResultColumnHeader));
         OnPropertyChanged(nameof(DurationColumnHeader));
+        OnPropertyChanged(nameof(IsPullNumberColumnVisible));
         OnPropertyChanged(nameof(IsContextColumnVisible));
         OnPropertyChanged(nameof(IsResultColumnVisible));
         OnPropertyChanged(nameof(IsDurationColumnVisible));
+        OnPropertyChanged(nameof(PullNumberColumnWidth));
         OnPropertyChanged(nameof(ContextColumnWidth));
         OnPropertyChanged(nameof(ResultColumnWidth));
         OnPropertyChanged(nameof(DurationColumnWidth));
@@ -465,6 +478,13 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return startedAtUtc is null
             ? MissingMetadataValue
             : $"{startedAtUtc.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+    }
+
+    private static string FormatPullNumber(RecordingCatalogFile file)
+    {
+        return file.RaidEncounter?.PullNumber is { } pullNumber
+            ? pullNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : MissingMetadataValue;
     }
 
     private static RecordingListCategory GetRecordingCategory(RecordingCatalogFile file)

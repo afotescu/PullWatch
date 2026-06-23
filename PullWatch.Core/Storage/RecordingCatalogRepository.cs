@@ -30,7 +30,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         EncounterStartedAtUtc,
         Outcome,
         EncounterEndedAtUtc,
-        DurationMilliseconds
+        DurationMilliseconds,
+        PullNumber
         """;
     private const string ChallengeModeSelectColumns = """
         RecordingId,
@@ -554,7 +555,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     EncounterStartedAtUtc,
                     Outcome,
                     EncounterEndedAtUtc,
-                    DurationMilliseconds
+                    DurationMilliseconds,
+                    PullNumber
                 )
                 VALUES (
                     @RecordingId,
@@ -566,7 +568,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     @EncounterStartedAtUtc,
                     @Outcome,
                     @EncounterEndedAtUtc,
-                    @DurationMilliseconds
+                    @DurationMilliseconds,
+                    @PullNumber
                 )
                 ON CONFLICT(RecordingId) DO UPDATE SET
                     EncounterId = excluded.EncounterId,
@@ -577,7 +580,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     EncounterStartedAtUtc = excluded.EncounterStartedAtUtc,
                     Outcome = excluded.Outcome,
                     EncounterEndedAtUtc = excluded.EncounterEndedAtUtc,
-                    DurationMilliseconds = excluded.DurationMilliseconds;
+                    DurationMilliseconds = excluded.DurationMilliseconds,
+                    PullNumber = excluded.PullNumber;
                 """,
                 ToParameters(raidEncounter),
                 transaction,
@@ -739,7 +743,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.ParseUtc(row.EncounterStartedAtUtc),
             ParseEnum<RaidEncounterOutcome>(row.Outcome),
             StorageTimestampFormatter.ParseNullableUtc(row.EncounterEndedAtUtc),
-            ToNullableInt32(row.DurationMilliseconds)
+            ToNullableInt32(row.DurationMilliseconds),
+            ToNullableInt32(row.PullNumber)
         );
     }
 
@@ -850,7 +855,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.FormatUtc(raidEncounter.EncounterStartedAtUtc),
             raidEncounter.Outcome.ToString(),
             StorageTimestampFormatter.FormatNullableUtc(raidEncounter.EncounterEndedAtUtc),
-            raidEncounter.DurationMilliseconds
+            raidEncounter.DurationMilliseconds,
+            raidEncounter.PullNumber
         );
     }
 
@@ -918,7 +924,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string EncounterStartedAtUtc,
         string Outcome,
         string? EncounterEndedAtUtc,
-        int? DurationMilliseconds
+        int? DurationMilliseconds,
+        int? PullNumber
     );
 
     private sealed record ChallengeModeCompletionParameters(
@@ -966,6 +973,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string EncounterStartedAtUtc,
         string Outcome,
         string? EncounterEndedAtUtc,
-        long? DurationMilliseconds
+        long? DurationMilliseconds,
+        long? PullNumber
     );
 }

@@ -156,7 +156,8 @@ public sealed class RecordingCatalogTests
             "Rotmire",
             WowDifficultyIds.FlexibleMythicRaid,
             20,
-            1592
+            1592,
+            7
         );
 
         var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
@@ -193,6 +194,7 @@ public sealed class RecordingCatalogTests
         Assert.Equal(WowDifficultyIds.FlexibleMythicRaid, startedEncounter.DifficultyId);
         Assert.Equal(20, startedEncounter.GroupSize);
         Assert.Equal(1592, startedEncounter.InstanceId);
+        Assert.Equal(7, startedEncounter.PullNumber);
         Assert.Equal(startedAt.ToUniversalTime(), startedEncounter.EncounterStartedAtUtc);
         Assert.Equal(RaidEncounterOutcome.Unknown, startedEncounter.Outcome);
         Assert.Null(startedEncounter.EncounterEndedAtUtc);
@@ -211,6 +213,7 @@ public sealed class RecordingCatalogTests
         Assert.NotNull(recording.RaidEncounter);
         Assert.Equal("Rotmire", recording.RaidEncounter.EncounterName);
         Assert.Equal(WowDifficultyIds.FlexibleMythicRaid, recording.RaidEncounter.DifficultyId);
+        Assert.Equal(7, recording.RaidEncounter.PullNumber);
         Assert.Equal(RaidEncounterOutcome.Kill, recording.RaidEncounter.Outcome);
         Assert.Equal(466563, recording.RaidEncounter.DurationMilliseconds);
 

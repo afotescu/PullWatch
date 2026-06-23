@@ -216,6 +216,7 @@
         <Grid Grid.Row="1" Margin="15,0,15,6">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="132" />
+            <ColumnDefinition Width="{Binding PullNumberColumnWidth}" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="{Binding ContextColumnWidth}" />
             <ColumnDefinition Width="{Binding ResultColumnWidth}" />
@@ -237,11 +238,21 @@
             FontSize="11"
             FontWeight="SemiBold"
             Style="{StaticResource SecondaryTextStyle}"
+            Text="{Binding PullNumberColumnHeader}"
+            TextWrapping="NoWrap"
+            Visibility="{Binding IsPullNumberColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+          />
+          <TextBlock
+            Grid.Column="2"
+            Margin="14,0,0,0"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Style="{StaticResource SecondaryTextStyle}"
             Text="{Binding ActivityColumnHeader}"
             TextWrapping="NoWrap"
           />
           <TextBlock
-            Grid.Column="2"
+            Grid.Column="3"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -251,7 +262,7 @@
             Visibility="{Binding IsContextColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           />
           <TextBlock
-            Grid.Column="3"
+            Grid.Column="4"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -261,7 +272,7 @@
             Visibility="{Binding IsResultColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           />
           <TextBlock
-            Grid.Column="4"
+            Grid.Column="5"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -289,6 +300,7 @@
               <Grid Margin="4" ToolTip="{Binding ToolTip}">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="132" />
+                  <ColumnDefinition Width="{Binding PullNumberColumnWidth}" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="{Binding ContextColumnWidth}" />
                   <ColumnDefinition Width="{Binding ResultColumnWidth}" />
@@ -305,13 +317,22 @@
                 <TextBlock
                   Grid.Column="1"
                   Margin="14,0,0,0"
+                  FontSize="12"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding PullNumber}"
+                  TextWrapping="NoWrap"
+                  Visibility="{Binding IsPullNumberVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                />
+                <TextBlock
+                  Grid.Column="2"
+                  Margin="14,0,0,0"
                   FontWeight="SemiBold"
                   Text="{Binding Activity}"
                   TextTrimming="CharacterEllipsis"
                   TextWrapping="NoWrap"
                 />
                 <TextBlock
-                  Grid.Column="2"
+                  Grid.Column="3"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
@@ -321,7 +342,7 @@
                   Visibility="{Binding IsContextVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                 />
                 <TextBlock
-                  Grid.Column="3"
+                  Grid.Column="4"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
@@ -331,7 +352,7 @@
                   Visibility="{Binding IsResultVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                 />
                 <TextBlock
-                  Grid.Column="4"
+                  Grid.Column="5"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"

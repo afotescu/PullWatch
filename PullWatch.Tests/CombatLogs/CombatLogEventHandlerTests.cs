@@ -34,6 +34,34 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
+    public async Task EncounterPullNumbersIncrementPerBossAndDifficulty()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+        var mythicStart = $"3129,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,2810";
+        var mythicEnd = $"3129,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,0,70964";
+        var heroicStart = $"3129,\"Plexus Sentinel\",{WowDifficultyIds.HeroicRaid},20,2810";
+        var heroicEnd = $"3129,\"Plexus Sentinel\",{WowDifficultyIds.HeroicRaid},20,0,70964";
+
+        await HandleAsync(handler, WowEvents.ChallengeModeStart);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterStart, mythicStart);
+        await HandleAsync(handler, WowEvents.ChallengeModeEnd);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterStart, mythicStart);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, mythicEnd);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterStart, mythicStart);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, mythicEnd);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterStart, heroicStart);
+        await HandleWithArgumentsAsync(handler, WowEvents.EncounterEnd, heroicEnd);
+
+        var pullNumbers = recorder
+            .StartedContexts.OfType<EncounterRecordingContext>()
+            .Select(context => context.PullNumber)
+            .ToArray();
+
+        Assert.Equal([1, 2, 1], pullNumbers);
+    }
+
+    [Fact]
     public async Task EncounterOwnsRecordingAcrossChallengeModeEvents()
     {
         var recorder = new FakeRecordingService();

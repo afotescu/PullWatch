@@ -17,6 +17,7 @@ public sealed class CombatLogEventHandler(
     private readonly TimeSpan _challengeWatchdogTimeout =
         challengeWatchdogTimeout ?? DefaultChallengeWatchdogTimeout;
     private readonly SemaphoreSlim _challengeLifecycleLock = new(1, 1);
+    private readonly Dictionary<EncounterPullKey, int> _encounterPullCounts = new();
     private long _previousRecordingEventTimestamp;
     private ChallengeWatchdogState? _challengeWatchdog;
     private CancellationTokenSource? _challengeWatchdogCancellation;
@@ -160,12 +161,18 @@ public sealed class CombatLogEventHandler(
                     break;
                 }
 
-                await HandleStartAsync(
+                var numberedEncounterContext = AssignNextPullNumber(encounterContext);
+                var encounterStartResult = await HandleStartAsync(
                     combatLogEvent,
                     eventTimestamp,
-                    encounterContext,
+                    numberedEncounterContext,
                     cancellationToken
                 );
+
+                if (encounterStartResult == RecordingCommandResult.Started)
+                {
+                    CommitPullNumber(numberedEncounterContext);
+                }
                 break;
             case WowEvents.ChallengeModeEnd:
                 ChallengeRecordingEnd? challengeEnd = null;
@@ -343,7 +350,7 @@ public sealed class CombatLogEventHandler(
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
     }
 
-    private async Task HandleStartAsync(
+    private async Task<RecordingCommandResult> HandleStartAsync(
         CombatLogEvent combatLogEvent,
         long eventTimestamp,
         RecordingContext context,
@@ -354,6 +361,24 @@ public sealed class CombatLogEventHandler(
         var result = await recordingCoordinator.StartAutomaticAsync(context, cancellationToken);
         LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
+        return result;
+    }
+
+    private EncounterRecordingContext AssignNextPullNumber(EncounterRecordingContext context)
+    {
+        var key = EncounterPullKey.From(context);
+        var nextPullNumber = _encounterPullCounts.GetValueOrDefault(key) + 1;
+        return context with { PullNumber = nextPullNumber };
+    }
+
+    private void CommitPullNumber(EncounterRecordingContext context)
+    {
+        if (context.PullNumber is not { } pullNumber)
+        {
+            return;
+        }
+
+        _encounterPullCounts[EncounterPullKey.From(context)] = pullNumber;
     }
 
     private async Task HandleEndAsync(
@@ -988,6 +1013,14 @@ public sealed class CombatLogEventHandler(
         ChallengeSoftStopEvidence Evidence,
         DateTimeOffset ExpiresAt
     );
+
+    private sealed record EncounterPullKey(int EncounterId, int DifficultyId)
+    {
+        public static EncounterPullKey From(EncounterRecordingContext context)
+        {
+            return new EncounterPullKey(context.EncounterId, context.DifficultyId);
+        }
+    }
 
     private sealed record ChallengeSoftStopEvidence(
         string EventName,

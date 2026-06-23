@@ -245,7 +245,8 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 encounter.StartedAt.ToUniversalTime(),
                 RaidEncounterOutcome.Unknown,
                 null,
-                null
+                null,
+                encounter.PullNumber
             )
             : null;
     }

@@ -21,7 +21,8 @@ public sealed record EncounterRecordingContext(
     string EncounterName,
     int DifficultyId,
     int? GroupSize = null,
-    int? InstanceId = null
+    int? InstanceId = null,
+    int? PullNumber = null
 ) : RecordingContext(StartedAt);
 
 public sealed record EncounterRecordingEnd(
