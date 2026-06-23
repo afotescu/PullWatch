@@ -204,6 +204,10 @@ internal sealed class ApplicationMonitoringSupervisor(
                 }
             );
         }
+        finally
+        {
+            await eventHandler.DisposeAsync();
+        }
     }
 
     private async Task StopCombatLogMonitoringAsync()

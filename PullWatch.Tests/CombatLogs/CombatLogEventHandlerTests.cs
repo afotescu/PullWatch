@@ -63,6 +63,206 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
+    public async Task SameChallengeStartAfterSoftSignalKeepsRecordingActive()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:59.0000  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:43:10.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task WatchdogExpiresFromLogTimestampsWithoutRecoveryEvidence()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:42:51.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task WatchdogTimerExpiryStopsRecordingWithoutAnotherLogLine()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(
+            recorder,
+            challengeWatchdogTimeout: TimeSpan.FromMilliseconds(20)
+        );
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+
+        await WaitForAsync(() => recorder.Calls.Count == 2);
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task ZoneReturnToMythicPlusCancelsWatchdog()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:41:59.0000  ZONE_CHANGE,1209,\"Skyreach\",8");
+        await HandleLineAsync(handler, "6/23/2026 16:43:10.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task MapReturnToDungeonNameCancelsWatchdog()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  MAP_CHANGE,572,\"Draenor\",11193.750000,-3964.583984,12243.750000,-10493.750000"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:59.0000  MAP_CHANGE,601,\"Skyreach\",1367.989990,839.651978,2227.123535,1434.616577"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:43:10.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task SameDungeonNonMythicPlusZoneKeepsWatchdogArmedAcrossMapChange()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:41:50.0000  ZONE_CHANGE,1209,\"Skyreach\",23");
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0010  MAP_CHANGE,601,\"Skyreach\",1367.989990,839.651978,2227.123535,1434.616577"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:42:01.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start", "stop"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task CombatLogVersionDoesNotExpireActiveWatchdog()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:43:10.0000  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,12.0.7,PROJECT_ID,1"
+        );
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task DifferentChallengeStartStopsCurrentRecordingAndStartsNext()
+    {
+        var recorder = new FakeRecordingService();
+        var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:42:00.0000  CHALLENGE_MODE_START,\"Windrunner Spire\",2805,557,21,[10,9,147]"
+        );
+
+        Assert.Equal(["start", "stop", "start"], recorder.Calls);
+        var nextContext = Assert.IsType<ChallengeRecordingContext>(recorder.StartedContexts[1]);
+        Assert.Equal("Windrunner Spire", nextContext.DungeonName);
+    }
+
+    [Fact]
+    public async Task WatchdogExpiryCompletesChallengeAsDepleted()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var outputPath = Path.Combine(database.DirectoryPath, "watchdog-expiry.mp4");
+        var recorder = new FakeRecordingService { ActiveOutputPath = outputPath };
+        var catalog = new RecordingCatalog(database.Repository);
+        await using var handler = CreateHandler(recorder, recordingCatalog: catalog);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Skyreach\",1209,161,21,[10,9,147]"
+        );
+        File.WriteAllText(outputPath, "recording");
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:42:51.0000  SPELL_DAMAGE");
+
+        var recordings = await catalog.ListAvailableFilesAsync(
+            database.DirectoryPath,
+            cancellationToken
+        );
+        var recording = Assert.Single(recordings);
+        Assert.NotNull(recording.ChallengeMode);
+        Assert.Equal(ChallengeModeOutcome.Depleted, recording.ChallengeMode.Outcome);
+    }
+
+    [Fact]
     public async Task FailedStartDoesNotClaimOwnership()
     {
         var recorder = new FakeRecordingService
@@ -205,19 +405,29 @@ public sealed class CombatLogEventHandlerTests
 
     private static CombatLogEventHandler CreateHandler(
         IRecordingService recordingService,
-        SettingsProvider? settingsProvider = null
+        SettingsProvider? settingsProvider = null,
+        RecordingCatalog? recordingCatalog = null,
+        TimeSpan? challengeWatchdogTimeout = null
     )
     {
         var coordinator = new RecordingCoordinator(
             recordingService,
-            NullLogger<RecordingCoordinator>.Instance
+            NullLogger<RecordingCoordinator>.Instance,
+            recordingCatalog: recordingCatalog
         );
 
         return new CombatLogEventHandler(
             coordinator,
             settingsProvider ?? new SettingsProvider(new PullWatchSettings()),
-            NullLogger<CombatLogEventHandler>.Instance
+            NullLogger<CombatLogEventHandler>.Instance,
+            challengeWatchdogTimeout
         );
+    }
+
+    private static Task HandleLineAsync(CombatLogEventHandler handler, string line)
+    {
+        Assert.True(CombatLogParser.TryParseEvent(line, out var combatLogEvent));
+        return handler.HandleAsync(combatLogEvent, CancellationToken.None);
     }
 
     private static Task HandleAsync(CombatLogEventHandler handler, string eventName)
@@ -274,5 +484,82 @@ public sealed class CombatLogEventHandlerTests
             new CombatLogEvent(eventName, eventName.Length + 1, rawLine),
             CancellationToken.None
         );
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < timeout, "Condition was not reached.");
+            await Task.Delay(10);
+        }
+    }
+
+    private sealed class TemporaryRecordingDatabase : IDisposable
+    {
+        private readonly TemporaryDirectory _directory;
+
+        private TemporaryRecordingDatabase(
+            TemporaryDirectory directory,
+            SqliteConnectionFactory connectionFactory
+        )
+        {
+            _directory = directory;
+            ConnectionFactory = connectionFactory;
+            Repository = new RecordingCatalogRepository(connectionFactory);
+        }
+
+        public string DirectoryPath => _directory.Path;
+
+        public SqliteConnectionFactory ConnectionFactory { get; }
+
+        public RecordingCatalogRepository Repository { get; }
+
+        public static async Task<TemporaryRecordingDatabase> CreateAsync(
+            CancellationToken cancellationToken
+        )
+        {
+            var directory = new TemporaryDirectory();
+            var databasePath = Path.Combine(directory.Path, "pullwatch.db");
+            var factory = new SqliteConnectionFactory(
+                new RecordingDatabasePathProvider(databasePath)
+            );
+            var initializer = new RecordingStorageInitializer(factory, NullLoggerFactory.Instance);
+
+            try
+            {
+                await initializer.InitializeAsync(cancellationToken);
+                return new TemporaryRecordingDatabase(directory, factory);
+            }
+            catch
+            {
+                directory.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            _directory.Dispose();
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = Directory
+                .CreateTempSubdirectory("PullWatchCombatLogEventHandlerTests-")
+                .FullName;
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            Directory.Delete(Path, true);
+        }
     }
 }

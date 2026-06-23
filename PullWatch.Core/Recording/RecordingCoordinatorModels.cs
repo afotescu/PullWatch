@@ -44,6 +44,15 @@ public sealed record ChallengeRecordingEnd(
     int? TimerLimitSeconds
 ) : RecordingActivityEnd(EndedAt);
 
+public sealed record ZoneChangeContext(
+    DateTimeOffset ChangedAt,
+    int ZoneId,
+    string ZoneName,
+    int InstanceType
+);
+
+public sealed record MapChangeContext(DateTimeOffset ChangedAt, int UiMapId, string MapName);
+
 public enum RecordingOwner
 {
     Manual,

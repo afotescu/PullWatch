@@ -16,6 +16,11 @@ internal static class CombatLogEventMetadataParser
     private const int ChallengeEndTotalTimeMillisecondsIndex = 3;
     private const int ChallengeEndOnTimeSecondsIndex = 4;
     private const int ChallengeEndTimerLimitSecondsIndex = 5;
+    private const int ZoneIdIndex = 0;
+    private const int ZoneNameIndex = 1;
+    private const int ZoneInstanceTypeIndex = 2;
+    private const int UiMapIdIndex = 0;
+    private const int MapNameIndex = 1;
     private const int EncounterIdIndex = 0;
     private const int EncounterNameIndex = 1;
     private const int EncounterDifficultyIdIndex = 2;
@@ -104,6 +109,52 @@ internal static class CombatLogEventMetadataParser
             onTimeSeconds,
             timerLimitSeconds
         );
+        return true;
+    }
+
+    public static bool TryParseZoneChange(
+        CombatLogEvent combatLogEvent,
+        DateTimeOffset changedAt,
+        out ZoneChangeContext context
+    )
+    {
+        var arguments = combatLogEvent.Arguments;
+        context = null!;
+
+        if (
+            arguments.Count <= ZoneIdIndex
+            || arguments.Count <= ZoneNameIndex
+            || arguments.Count <= ZoneInstanceTypeIndex
+            || !TryParseInt(arguments[ZoneIdIndex], out var zoneId)
+            || !TryParseInt(arguments[ZoneInstanceTypeIndex], out var instanceType)
+        )
+        {
+            return false;
+        }
+
+        context = new ZoneChangeContext(changedAt, zoneId, arguments[ZoneNameIndex], instanceType);
+        return true;
+    }
+
+    public static bool TryParseMapChange(
+        CombatLogEvent combatLogEvent,
+        DateTimeOffset changedAt,
+        out MapChangeContext context
+    )
+    {
+        var arguments = combatLogEvent.Arguments;
+        context = null!;
+
+        if (
+            arguments.Count <= UiMapIdIndex
+            || arguments.Count <= MapNameIndex
+            || !TryParseInt(arguments[UiMapIdIndex], out var uiMapId)
+        )
+        {
+            return false;
+        }
+
+        context = new MapChangeContext(changedAt, uiMapId, arguments[MapNameIndex]);
         return true;
     }
 

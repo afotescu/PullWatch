@@ -1,12 +1,19 @@
 namespace PullWatch;
 
-public sealed class CombatLogEvent(string name, int argumentsStart, string rawLine)
+public sealed class CombatLogEvent(
+    string name,
+    int argumentsStart,
+    string rawLine,
+    DateTimeOffset? loggedAt = null
+)
 {
     private IReadOnlyList<string>? _arguments;
 
     public string Name { get; } = name;
 
     public string RawLine { get; } = rawLine;
+
+    public DateTimeOffset? LoggedAt { get; } = loggedAt;
 
     public IReadOnlyList<string> Arguments =>
         _arguments ??= ParseFields(

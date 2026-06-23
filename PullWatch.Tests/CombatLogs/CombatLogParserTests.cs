@@ -17,6 +17,11 @@ public sealed class CombatLogParserTests
             combatLogEvent.Arguments
         );
         Assert.Equal(line, combatLogEvent.RawLine);
+        Assert.NotNull(combatLogEvent.LoggedAt);
+        Assert.Equal(
+            new DateTime(2026, 6, 15, 0, 15, 10).AddTicks(373000),
+            combatLogEvent.LoggedAt.Value.DateTime
+        );
     }
 
     [Fact]
