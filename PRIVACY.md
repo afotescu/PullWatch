@@ -1,4 +1,4 @@
-# Privacy and Safety
+# Privacy
 
 PullWatch is a local desktop recorder. It does not include telemetry, analytics,
 cloud sync, or any upload feature.

@@ -1,5 +1,10 @@
 # PullWatch
 
+[![CI](https://github.com/afotescu/PullWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/afotescu/PullWatch/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/afotescu/PullWatch?sort=semver)](https://github.com/afotescu/PullWatch/releases/latest)
+[![License](https://img.shields.io/github/license/afotescu/PullWatch)](LICENSE)
+![Windows x64](https://img.shields.io/badge/platform-Windows%20x64-0078d4)
+
 PullWatch is a lightweight Windows desktop app for recording World of Warcraft
 gameplay. It watches the WoW process and combat log, starts recordings for
 Mythic+ runs and raid encounters, and keeps finished videos in a browsable
