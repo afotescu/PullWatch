@@ -8,6 +8,7 @@ namespace PullWatch;
 public partial class App : Application
 {
     private const string InstanceName = "PullWatch.Desktop.Instance";
+    private static readonly TimeSpan UpgradeReleaseTimeout = TimeSpan.FromSeconds(60);
 
     private ILoggerFactory? _loggerFactory;
     private InMemoryLogProvider? _logs;
@@ -16,6 +17,7 @@ public partial class App : Application
     private SingleInstanceCoordinator? _singleInstance;
     private TrayIconManager? _trayIcon;
     private MainWindow? _mainWindow;
+    private int _upgradeShutdownStarted;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -33,13 +35,38 @@ public partial class App : Application
 
         if (!_singleInstance.TryAcquire())
         {
-            await _singleInstance.ActivateExistingAsync(CancellationToken.None);
-            Shutdown();
-            return;
+            var activationResult = await _singleInstance.ActivateExistingAsync(
+                CreateLaunchRequest(),
+                CancellationToken.None
+            );
+
+            if (activationResult != SingleInstanceActivationResult.UpgradeAccepted)
+            {
+                Shutdown();
+                return;
+            }
+
+            if (
+                !await _singleInstance.WaitForReleaseAndAcquireAsync(
+                    UpgradeReleaseTimeout,
+                    CancellationToken.None
+                )
+            )
+            {
+                MessageBox.Show(
+                    "The running PullWatch instance accepted the upgrade, but did not exit in time. Close PullWatch and open this version again.",
+                    "PullWatch upgrade could not continue",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+                Shutdown(1);
+                return;
+            }
         }
 
-        _singleInstance.StartActivationListener(() =>
-            Dispatcher.BeginInvoke(ShowAndActivateMainWindow)
+        _singleInstance.StartActivationListener(
+            HandleSingleInstanceActivationAsync,
+            CompleteSingleInstanceActivationExchange
         );
         _controller = new ApplicationController(_loggerFactory);
 
@@ -135,6 +162,25 @@ public partial class App : Application
             && settings?.Startup.StartMinimizedToTray == true;
     }
 
+    private static SingleInstanceLaunchRequest CreateLaunchRequest()
+    {
+        string? executablePath = null;
+
+        try
+        {
+            executablePath = string.IsNullOrWhiteSpace(Environment.ProcessPath)
+                ? null
+                : Path.GetFullPath(Environment.ProcessPath);
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            executablePath = Environment.ProcessPath;
+        }
+
+        return new SingleInstanceLaunchRequest(ApplicationVersion.Current, executablePath);
+    }
+
     private static async Task ReconcileWindowsStartupShortcutAsync(
         IWindowsStartupShortcut windowsStartupShortcut,
         ILogger logger
@@ -194,6 +240,105 @@ public partial class App : Application
                 MessageBoxImage.Error
             );
         }
+    }
+
+    private Task<SingleInstanceActivationResult> HandleSingleInstanceActivationAsync(
+        SingleInstanceLaunchRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var completion = new TaskCompletionSource<SingleInstanceActivationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        Dispatcher.BeginInvoke(async () =>
+        {
+            try
+            {
+                completion.SetResult(
+                    await HandleSingleInstanceActivationOnUiThreadAsync(request, cancellationToken)
+                );
+            }
+            catch (Exception exception)
+            {
+                completion.SetException(exception);
+            }
+        });
+
+        return completion.Task;
+    }
+
+    private async Task<SingleInstanceActivationResult> HandleSingleInstanceActivationOnUiThreadAsync(
+        SingleInstanceLaunchRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (ApplicationVersionComparer.IsNewer(request.AppVersion, ApplicationVersion.Current))
+        {
+            var upgradeAccepted = await PrepareUpgradeExitAsync(cancellationToken);
+
+            if (upgradeAccepted)
+            {
+                return SingleInstanceActivationResult.UpgradeAccepted;
+            }
+
+            ShowAndActivateMainWindow();
+            return SingleInstanceActivationResult.UpgradeRejected;
+        }
+
+        ShowAndActivateMainWindow();
+        return SingleInstanceActivationResult.ActivatedExisting;
+    }
+
+    private async Task<bool> PrepareUpgradeExitAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.Exchange(ref _upgradeShutdownStarted, 1) != 0)
+        {
+            return true;
+        }
+
+        if (_lifetime is null)
+        {
+            return true;
+        }
+
+        var finalized = await _lifetime.FinalizeRecordingForUpgradeAsync(cancellationToken);
+
+        if (!finalized)
+        {
+            Interlocked.Exchange(ref _upgradeShutdownStarted, 0);
+            MessageBox.Show(
+                "PullWatch could not finish the active recording. The current version will remain running.",
+                "PullWatch upgrade could not continue",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            );
+        }
+
+        return finalized;
+    }
+
+    private void CompleteSingleInstanceActivationExchange(
+        SingleInstanceActivationResult result,
+        bool responseSent
+    )
+    {
+        if (result != SingleInstanceActivationResult.UpgradeAccepted)
+        {
+            return;
+        }
+
+        if (!responseSent)
+        {
+            Interlocked.Exchange(ref _upgradeShutdownStarted, 0);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            _lifetime?.BeginForcedExit();
+            Shutdown();
+        });
     }
 
     private void ShowAndActivateMainWindow()

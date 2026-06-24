@@ -60,4 +60,22 @@ public sealed class ApplicationLifetimeCoordinator
         _requestShutdown();
         return true;
     }
+
+    public async Task<bool> FinalizeRecordingForUpgradeAsync(CancellationToken cancellationToken)
+    {
+        LastFinalizationResult = null;
+        var result = await _finalizeRecording(cancellationToken);
+        LastFinalizationResult = result;
+
+        if (
+            result
+            is not RecordingCommandResult.Stopped
+                and not RecordingCommandResult.NoActiveRecording
+        )
+        {
+            return false;
+        }
+
+        return true;
+    }
 }

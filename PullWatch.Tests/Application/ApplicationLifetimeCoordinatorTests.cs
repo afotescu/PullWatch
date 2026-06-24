@@ -91,6 +91,63 @@ public sealed class ApplicationLifetimeCoordinatorTests
         Assert.Equal(finalizationResult, coordinator.LastFinalizationResult);
     }
 
+    [Fact]
+    public async Task UpgradeFinalizationStopsRecordingWithoutPrompt()
+    {
+        var confirmed = false;
+        var finalized = false;
+        var shutdown = false;
+        var coordinator = CreateCoordinator(
+            Status(RecordingCoordinatorState.Recording),
+            confirm: () =>
+            {
+                confirmed = true;
+                return false;
+            },
+            finalize: _ =>
+            {
+                finalized = true;
+                return Task.FromResult(RecordingCommandResult.Stopped);
+            },
+            shutdown: () => shutdown = true
+        );
+
+        var result = await coordinator.FinalizeRecordingForUpgradeAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(result);
+        Assert.False(confirmed);
+        Assert.True(finalized);
+        Assert.False(shutdown);
+        Assert.True(coordinator.ShouldHideOnWindowClose);
+        Assert.Equal(RecordingCommandResult.Stopped, coordinator.LastFinalizationResult);
+    }
+
+    [Theory]
+    [InlineData(RecordingCommandResult.Failed)]
+    [InlineData(RecordingCommandResult.TimedOut)]
+    public async Task UpgradeExitFailureLeavesApplicationRunning(
+        RecordingCommandResult finalizationResult
+    )
+    {
+        var shutdown = false;
+        var coordinator = CreateCoordinator(
+            Status(RecordingCoordinatorState.Recording),
+            finalize: _ => Task.FromResult(finalizationResult),
+            shutdown: () => shutdown = true
+        );
+
+        var result = await coordinator.FinalizeRecordingForUpgradeAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.False(result);
+        Assert.False(shutdown);
+        Assert.True(coordinator.ShouldHideOnWindowClose);
+        Assert.Equal(finalizationResult, coordinator.LastFinalizationResult);
+    }
+
     private static ApplicationLifetimeCoordinator CreateCoordinator(
         ApplicationStatus status,
         Func<bool>? confirm = null,
