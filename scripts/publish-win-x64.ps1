@@ -68,23 +68,40 @@ if (Test-Path -LiteralPath $oldExe) {
     throw "Stale executable found in publish output: $oldExe"
 }
 
+$mediaFeaturePackUrl = "https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407"
 $vcRedistUrl = "https://aka.ms/vc14/vc_redist.x64.exe"
 
 $readmePath = Join-Path $publishPath "README.txt"
 @"
-PullWatch portable test build
+PullWatch portable release build
 
 Run PullWatch.exe. Keep ScreenRecorderLib.dll in the same folder as PullWatch.exe.
 
 Screen recording requires:
-- Windows 8 or newer
-- Windows Media Foundation
+- Windows x64 with Windows Media Foundation
 - Microsoft Visual C++ Redistributable 2015-2022 x64
+
+If recording cannot start because Windows Media Foundation is unavailable,
+install Microsoft's Media Feature Pack for Windows N editions, then restart
+PullWatch:
+$mediaFeaturePackUrl
 
 If recording cannot start because the Visual C++ Redistributable is missing,
 download and install the official Microsoft installer, then restart PullWatch:
 $vcRedistUrl
+
+Automatic recording requires World of Warcraft combat logging to be enabled.
+Start PullWatch before the Mythic+ key or raid pull so it can see the combat-log
+start event.
+
+Closing the PullWatch window hides it to the system tray. Use Exit from the tray
+icon menu to fully quit the app.
+
+See LICENSE.txt and PRIVACY.md in this folder for license and privacy details.
 "@ | Set-Content -LiteralPath $readmePath -Encoding UTF8
+
+Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $publishPath "LICENSE.txt")
+Copy-Item -LiteralPath (Join-Path $repoRoot "PRIVACY.md") -Destination (Join-Path $publishPath "PRIVACY.md")
 
 $totalBytes = (Get-ChildItem -LiteralPath $publishPath -Recurse -File | Measure-Object -Property Length -Sum).Sum
 $totalMiB = [Math]::Round($totalBytes / 1MB, 2)

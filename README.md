@@ -18,10 +18,10 @@ in-app library.
 
 This project is in early development. Expect issues.
 
-The first public release focuses on World of Warcraft Retail. Automatic logs
-folder detection looks for Retail `_retail_\Logs` directories. Classic, PTR, and
-other variants may work only with manual folder configuration and are not the
-primary target yet.
+The current release focuses on World of Warcraft Retail. Automatic logs folder
+detection looks for Retail `_retail_\Logs` directories. Classic, PTR, and other
+variants may work only with manual folder configuration and are not the primary
+target yet.
 
 ## Download
 
@@ -30,6 +30,9 @@ Download the latest portable Windows x64 build from the
 
 Release builds are currently unsigned, so Windows SmartScreen may show a warning
 for new downloads.
+
+Closing the PullWatch window keeps the app running in the system tray. Use
+`Exit` from the tray icon menu to fully quit PullWatch.
 
 ## Features
 
@@ -57,6 +60,14 @@ for new downloads.
 
 Portable releases are self-contained and do not require a separately installed
 .NET runtime.
+
+If recording cannot start because Windows Media Foundation is unavailable,
+install Microsoft's Media Feature Pack for Windows N editions, then restart
+PullWatch:
+
+```text
+https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407
+```
 
 If recording cannot start because the Visual C++ Redistributable is missing,
 install the official Microsoft x64 redistributable:
@@ -114,69 +125,34 @@ Automatic recording starts only when PullWatch can see the WoW window and read
 the configured logs directory. If combat-log monitoring is unavailable, manual
 recording can still be used while the WoW window is available.
 
+Automatic recording is not retroactive. Start PullWatch before the Mythic+ key
+or raid pull so it can see the combat-log start event.
+
 Finished recordings are saved as `.mp4` files. File names include the recording
 start time and context, such as `manual`, `mythic-plus`, or `raid`.
 
-## Building from Source
+## Source
 
-Requirements:
+Source is available for transparency. Building locally requires:
 
 - Windows x64
 - .NET 10 SDK
 
-Restore local tools:
-
-```powershell
-dotnet tool restore
-```
-
-Run the app:
-
-```powershell
-dotnet run --project PullWatch.App/PullWatch.App.csproj -c Release -p:Platform=x64
-```
-
-Run tests:
+Run the test suite:
 
 ```powershell
 dotnet test PullWatch.sln -c Release -p:Platform=x64
 ```
 
-Format the codebase:
-
-```powershell
-dotnet csharpier format .
-```
-
-Create a local self-contained Windows x64 publish:
+Create a local self-contained Windows x64 build:
 
 ```powershell
 ./scripts/publish-win-x64.ps1
 ```
 
-The publish output is written to:
-
-```text
-artifacts\publish\win-x64
-```
-
 Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
 kept next to the executable because the native recorder library does not load
 reliably when embedded into the single-file bundle.
-
-## CI and Releases
-
-GitHub Actions checks formatting, builds, and runs tests on pushes and pull
-requests.
-
-Create a GitHub release by pushing a version tag:
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Release tags publish a Windows x64 zip and embed the tag version into the app.
 
 ## Key Dependencies
 
