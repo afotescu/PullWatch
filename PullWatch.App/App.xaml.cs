@@ -1,3 +1,5 @@
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +21,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        _logs = new InMemoryLogProvider();
+        _loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(_logs));
+        var logger = _loggerFactory.CreateLogger<App>();
+        var windowsStartupShortcut = new WindowsStartupShortcut();
+
+        logger.LogInformation("Starting PullWatch {AppVersion}", ApplicationVersion.Current);
+        await ReconcileWindowsStartupShortcutAsync(windowsStartupShortcut, logger);
+
         _singleInstance = new SingleInstanceCoordinator(InstanceName);
 
         if (!_singleInstance.TryAcquire())
@@ -31,11 +41,6 @@ public partial class App : Application
         _singleInstance.StartActivationListener(() =>
             Dispatcher.BeginInvoke(ShowAndActivateMainWindow)
         );
-        _logs = new InMemoryLogProvider();
-        _loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(_logs));
-        _loggerFactory
-            .CreateLogger<App>()
-            .LogInformation("Starting PullWatch {AppVersion}", ApplicationVersion.Current);
         _controller = new ApplicationController(_loggerFactory);
 
         try
@@ -51,7 +56,7 @@ public partial class App : Application
                 _controller,
                 _lifetime,
                 _logs,
-                new WindowsStartupShortcut(),
+                windowsStartupShortcut,
                 _controller.StartedWithCreatedSettingsFile
             );
             _trayIcon = new TrayIconManager(
@@ -128,6 +133,32 @@ public partial class App : Application
                 StringComparer.OrdinalIgnoreCase
             )
             && settings?.Startup.StartMinimizedToTray == true;
+    }
+
+    private static async Task ReconcileWindowsStartupShortcutAsync(
+        IWindowsStartupShortcut windowsStartupShortcut,
+        ILogger logger
+    )
+    {
+        try
+        {
+            var loadResult = await new SettingsStore().LoadAsync(CancellationToken.None);
+
+            if (loadResult.Status == SettingsLoadStatus.Loaded && loadResult.Settings is not null)
+            {
+                await windowsStartupShortcut.SyncAsync(loadResult.Settings.Startup);
+            }
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or InvalidOperationException
+                        or COMException
+            )
+        {
+            logger.LogWarning(exception, "Could not reconcile Windows startup shortcut.");
+        }
     }
 
     private bool ConfirmExitWhileRecording()
