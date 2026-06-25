@@ -267,6 +267,27 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnFullScreenClicked(object sender, RoutedEventArgs eventArgs)
     {
+        RequestFullScreenToggle();
+    }
+
+    private void OnVideoSurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
+    {
+        if (eventArgs.ChangedButton != MouseButton.Left || eventArgs.ClickCount != 2)
+        {
+            return;
+        }
+
+        if (!FullScreenButton.IsEnabled)
+        {
+            return;
+        }
+
+        eventArgs.Handled = true;
+        RequestFullScreenToggle();
+    }
+
+    private void RequestFullScreenToggle()
+    {
         if (IsFullScreen)
         {
             ExitFullScreenRequested?.Invoke(this, EventArgs.Empty);

@@ -60,6 +60,7 @@
           Style="{StaticResource SecondaryTextStyle}"
           TextAlignment="Center"
         />
+        <Border Background="Transparent" MouseLeftButtonDown="OnVideoSurfaceMouseLeftButtonDown" />
       </Grid>
     </Border>
 
