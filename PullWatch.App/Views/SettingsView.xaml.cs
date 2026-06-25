@@ -47,6 +47,17 @@ public partial class SettingsView : UserControl
         }
     }
 
+    private void OnRecordingStorageLimitLostFocus(object sender, RoutedEventArgs eventArgs)
+    {
+        if (
+            sender is System.Windows.Controls.TextBox textBox
+            && string.IsNullOrWhiteSpace(textBox.Text)
+        )
+        {
+            textBox.Text = "1";
+        }
+    }
+
     private async void OnWowLogsDirectoryLostFocus(object sender, RoutedEventArgs eventArgs)
     {
         if (ReferenceEquals(Input.Keyboard.FocusedElement, WowLogsDirectoryBrowseButton))

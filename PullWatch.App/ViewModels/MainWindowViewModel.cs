@@ -50,7 +50,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             controller.Status,
             controller.SaveSettingsAsync,
             settingsDialogs,
-            windowsStartupShortcut: windowsStartupShortcut
+            windowsStartupShortcut: windowsStartupShortcut,
+            initialRecordingStorageStatus: controller.RecordingStorageStatus
         );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
         NavigationItems =
@@ -66,6 +67,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _selectedNavigationItem = showSettingsOnStartup ? NavigationItems[1] : NavigationItems[0];
         _isSidebarCollapsed = controller.Status.EffectiveSettings?.Ui.SidebarCollapsed ?? false;
         _controller.StatusChanged += OnStatusChanged;
+        _controller.RecordingStorageStatusChanged += OnRecordingStorageStatusChanged;
         _logs.LogsChanged += OnLogsChanged;
     }
 
@@ -95,6 +97,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _controller.StatusChanged -= OnStatusChanged;
+        _controller.RecordingStorageStatusChanged -= OnRecordingStorageStatusChanged;
         _logs.LogsChanged -= OnLogsChanged;
     }
 
@@ -153,6 +156,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Recordings.ApplyStatus(status);
             Settings.ApplyStatus(status);
             Diagnostics.ApplyStatus(status);
+        });
+    }
+
+    private void OnRecordingStorageStatusChanged(RecordingStorageStatus status)
+    {
+        _dispatcher.Post(() =>
+        {
+            Settings.ApplyRecordingStorageStatus(status);
+
+            if (status.LastDeletedRecordingCount > 0)
+            {
+                _ = Recordings.RefreshRecordingsAsync();
+            }
         });
     }
 

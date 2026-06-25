@@ -45,6 +45,7 @@ public sealed class SettingsStoreTests
             },
             Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
             Startup = new StartupSettings { StartWithWindows = true, StartMinimizedToTray = true },
+            Storage = new RecordingStorageSettings { MaxUsageBytes = 50L * 1024 * 1024 * 1024 },
             Ui = new UiSettings
             {
                 SidebarCollapsed = true,
@@ -96,6 +97,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(new RecordingFilterSettings(), result.Settings.RecordingFilters);
         Assert.Equal(new VideoSettings(), result.Settings.Video);
         Assert.Equal(new AudioSettings(), result.Settings.Audio);
+        Assert.Equal(new RecordingStorageSettings(), result.Settings.Storage);
         Assert.Equal(new UiSettings(), result.Settings.Ui);
     }
 
@@ -104,6 +106,7 @@ public sealed class SettingsStoreTests
     [InlineData("""{ "Version": 1, "Video": null }""")]
     [InlineData("""{ "Version": 1, "Audio": null }""")]
     [InlineData("""{ "Version": 1, "Startup": null }""")]
+    [InlineData("""{ "Version": 1, "Storage": null }""")]
     [InlineData("""{ "Version": 1, "Ui": null }""")]
     [InlineData("""{ "Version": 1, "Ui": { "WindowPlacement": null } }""")]
     public async Task ExplicitNullRequiredSettingsSectionsAreRejected(string json)

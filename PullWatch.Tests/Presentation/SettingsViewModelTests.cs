@@ -36,6 +36,59 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task RecordingStorageLimitAutosavesAndDisplaysUsage()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            initialRecordingStorageStatus: new RecordingStorageStatus(
+                10 * bytesPerGigabyte,
+                25 * bytesPerGigabyte,
+                2,
+                IsRefreshing: false,
+                IsCleaning: false,
+                LastDeletedRecordingCount: 0,
+                LastError: null
+            )
+        );
+
+        Assert.True(viewModel.IsRecordingStorageLimitEnabled);
+        Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Equal(
+            "Managed recordings storage: 10 GB / 25 GB",
+            viewModel.RecordingStorageUsageText
+        );
+
+        viewModel.RecordingStorageLimitGigabytes = 30;
+
+        await WaitForAsync(() =>
+            saves.Any(save => save.Storage.MaxUsageBytes == 30 * bytesPerGigabyte)
+        );
+
+        Assert.Equal(
+            "Managed recordings storage: 10 GB / 30 GB",
+            viewModel.RecordingStorageUsageText
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = false;
+
+        await WaitForAsync(() =>
+            saves.Any(save => save.Storage.MaxUsageBytes == RecordingStorageSettings.UnlimitedBytes)
+        );
+
+        Assert.Equal(
+            "Managed recordings storage: 10 GB / Unlimited",
+            viewModel.RecordingStorageUsageText
+        );
+    }
+
+    [Fact]
     public async Task RecordingFilterOptionsAutosave()
     {
         var saves = new List<PullWatchSettings>();
@@ -471,7 +524,8 @@ public sealed class SettingsViewModelTests
         Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null,
         VideoCaptureSize? estimateCaptureSize = null,
         ISettingsDialogs? dialogs = null,
-        IWindowsStartupShortcut? windowsStartupShortcut = null
+        IWindowsStartupShortcut? windowsStartupShortcut = null,
+        RecordingStorageStatus? initialRecordingStorageStatus = null
     )
     {
         return new SettingsViewModel(
@@ -479,7 +533,8 @@ public sealed class SettingsViewModelTests
             settings => save?.Invoke(settings) ?? Saved(settings),
             dialogs ?? new FakeSettingsDialogs(),
             () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080),
-            windowsStartupShortcut
+            windowsStartupShortcut,
+            initialRecordingStorageStatus
         );
     }
 

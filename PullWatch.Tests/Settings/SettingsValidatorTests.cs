@@ -81,6 +81,18 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsNegativeRecordingStorageLimit()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Storage = new RecordingStorageSettings { MaxUsageBytes = -1 } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Recording storage limit cannot be negative.", result.Errors);
+    }
+
+    [Fact]
     public void ClearsStartMinimizedToTrayWhenWindowsStartupIsDisabled()
     {
         var result = SettingsValidator.Validate(

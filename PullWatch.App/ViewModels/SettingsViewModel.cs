@@ -11,6 +11,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string FixHighlightedSettingsMessage = "Fix the highlighted settings.";
     private const string SettingsLockedMessage = "Settings are locked while recording.";
 
+    private const long BytesPerKilobyte = 1024;
+    private const long BytesPerMegabyte = BytesPerKilobyte * 1024;
+    private const long BytesPerGigabyte = BytesPerMegabyte * 1024;
+    private const int DefaultRecordingStorageLimitGigabytes = (int)(
+        RecordingStorageSettings.DefaultMaxUsageBytes / BytesPerGigabyte
+    );
+    private const int MaximumRecordingStorageLimitGigabytes = 10_000;
+
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(5);
 
@@ -27,6 +35,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private bool _retryWowLogsDirectoryOnNextAutosave;
     private bool _retryRecordingsDirectoryOnNextAutosave;
     private bool _retryStartupShortcutOnNextAutosave;
+    private RecordingStorageStatus _recordingStorageStatus = RecordingStorageStatus.Initial;
     private bool _isLoading;
 
     public SettingsViewModel(
@@ -34,13 +43,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings,
         ISettingsDialogs dialogs,
         Func<VideoCaptureSize>? getEstimateCaptureSize = null,
-        IWindowsStartupShortcut? windowsStartupShortcut = null
+        IWindowsStartupShortcut? windowsStartupShortcut = null,
+        RecordingStorageStatus? initialRecordingStorageStatus = null
     )
     {
         _saveSettings = saveSettings;
         _dialogs = dialogs;
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
         _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
+        _recordingStorageStatus = initialRecordingStorageStatus ?? RecordingStorageStatus.Initial;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
             () => ExecuteCommandAsync(CommitWowLogsDirectoryAsync),
@@ -80,6 +91,126 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         get;
         set => SetEditableProperty(ref field, value);
+    }
+
+    public bool IsRecordingStorageLimitEnabled
+    {
+        get;
+        set
+        {
+            if (SetEditableProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+            }
+        }
+    }
+
+    public bool CanConfigureRecordingStorageLimit =>
+        IsEditingEnabled && IsRecordingStorageLimitEnabled;
+
+    public int RecordingStorageLimitGigabytes
+    {
+        get;
+        set =>
+            SetEditableProperty(
+                ref field,
+                Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes)
+            );
+    }
+
+    public string RecordingStorageUsageText
+    {
+        get
+        {
+            var usageText = _recordingStorageStatus.UsageBytes is { } usageBytes
+                ? FormatStorageSize(usageBytes)
+                : "Calculating";
+            var limitText = IsRecordingStorageLimitEnabled
+                ? FormatStorageSize(GetConfiguredRecordingStorageLimitBytes())
+                : "Unlimited";
+
+            return $"Managed recordings storage: {usageText} / {limitText}";
+        }
+    }
+
+    public string RecordingStorageStatusText
+    {
+        get
+        {
+            if (_recordingStorageStatus.LastError is not null)
+            {
+                return $"Could not read managed recordings storage: {_recordingStorageStatus.LastError.Message}";
+            }
+
+            if (_recordingStorageStatus.IsCleaning)
+            {
+                return "Cleaning up old recordings...";
+            }
+
+            if (_recordingStorageStatus.IsRefreshing)
+            {
+                return "Calculating managed recordings storage...";
+            }
+
+            if (_recordingStorageStatus.UsageBytes is null)
+            {
+                return "Managed recordings storage has not been scanned yet.";
+            }
+
+            if (!IsRecordingStorageLimitEnabled)
+            {
+                return "Storage limit is disabled. PullWatch-owned recordings are still counted.";
+            }
+
+            if (IsRecordingStorageOverLimit)
+            {
+                return "Managed recordings are over the configured limit.";
+            }
+
+            if (IsRecordingStorageNearLimit)
+            {
+                return "Managed recordings are close to the configured limit.";
+            }
+
+            return "Oldest managed recordings are removed first when the limit is reached.";
+        }
+    }
+
+    public double RecordingStorageUsagePercent
+    {
+        get
+        {
+            var limitBytes = GetConfiguredRecordingStorageLimitBytes();
+            return limitBytes > 0 && _recordingStorageStatus.UsageBytes is { } usageBytes
+                ? Math.Clamp(usageBytes * 100d / limitBytes, 0, 100)
+                : 0;
+        }
+    }
+
+    public bool IsRecordingStorageProgressVisible => IsRecordingStorageLimitEnabled;
+
+    public bool IsRecordingStorageUsageIndeterminate =>
+        IsRecordingStorageLimitEnabled
+        && _recordingStorageStatus.UsageBytes is null
+        && (_recordingStorageStatus.IsRefreshing || _recordingStorageStatus.IsCleaning);
+
+    public bool IsRecordingStorageOverLimit =>
+        IsRecordingStorageLimitEnabled
+        && _recordingStorageStatus.UsageBytes is { } usageBytes
+        && usageBytes > GetConfiguredRecordingStorageLimitBytes();
+
+    public bool IsRecordingStorageNearLimit =>
+        IsRecordingStorageLimitEnabled
+        && !IsRecordingStorageOverLimit
+        && _recordingStorageStatus.UsageBytes is { } usageBytes
+        && usageBytes >= GetConfiguredRecordingStorageLimitBytes() * 0.85d;
+
+    public void ApplyRecordingStorageStatus(RecordingStorageStatus status)
+    {
+        if (SetProperty(ref _recordingStorageStatus, status))
+        {
+            NotifyRecordingStorageUsageChanged();
+        }
     }
 
     public bool RecordMythicPlus
@@ -214,6 +345,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 OnPropertyChanged(nameof(CanStartMinimizedToTray));
                 OnPropertyChanged(nameof(CanConfigureMythicPlus));
                 OnPropertyChanged(nameof(CanConfigureRaidEncounters));
+                OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
             }
         }
     }
@@ -465,6 +597,12 @@ public sealed partial class SettingsViewModel : ObservableObject
                 StartWithWindows = StartWithWindows,
                 StartMinimizedToTray = StartWithWindows && StartMinimizedToTray,
             },
+            Storage = _savedSettings.Storage with
+            {
+                MaxUsageBytes = IsRecordingStorageLimitEnabled
+                    ? GigabytesToBytes(RecordingStorageLimitGigabytes)
+                    : RecordingStorageSettings.UnlimitedBytes,
+            },
         };
     }
 
@@ -711,6 +849,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             WowLogsDirectory = settings.WowLogsDirectory;
             RecordingsDirectory = settings.RecordingsDirectory;
+            IsRecordingStorageLimitEnabled = settings.Storage.IsLimitEnabled;
+            RecordingStorageLimitGigabytes = settings.Storage.IsLimitEnabled
+                ? BytesToGigabytes(settings.Storage.MaxUsageBytes)
+                : DefaultRecordingStorageLimitGigabytes;
             RecordMythicPlus = settings.RecordMythicPlus;
             MinimumMythicPlusKeystoneLevel = settings
                 .RecordingFilters
@@ -733,6 +875,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         });
 
         OnPropertyChanged(nameof(EstimatedRecordingSize));
+        NotifyRecordingStorageUsageChanged();
     }
 
     private void ClearErrors()
@@ -776,6 +919,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (ShouldRefreshEstimate(propertyName))
         {
             OnPropertyChanged(nameof(EstimatedRecordingSize));
+        }
+
+        if (ShouldRefreshRecordingStorageUsage(propertyName))
+        {
+            NotifyRecordingStorageUsageChanged();
         }
 
         return true;
@@ -945,6 +1093,67 @@ public sealed partial class SettingsViewModel : ObservableObject
                 or nameof(SelectedFrameRate)
                 or nameof(CaptureSystemAudio)
                 or nameof(CaptureMicrophone);
+    }
+
+    private static bool ShouldRefreshRecordingStorageUsage(string? propertyName)
+    {
+        return propertyName
+            is nameof(IsRecordingStorageLimitEnabled)
+                or nameof(RecordingStorageLimitGigabytes);
+    }
+
+    private void NotifyRecordingStorageUsageChanged()
+    {
+        OnPropertyChanged(nameof(RecordingStorageUsageText));
+        OnPropertyChanged(nameof(RecordingStorageStatusText));
+        OnPropertyChanged(nameof(RecordingStorageUsagePercent));
+        OnPropertyChanged(nameof(IsRecordingStorageProgressVisible));
+        OnPropertyChanged(nameof(IsRecordingStorageUsageIndeterminate));
+        OnPropertyChanged(nameof(IsRecordingStorageOverLimit));
+        OnPropertyChanged(nameof(IsRecordingStorageNearLimit));
+    }
+
+    private long GetConfiguredRecordingStorageLimitBytes()
+    {
+        return IsRecordingStorageLimitEnabled
+            ? GigabytesToBytes(RecordingStorageLimitGigabytes)
+            : RecordingStorageSettings.UnlimitedBytes;
+    }
+
+    private static long GigabytesToBytes(int gigabytes)
+    {
+        return Math.Clamp(gigabytes, 1, MaximumRecordingStorageLimitGigabytes) * BytesPerGigabyte;
+    }
+
+    private static int BytesToGigabytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return DefaultRecordingStorageLimitGigabytes;
+        }
+
+        return Math.Clamp(
+            (int)Math.Ceiling(bytes / (double)BytesPerGigabyte),
+            1,
+            MaximumRecordingStorageLimitGigabytes
+        );
+    }
+
+    private static string FormatStorageSize(long bytes)
+    {
+        bytes = Math.Max(0, bytes);
+
+        if (bytes >= BytesPerGigabyte)
+        {
+            return $"{bytes / (double)BytesPerGigabyte:0.#} GB";
+        }
+
+        if (bytes >= BytesPerMegabyte)
+        {
+            return $"{bytes / (double)BytesPerMegabyte:0.#} MB";
+        }
+
+        return $"{bytes / (double)BytesPerKilobyte:0.#} KB";
     }
 
     private static string FormatFileSize(int megabytes)

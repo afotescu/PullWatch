@@ -47,6 +47,11 @@ public static class SettingsValidator
             errors.Add("Minimum Mythic+ keystone level cannot be negative.");
         }
 
+        if (settings.Storage.MaxUsageBytes < 0)
+        {
+            errors.Add("Recording storage limit cannot be negative.");
+        }
+
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",

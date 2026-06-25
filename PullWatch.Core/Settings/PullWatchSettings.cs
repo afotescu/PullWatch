@@ -13,6 +13,7 @@ public sealed record PullWatchSettings
     public VideoSettings Video { get; init; } = new();
     public AudioSettings Audio { get; init; } = new();
     public StartupSettings Startup { get; init; } = new();
+    public RecordingStorageSettings Storage { get; init; } = new();
     public UiSettings Ui { get; init; } = new();
 }
 
@@ -90,6 +91,16 @@ public sealed record StartupSettings
 {
     public bool StartWithWindows { get; init; }
     public bool StartMinimizedToTray { get; init; }
+}
+
+public sealed record RecordingStorageSettings
+{
+    public const long UnlimitedBytes = 0;
+    public const long DefaultMaxUsageBytes = 25L * 1024 * 1024 * 1024;
+
+    public long MaxUsageBytes { get; init; } = DefaultMaxUsageBytes;
+
+    public bool IsLimitEnabled => MaxUsageBytes > UnlimitedBytes;
 }
 
 public sealed record UiSettings

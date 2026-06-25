@@ -9,6 +9,8 @@
   <SolidColorBrush x:Key="SurfaceBrush" Color="#22272E" />
   <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#2A3038" />
   <SolidColorBrush x:Key="BorderBrush" Color="#404956" />
+  <SolidColorBrush x:Key="ProgressTrackBrush" Color="#343C47" />
+  <SolidColorBrush x:Key="ProgressTrackBorderBrush" Color="#46505E" />
   <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F4F7" />
   <SolidColorBrush x:Key="SecondaryTextBrush" Color="#AAB2BD" />
   <SolidColorBrush x:Key="AccentBrush" Color="#D59B45" />
