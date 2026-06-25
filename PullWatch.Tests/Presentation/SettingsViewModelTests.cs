@@ -35,6 +35,47 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Settings saved.", viewModel.SaveMessage);
     }
 
+    [Fact]
+    public async Task RecordingFilterOptionsAutosave()
+    {
+        var saves = new List<PullWatchSettings>();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            }
+        );
+
+        Assert.True(viewModel.CanConfigureMythicPlus);
+        Assert.True(viewModel.CanConfigureRaidEncounters);
+        Assert.Equal(0, viewModel.MinimumMythicPlusKeystoneLevel);
+        Assert.True(viewModel.RecordRaidFinder);
+        Assert.True(viewModel.RecordNormalRaid);
+        Assert.True(viewModel.RecordHeroicRaid);
+        Assert.True(viewModel.RecordMythicRaid);
+
+        viewModel.MinimumMythicPlusKeystoneLevel = 12;
+        viewModel.RecordRaidFinder = false;
+        viewModel.RecordMythicRaid = false;
+
+        await WaitForAsync(() =>
+            saves.Any(save =>
+                save.RecordingFilters.MythicPlus.MinimumKeystoneLevel == 12
+                && !save.RecordingFilters.RaidEncounters.RecordRaidFinder
+                && !save.RecordingFilters.RaidEncounters.RecordMythic
+            )
+        );
+
+        var saved = saves.Last();
+        Assert.Equal(12, saved.RecordingFilters.MythicPlus.MinimumKeystoneLevel);
+        Assert.False(saved.RecordingFilters.RaidEncounters.RecordRaidFinder);
+        Assert.True(saved.RecordingFilters.RaidEncounters.RecordNormal);
+        Assert.True(saved.RecordingFilters.RaidEncounters.RecordHeroic);
+        Assert.False(saved.RecordingFilters.RaidEncounters.RecordMythic);
+    }
+
     [Theory]
     [InlineData(RecordingCoordinatorState.Starting)]
     [InlineData(RecordingCoordinatorState.Recording)]
@@ -46,6 +87,8 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.IsEditingEnabled);
         Assert.False(viewModel.PickWowLogsDirectoryCommand.CanExecute(null));
         Assert.False(viewModel.CommitWowLogsDirectoryCommand.CanExecute(null));
+        Assert.False(viewModel.CanConfigureMythicPlus);
+        Assert.False(viewModel.CanConfigureRaidEncounters);
         Assert.False(viewModel.CanStartMinimizedToTray);
         Assert.Equal("Settings are locked while recording.", viewModel.SaveMessage);
     }

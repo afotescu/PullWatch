@@ -403,6 +403,110 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
+    public async Task MythicPlusMinimumKeystoneLevelFiltersChallengeStarts()
+    {
+        var recorder = new FakeRecordingService();
+        var settingsProvider = new SettingsProvider(
+            new PullWatchSettings
+            {
+                RecordingFilters = new RecordingFilterSettings
+                {
+                    MythicPlus = new MythicPlusRecordingFilterSettings
+                    {
+                        MinimumKeystoneLevel = 20,
+                    },
+                },
+            }
+        );
+        var handler = CreateHandler(recorder, settingsProvider);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.ChallengeModeStart,
+            "\"Magisters' Terrace\",2811,558,19,[9,10,147]"
+        );
+        await HandleAsync(handler, WowEvents.ChallengeModeEnd);
+
+        Assert.Empty(recorder.Calls);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.ChallengeModeStart,
+            "\"Magisters' Terrace\",2811,558,20,[9,10,147]"
+        );
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task RaidDifficultySelectionFiltersEncounterStarts()
+    {
+        var recorder = new FakeRecordingService();
+        var settingsProvider = new SettingsProvider(
+            new PullWatchSettings
+            {
+                RecordingFilters = new RecordingFilterSettings
+                {
+                    RaidEncounters = new RaidEncounterRecordingFilterSettings
+                    {
+                        RecordRaidFinder = false,
+                        RecordNormal = false,
+                        RecordHeroic = true,
+                        RecordMythic = false,
+                    },
+                },
+            }
+        );
+        var handler = CreateHandler(recorder, settingsProvider);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.EncounterStart,
+            $"3129,\"Plexus Sentinel\",{WowDifficultyIds.NormalRaid},20,2810"
+        );
+
+        Assert.Empty(recorder.Calls);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.EncounterStart,
+            $"3129,\"Plexus Sentinel\",{WowDifficultyIds.HeroicRaid},20,2810"
+        );
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task MythicRaidDifficultySelectionIncludesFlexibleMythicDifficulty()
+    {
+        var recorder = new FakeRecordingService();
+        var settingsProvider = new SettingsProvider(
+            new PullWatchSettings
+            {
+                RecordingFilters = new RecordingFilterSettings
+                {
+                    RaidEncounters = new RaidEncounterRecordingFilterSettings
+                    {
+                        RecordRaidFinder = false,
+                        RecordNormal = false,
+                        RecordHeroic = false,
+                        RecordMythic = true,
+                    },
+                },
+            }
+        );
+        var handler = CreateHandler(recorder, settingsProvider);
+
+        await HandleWithArgumentsAsync(
+            handler,
+            WowEvents.EncounterStart,
+            $"3159,\"Rotmire\",{WowDifficultyIds.FlexibleMythicRaid},20,1592"
+        );
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
     public async Task DisabledAutomaticRecordingTypesDoNotStart()
     {
         var recorder = new FakeRecordingService();

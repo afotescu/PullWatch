@@ -9,10 +9,47 @@ public sealed record PullWatchSettings
     public string? RecordingsDirectory { get; init; }
     public bool RecordMythicPlus { get; init; } = true;
     public bool RecordRaidEncounters { get; init; } = true;
+    public RecordingFilterSettings RecordingFilters { get; init; } = new();
     public VideoSettings Video { get; init; } = new();
     public AudioSettings Audio { get; init; } = new();
     public StartupSettings Startup { get; init; } = new();
     public UiSettings Ui { get; init; } = new();
+}
+
+public sealed record RecordingFilterSettings
+{
+    public MythicPlusRecordingFilterSettings MythicPlus { get; init; } = new();
+    public RaidEncounterRecordingFilterSettings RaidEncounters { get; init; } = new();
+}
+
+public sealed record MythicPlusRecordingFilterSettings
+{
+    public int MinimumKeystoneLevel { get; init; }
+
+    public bool Includes(int keystoneLevel)
+    {
+        return MinimumKeystoneLevel == 0 || keystoneLevel >= MinimumKeystoneLevel;
+    }
+}
+
+public sealed record RaidEncounterRecordingFilterSettings
+{
+    public bool RecordRaidFinder { get; init; } = true;
+    public bool RecordNormal { get; init; } = true;
+    public bool RecordHeroic { get; init; } = true;
+    public bool RecordMythic { get; init; } = true;
+
+    public bool Includes(int difficultyId)
+    {
+        return difficultyId switch
+        {
+            WowDifficultyIds.RaidFinder => RecordRaidFinder,
+            WowDifficultyIds.NormalRaid => RecordNormal,
+            WowDifficultyIds.HeroicRaid => RecordHeroic,
+            WowDifficultyIds.MythicRaid or WowDifficultyIds.FlexibleMythicRaid => RecordMythic,
+            _ => false,
+        };
+    }
 }
 
 public sealed record VideoSettings

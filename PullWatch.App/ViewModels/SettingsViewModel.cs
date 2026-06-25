@@ -85,10 +85,56 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool RecordMythicPlus
     {
         get;
+        set
+        {
+            if (SetEditableProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(CanConfigureMythicPlus));
+            }
+        }
+    }
+
+    public bool CanConfigureMythicPlus => IsEditingEnabled && RecordMythicPlus;
+
+    public int MinimumMythicPlusKeystoneLevel
+    {
+        get;
         set => SetEditableProperty(ref field, value);
     }
 
     public bool RecordRaidEncounters
+    {
+        get;
+        set
+        {
+            if (SetEditableProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(CanConfigureRaidEncounters));
+            }
+        }
+    }
+
+    public bool CanConfigureRaidEncounters => IsEditingEnabled && RecordRaidEncounters;
+
+    public bool RecordRaidFinder
+    {
+        get;
+        set => SetEditableProperty(ref field, value);
+    }
+
+    public bool RecordNormalRaid
+    {
+        get;
+        set => SetEditableProperty(ref field, value);
+    }
+
+    public bool RecordHeroicRaid
+    {
+        get;
+        set => SetEditableProperty(ref field, value);
+    }
+
+    public bool RecordMythicRaid
     {
         get;
         set => SetEditableProperty(ref field, value);
@@ -166,6 +212,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             {
                 NotifyCommandStatesChanged();
                 OnPropertyChanged(nameof(CanStartMinimizedToTray));
+                OnPropertyChanged(nameof(CanConfigureMythicPlus));
+                OnPropertyChanged(nameof(CanConfigureRaidEncounters));
             }
         }
     }
@@ -386,6 +434,20 @@ public sealed partial class SettingsViewModel : ObservableObject
                 : _savedSettings.RecordingsDirectory,
             RecordMythicPlus = RecordMythicPlus,
             RecordRaidEncounters = RecordRaidEncounters,
+            RecordingFilters = _savedSettings.RecordingFilters with
+            {
+                MythicPlus = _savedSettings.RecordingFilters.MythicPlus with
+                {
+                    MinimumKeystoneLevel = MinimumMythicPlusKeystoneLevel,
+                },
+                RaidEncounters = _savedSettings.RecordingFilters.RaidEncounters with
+                {
+                    RecordRaidFinder = RecordRaidFinder,
+                    RecordNormal = RecordNormalRaid,
+                    RecordHeroic = RecordHeroicRaid,
+                    RecordMythic = RecordMythicRaid,
+                },
+            },
             Video = _savedSettings.Video with
             {
                 Quality = SelectedVideoQuality,
@@ -650,7 +712,15 @@ public sealed partial class SettingsViewModel : ObservableObject
             WowLogsDirectory = settings.WowLogsDirectory;
             RecordingsDirectory = settings.RecordingsDirectory;
             RecordMythicPlus = settings.RecordMythicPlus;
+            MinimumMythicPlusKeystoneLevel = settings
+                .RecordingFilters
+                .MythicPlus
+                .MinimumKeystoneLevel;
             RecordRaidEncounters = settings.RecordRaidEncounters;
+            RecordRaidFinder = settings.RecordingFilters.RaidEncounters.RecordRaidFinder;
+            RecordNormalRaid = settings.RecordingFilters.RaidEncounters.RecordNormal;
+            RecordHeroicRaid = settings.RecordingFilters.RaidEncounters.RecordHeroic;
+            RecordMythicRaid = settings.RecordingFilters.RaidEncounters.RecordMythic;
             StartWithWindows = settings.Startup.StartWithWindows;
             StartMinimizedToTray =
                 settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;

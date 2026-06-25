@@ -113,7 +113,9 @@ public sealed class CombatLogEventHandler(
         switch (eventName)
         {
             case WowEvents.ChallengeModeStart:
-                if (!settingsProvider.Current.RecordMythicPlus)
+                var mythicPlusSettings = settingsProvider.Current;
+
+                if (!mythicPlusSettings.RecordMythicPlus)
                 {
                     break;
                 }
@@ -133,6 +135,15 @@ public sealed class CombatLogEventHandler(
                     break;
                 }
 
+                if (
+                    !mythicPlusSettings.RecordingFilters.MythicPlus.Includes(
+                        challengeContext.KeystoneLevel
+                    )
+                )
+                {
+                    break;
+                }
+
                 await HandleChallengeStartAsync(
                     combatLogEvent,
                     eventTimestamp,
@@ -141,7 +152,9 @@ public sealed class CombatLogEventHandler(
                 );
                 break;
             case WowEvents.EncounterStart:
-                if (!settingsProvider.Current.RecordRaidEncounters)
+                var raidSettings = settingsProvider.Current;
+
+                if (!raidSettings.RecordRaidEncounters)
                 {
                     break;
                 }
@@ -158,6 +171,15 @@ public sealed class CombatLogEventHandler(
                         combatLogEvent,
                         "Encounter start is missing an encounter id, encounter name, or valid difficulty id"
                     );
+                    break;
+                }
+
+                if (
+                    !raidSettings.RecordingFilters.RaidEncounters.Includes(
+                        encounterContext.DifficultyId
+                    )
+                )
+                {
                     break;
                 }
 

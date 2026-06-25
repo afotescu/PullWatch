@@ -25,6 +25,17 @@ public sealed class SettingsStoreTests
             WowLogsDirectory = @"D:\Games\World of Warcraft\_retail_\Logs",
             RecordingsDirectory = @"D:\Recordings",
             RecordMythicPlus = false,
+            RecordingFilters = new RecordingFilterSettings
+            {
+                MythicPlus = new MythicPlusRecordingFilterSettings { MinimumKeystoneLevel = 12 },
+                RaidEncounters = new RaidEncounterRecordingFilterSettings
+                {
+                    RecordRaidFinder = false,
+                    RecordNormal = true,
+                    RecordHeroic = true,
+                    RecordMythic = false,
+                },
+            },
             Video = new VideoSettings
             {
                 Quality = VideoQuality.High,
@@ -82,12 +93,14 @@ public sealed class SettingsStoreTests
 
         Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
         Assert.NotNull(result.Settings);
+        Assert.Equal(new RecordingFilterSettings(), result.Settings.RecordingFilters);
         Assert.Equal(new VideoSettings(), result.Settings.Video);
         Assert.Equal(new AudioSettings(), result.Settings.Audio);
         Assert.Equal(new UiSettings(), result.Settings.Ui);
     }
 
     [Theory]
+    [InlineData("""{ "Version": 1, "RecordingFilters": null }""")]
     [InlineData("""{ "Version": 1, "Video": null }""")]
     [InlineData("""{ "Version": 1, "Audio": null }""")]
     [InlineData("""{ "Version": 1, "Startup": null }""")]

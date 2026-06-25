@@ -60,6 +60,27 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsNegativeMinimumKeystoneLevel()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                RecordingFilters = new RecordingFilterSettings
+                {
+                    MythicPlus = new MythicPlusRecordingFilterSettings
+                    {
+                        MinimumKeystoneLevel = -1,
+                    },
+                },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Minimum Mythic+ keystone level cannot be negative.", result.Errors);
+    }
+
+    [Fact]
     public void ClearsStartMinimizedToTrayWhenWindowsStartupIsDisabled()
     {
         var result = SettingsValidator.Validate(

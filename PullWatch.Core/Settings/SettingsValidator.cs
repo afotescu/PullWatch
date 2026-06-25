@@ -42,6 +42,11 @@ public static class SettingsValidator
             );
         }
 
+        if (settings.RecordingFilters.MythicPlus.MinimumKeystoneLevel < 0)
+        {
+            errors.Add("Minimum Mythic+ keystone level cannot be negative.");
+        }
+
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",
