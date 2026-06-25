@@ -53,43 +53,6 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
     private readonly SqliteConnectionFactory _connectionFactory =
         connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
 
-    public async Task AddAsync(RecordingCatalogSave recording, CancellationToken cancellationToken)
-    {
-        Validate(recording);
-
-        await using var connection = await _connectionFactory.OpenConnectionAsync(
-            cancellationToken
-        );
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                """
-                INSERT INTO Recordings (
-                    Id,
-                    FilePath,
-                    Status,
-                    Kind,
-                    StartedAtUtc,
-                    EndedAtUtc,
-                    FileSizeBytes,
-                    FileModifiedAtUtc
-                )
-                VALUES (
-                    @Id,
-                    @FilePath,
-                    @Status,
-                    @Kind,
-                    @StartedAtUtc,
-                    @EndedAtUtc,
-                    @FileSizeBytes,
-                    @FileModifiedAtUtc
-                );
-                """,
-                ToParameters(recording),
-                cancellationToken: cancellationToken
-            )
-        );
-    }
-
     public async Task<bool> UpdateAsync(
         RecordingCatalogSave recording,
         CancellationToken cancellationToken
@@ -213,29 +176,6 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         transaction.Commit();
     }
 
-    public async Task<RaidEncounterEntry?> GetRaidEncounterByRecordingIdAsync(
-        Guid recordingId,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(
-            cancellationToken
-        );
-        var row = await connection.QuerySingleOrDefaultAsync<RaidEncounterRow>(
-            new CommandDefinition(
-                $"""
-                SELECT {RaidEncounterSelectColumns}
-                FROM RecordingRaidEncounters
-                WHERE RecordingId = @RecordingId;
-                """,
-                new { RecordingId = FormatId(recordingId) },
-                cancellationToken: cancellationToken
-            )
-        );
-
-        return row is null ? null : FromRow(row);
-    }
-
     public async Task<IReadOnlyList<RaidEncounterEntry>> ListRaidEncountersByRecordingIdsAsync(
         IReadOnlyCollection<Guid> recordingIds,
         CancellationToken cancellationToken
@@ -262,29 +202,6 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
 
         return rows.Select(FromRow).ToList();
-    }
-
-    public async Task<ChallengeModeEntry?> GetChallengeModeByRecordingIdAsync(
-        Guid recordingId,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(
-            cancellationToken
-        );
-        var row = await connection.QuerySingleOrDefaultAsync<ChallengeModeRow>(
-            new CommandDefinition(
-                $"""
-                SELECT {ChallengeModeSelectColumns}
-                FROM RecordingChallengeModes
-                WHERE RecordingId = @RecordingId;
-                """,
-                new { RecordingId = FormatId(recordingId) },
-                cancellationToken: cancellationToken
-            )
-        );
-
-        return row is null ? null : FromRow(row);
     }
 
     public async Task<IReadOnlyList<ChallengeModeEntry>> ListChallengeModesByRecordingIdsAsync(
@@ -331,31 +248,6 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                 WHERE Id = @Id;
                 """,
                 new { Id = FormatId(id) },
-                cancellationToken: cancellationToken
-            )
-        );
-
-        return row is null ? null : FromRow(row);
-    }
-
-    public async Task<RecordingCatalogEntry?> GetByFilePathAsync(
-        string filePath,
-        CancellationToken cancellationToken
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-
-        await using var connection = await _connectionFactory.OpenConnectionAsync(
-            cancellationToken
-        );
-        var row = await connection.QuerySingleOrDefaultAsync<RecordingCatalogRow>(
-            new CommandDefinition(
-                $"""
-                SELECT {SelectColumns}
-                FROM Recordings
-                WHERE FilePath = @FilePath;
-                """,
-                new { FilePath = filePath },
                 cancellationToken: cancellationToken
             )
         );

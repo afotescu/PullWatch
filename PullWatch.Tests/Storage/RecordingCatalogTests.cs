@@ -74,7 +74,8 @@ public sealed class RecordingCatalogTests
         );
 
         var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
-        var startedChallengeMode = await database.Repository.GetChallengeModeByRecordingIdAsync(
+        var startedChallengeMode = await FindChallengeModeByRecordingIdAsync(
+            database.Repository,
             id,
             cancellationToken
         );
@@ -96,7 +97,8 @@ public sealed class RecordingCatalogTests
             cancellationToken
         );
 
-        var completedChallengeMode = await database.Repository.GetChallengeModeByRecordingIdAsync(
+        var completedChallengeMode = await FindChallengeModeByRecordingIdAsync(
+            database.Repository,
             id,
             cancellationToken
         );
@@ -135,7 +137,7 @@ public sealed class RecordingCatalogTests
         await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
 
         Assert.Null(
-            await database.Repository.GetChallengeModeByRecordingIdAsync(id, cancellationToken)
+            await FindChallengeModeByRecordingIdAsync(database.Repository, id, cancellationToken)
         );
     }
 
@@ -161,7 +163,8 @@ public sealed class RecordingCatalogTests
         );
 
         var id = await catalog.BeginRecordingAsync(context, outputPath, cancellationToken);
-        var startedEncounter = await database.Repository.GetRaidEncounterByRecordingIdAsync(
+        var startedEncounter = await FindRaidEncounterByRecordingIdAsync(
+            database.Repository,
             id,
             cancellationToken
         );
@@ -183,7 +186,8 @@ public sealed class RecordingCatalogTests
             cancellationToken
         );
 
-        var completedEncounter = await database.Repository.GetRaidEncounterByRecordingIdAsync(
+        var completedEncounter = await FindRaidEncounterByRecordingIdAsync(
+            database.Repository,
             id,
             cancellationToken
         );
@@ -220,7 +224,7 @@ public sealed class RecordingCatalogTests
         await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
 
         Assert.Null(
-            await database.Repository.GetRaidEncounterByRecordingIdAsync(id, cancellationToken)
+            await FindRaidEncounterByRecordingIdAsync(database.Repository, id, cancellationToken)
         );
     }
 
@@ -245,27 +249,27 @@ public sealed class RecordingCatalogTests
         var missingOutsideId = Guid.Parse("859839D9-7035-49C8-9FBD-AE6250D70A78");
         var recordingId = Guid.Parse("2943E43C-3F48-4D90-BB8F-3B2E70DBCD34");
 
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(Guid.Parse("82031F2F-16C0-4338-B622-484B03AB6980"), catalogedPath),
             cancellationToken
         );
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(missingId, Path.Combine(directory.FullName, "missing.mp4")),
             cancellationToken
         );
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(Guid.Parse("6E4A41A4-4A20-4167-8F9E-6A31676F72D6"), subdirectoryPath),
             cancellationToken
         );
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(Guid.Parse("B58C239C-A5F6-418C-8840-62362C334F79"), outsidePath),
             cancellationToken
         );
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(missingOutsideId, Path.Combine(outsideDirectory.FullName, "missing.mp4")),
             cancellationToken
         );
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(recordingId, Path.Combine(directory.FullName, "active.mp4")) with
             {
                 Status = RecordingCatalogStatus.Recording,
@@ -282,7 +286,8 @@ public sealed class RecordingCatalogTests
         Assert.Equal(catalogedPath, recording.FilePath);
         Assert.Equal("cataloged.mp4", Path.GetFileName(recording.FilePath));
         Assert.Equal(9, recording.SizeBytes);
-        Assert.Null(await database.Repository.GetByFilePathAsync(loosePath, cancellationToken));
+        var catalogEntries = await database.Repository.ListAsync(cancellationToken);
+        Assert.DoesNotContain(catalogEntries, entry => entry.FilePath == loosePath);
         Assert.Null(await database.Repository.GetByIdAsync(missingId, cancellationToken));
         Assert.Null(await database.Repository.GetByIdAsync(missingOutsideId, cancellationToken));
         Assert.Equal(
@@ -302,7 +307,7 @@ public sealed class RecordingCatalogTests
         );
         var id = Guid.Parse("5884C48E-B6CD-4F9A-B0B5-E0572AB54A6B");
         var path = WriteFile(directory.FullName, "deleted.mp4", "deleted");
-        await database.Repository.AddAsync(CreateSave(id, path), cancellationToken);
+        await database.Repository.UpsertAsync(CreateSave(id, path), cancellationToken);
 
         await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
 
@@ -320,7 +325,7 @@ public sealed class RecordingCatalogTests
             Path.Combine(database.DirectoryPath, "Recordings")
         );
         var id = Guid.Parse("5F0CFB5C-A5A9-4652-BA4B-21956E7D8BE5");
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(id, Path.Combine(directory.FullName, "missing.mp4")),
             cancellationToken
         );
@@ -341,7 +346,7 @@ public sealed class RecordingCatalogTests
         );
         var id = Guid.Parse("59C6BFC0-372A-4776-A1A9-1F0F75EE5A5C");
         var path = WriteFile(directory.FullName, "active.mp4", "active");
-        await database.Repository.AddAsync(
+        await database.Repository.UpsertAsync(
             CreateSave(id, path) with
             {
                 Status = RecordingCatalogStatus.Recording,
@@ -355,6 +360,32 @@ public sealed class RecordingCatalogTests
 
         Assert.True(File.Exists(path));
         Assert.NotNull(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    private static async Task<ChallengeModeEntry?> FindChallengeModeByRecordingIdAsync(
+        RecordingCatalogRepository repository,
+        Guid recordingId,
+        CancellationToken cancellationToken
+    )
+    {
+        var entries = await repository.ListChallengeModesByRecordingIdsAsync(
+            [recordingId],
+            cancellationToken
+        );
+        return entries.SingleOrDefault();
+    }
+
+    private static async Task<RaidEncounterEntry?> FindRaidEncounterByRecordingIdAsync(
+        RecordingCatalogRepository repository,
+        Guid recordingId,
+        CancellationToken cancellationToken
+    )
+    {
+        var entries = await repository.ListRaidEncountersByRecordingIdsAsync(
+            [recordingId],
+            cancellationToken
+        );
+        return entries.SingleOrDefault();
     }
 
     private static RecordingCatalogSave CreateSave(Guid id, string filePath)

@@ -5,7 +5,7 @@ namespace PullWatch.Tests;
 public sealed class RecordingCatalogRepositoryTests
 {
     [Fact]
-    public async Task AddAndReadRoundTripRecordingWithUtcStorageConventions()
+    public async Task UpsertAndReadRoundTripRecordingWithUtcStorageConventions()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
@@ -26,7 +26,7 @@ public sealed class RecordingCatalogRepositoryTests
             fileModifiedAt
         );
 
-        await repository.AddAsync(recording, cancellationToken);
+        await repository.UpsertAsync(recording, cancellationToken);
 
         var loaded = await repository.GetByIdAsync(id, cancellationToken);
         var raw = await database.ReadRawRecordingAsync(id, cancellationToken);
@@ -58,7 +58,7 @@ public sealed class RecordingCatalogRepositoryTests
         var repository = new RecordingCatalogRepository(database.ConnectionFactory);
         var id = Guid.Parse("8C88B626-774C-409E-84F0-61290F1545CB");
         var recording = CreateRecording(id, @"D:\Recordings\first.mp4");
-        await repository.AddAsync(recording, cancellationToken);
+        await repository.UpsertAsync(recording, cancellationToken);
         var updated = recording with
         {
             FilePath = @"D:\Recordings\renamed.mp4",
@@ -75,7 +75,7 @@ public sealed class RecordingCatalogRepositoryTests
             },
             cancellationToken
         );
-        var loaded = await repository.GetByFilePathAsync(updated.FilePath, cancellationToken);
+        var loaded = await repository.GetByIdAsync(id, cancellationToken);
 
         Assert.True(updatedExisting);
         Assert.False(updatedMissing);
@@ -114,7 +114,7 @@ public sealed class RecordingCatalogRepositoryTests
         using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
         var repository = new RecordingCatalogRepository(database.ConnectionFactory);
         var id = Guid.Parse("9D8366BC-3501-42D7-8E45-84C65285E3F3");
-        await repository.AddAsync(
+        await repository.UpsertAsync(
             CreateRecording(id, @"D:\Recordings\deleted.mp4"),
             cancellationToken
         );
