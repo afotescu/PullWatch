@@ -134,7 +134,7 @@ public sealed class RecordingCatalogTests
         Assert.Equal(ChallengeModeOutcome.Timed, recording.ChallengeMode.Outcome);
         Assert.Equal(1850000, recording.ChallengeMode.TotalTimeMilliseconds);
 
-        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+        await catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken);
 
         Assert.Null(
             await FindChallengeModeByRecordingIdAsync(database.Repository, id, cancellationToken)
@@ -221,7 +221,7 @@ public sealed class RecordingCatalogTests
         Assert.Equal(RaidEncounterOutcome.Kill, recording.RaidEncounter.Outcome);
         Assert.Equal(466563, recording.RaidEncounter.DurationMilliseconds);
 
-        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+        await catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken);
 
         Assert.Null(
             await FindRaidEncounterByRecordingIdAsync(database.Repository, id, cancellationToken)
@@ -309,7 +309,7 @@ public sealed class RecordingCatalogTests
         var path = WriteFile(directory.FullName, "deleted.mp4", "deleted");
         await database.Repository.UpsertAsync(CreateSave(id, path), cancellationToken);
 
-        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+        await catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken);
 
         Assert.False(File.Exists(path));
         Assert.Null(await database.Repository.GetByIdAsync(id, cancellationToken));
@@ -330,9 +330,37 @@ public sealed class RecordingCatalogTests
             cancellationToken
         );
 
-        await catalog.DeleteAvailableRecordingAsync(id, cancellationToken);
+        await catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken);
 
         Assert.Null(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    [Fact]
+    public async Task DeleteAvailableRecordingRejectsPathOutsideRecordingsDirectory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var outsideDirectory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Outside")
+        );
+        var id = Guid.Parse("6F8E9651-6267-4D7A-A8E0-D3BB85DFE0FB");
+        var path = WriteFile(outsideDirectory.FullName, "outside.mp4", "outside");
+        await database.Repository.UpsertAsync(CreateSave(id, path), cancellationToken);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken)
+        );
+
+        Assert.Equal(
+            "Only recordings in the active recordings directory can be deleted.",
+            exception.Message
+        );
+        Assert.True(File.Exists(path));
+        Assert.NotNull(await database.Repository.GetByIdAsync(id, cancellationToken));
     }
 
     [Fact]
@@ -355,7 +383,7 @@ public sealed class RecordingCatalogTests
         );
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            catalog.DeleteAvailableRecordingAsync(id, cancellationToken)
+            catalog.DeleteAvailableRecordingAsync(id, directory.FullName, cancellationToken)
         );
 
         Assert.True(File.Exists(path));

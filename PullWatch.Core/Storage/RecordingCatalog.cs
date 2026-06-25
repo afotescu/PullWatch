@@ -91,8 +91,15 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         await _repository.DeleteAsync(id, cancellationToken);
     }
 
-    public async Task DeleteAvailableRecordingAsync(Guid id, CancellationToken cancellationToken)
+    public async Task DeleteAvailableRecordingAsync(
+        Guid id,
+        string recordingsDirectory,
+        CancellationToken cancellationToken
+    )
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(recordingsDirectory);
+
+        var normalizedDirectory = NormalizeDirectoryPath(recordingsDirectory);
         var entry = await _repository.GetByIdAsync(id, cancellationToken);
 
         if (entry is null)
@@ -107,12 +114,18 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
 
         var normalizedFilePath = TryNormalizeFilePath(entry.FilePath);
 
-        if (normalizedFilePath is not null)
+        if (
+            normalizedFilePath is null
+            || !IsFileInDirectory(normalizedFilePath, normalizedDirectory)
+        )
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Run(() => File.Delete(normalizedFilePath), cancellationToken);
+            throw new InvalidOperationException(
+                "Only recordings in the active recordings directory can be deleted."
+            );
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        await Task.Run(() => File.Delete(normalizedFilePath), cancellationToken);
         await _repository.DeleteAsync(id, cancellationToken);
     }
 
@@ -315,6 +328,22 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         var parentDirectory = Path.GetDirectoryName(filePath);
         return parentDirectory is not null
             && PathComparer.Equals(parentDirectory, recordingsDirectory);
+    }
+
+    private static bool IsFileInDirectory(string filePath, string recordingsDirectory)
+    {
+        var relativePath = Path.GetRelativePath(recordingsDirectory, filePath);
+        return relativePath != "."
+            && !Path.IsPathRooted(relativePath)
+            && !relativePath.Equals("..", StringComparison.Ordinal)
+            && !relativePath.StartsWith(
+                ".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal
+            )
+            && !relativePath.StartsWith(
+                ".." + Path.AltDirectorySeparatorChar,
+                StringComparison.Ordinal
+            );
     }
 
     private static string NormalizeDirectoryPath(string path)

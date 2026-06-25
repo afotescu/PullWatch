@@ -298,7 +298,20 @@ public sealed class ApplicationController : IAsyncDisposable
                 return;
             }
 
-            await _recordingCatalog.DeleteAvailableRecordingAsync(recordingId, cancellationToken);
+            var settingsService =
+                _settingsService
+                ?? throw new InvalidOperationException(
+                    "The application controller has not been started."
+                );
+            var recordingsDirectory =
+                settingsService.Current.RecordingsDirectory
+                ?? throw new InvalidOperationException("Recordings directory was not configured.");
+
+            await _recordingCatalog.DeleteAvailableRecordingAsync(
+                recordingId,
+                recordingsDirectory,
+                cancellationToken
+            );
         }
         finally
         {
