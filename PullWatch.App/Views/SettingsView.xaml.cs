@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using Input = System.Windows.Input;
 
 namespace PullWatch;
@@ -49,13 +50,17 @@ public partial class SettingsView : UserControl
 
     private void OnRecordingStorageLimitLostFocus(object sender, RoutedEventArgs eventArgs)
     {
-        if (
-            sender is System.Windows.Controls.TextBox textBox
-            && string.IsNullOrWhiteSpace(textBox.Text)
-        )
+        if (sender is not System.Windows.Controls.TextBox textBox)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(textBox.Text))
         {
             textBox.Text = "1";
         }
+
+        textBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
     }
 
     private async void OnWowLogsDirectoryLostFocus(object sender, RoutedEventArgs eventArgs)

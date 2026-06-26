@@ -101,6 +101,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (SetEditableProperty(ref field, value))
             {
                 OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+
+                if (!value)
+                {
+                    RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
+                }
+
+                NotifyRecordingStorageLimitApplyStateChanged();
             }
         }
     }
@@ -108,14 +115,48 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool CanConfigureRecordingStorageLimit =>
         IsEditingEnabled && IsRecordingStorageLimitEnabled;
 
+    public bool CanApplyRecordingStorageLimit =>
+        CanConfigureRecordingStorageLimit
+        && RecordingStorageLimitInputGigabytes != RecordingStorageLimitGigabytes;
+
     public int RecordingStorageLimitGigabytes
     {
         get;
-        set =>
-            SetEditableProperty(
-                ref field,
-                Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes)
-            );
+        set
+        {
+            var limitGigabytes = Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes);
+
+            if (SetEditableProperty(ref field, limitGigabytes))
+            {
+                NotifyRecordingStorageLimitApplyStateChanged();
+            }
+        }
+    }
+
+    public int RecordingStorageLimitInputGigabytes
+    {
+        get;
+        set
+        {
+            var limitGigabytes = Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes);
+
+            if (!SetProperty(ref field, limitGigabytes))
+            {
+                return;
+            }
+
+            if (!_isLoading)
+            {
+                ClearTransientSuccessStatus();
+
+                if (!IsEditingEnabled)
+                {
+                    ApplyLockedStatus();
+                }
+            }
+
+            NotifyRecordingStorageLimitApplyStateChanged();
+        }
     }
 
     public string RecordingStorageUsageText
@@ -346,6 +387,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 OnPropertyChanged(nameof(CanConfigureMythicPlus));
                 OnPropertyChanged(nameof(CanConfigureRaidEncounters));
                 OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+                NotifyRecordingStorageLimitApplyStateChanged();
             }
         }
     }
@@ -481,6 +523,23 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             HandleCommandFailure(exception);
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanApplyRecordingStorageLimit))]
+    private void ApplyRecordingStorageLimit()
+    {
+        if (!IsEditingEnabled)
+        {
+            ApplyLockedStatus();
+            return;
+        }
+
+        if (!CanApplyRecordingStorageLimit)
+        {
+            return;
+        }
+
+        RecordingStorageLimitGigabytes = RecordingStorageLimitInputGigabytes;
     }
 
     [RelayCommand(CanExecute = nameof(IsEditingEnabled))]
@@ -853,6 +912,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordingStorageLimitGigabytes = settings.Storage.IsLimitEnabled
                 ? BytesToGigabytes(settings.Storage.MaxUsageBytes)
                 : DefaultRecordingStorageLimitGigabytes;
+            RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
             RecordMythicPlus = settings.RecordMythicPlus;
             MinimumMythicPlusKeystoneLevel = settings
                 .RecordingFilters
@@ -1006,6 +1066,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         CommitRecordingsDirectoryCommand.NotifyCanExecuteChanged();
         PickWowLogsDirectoryCommand.NotifyCanExecuteChanged();
         PickRecordingsDirectoryCommand.NotifyCanExecuteChanged();
+        ApplyRecordingStorageLimitCommand.NotifyCanExecuteChanged();
+    }
+
+    private void NotifyRecordingStorageLimitApplyStateChanged()
+    {
+        OnPropertyChanged(nameof(CanApplyRecordingStorageLimit));
+        ApplyRecordingStorageLimitCommand.NotifyCanExecuteChanged();
     }
 
     private void MarkIncludedPathsForRetry(

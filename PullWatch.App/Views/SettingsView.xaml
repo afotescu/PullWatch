@@ -72,12 +72,17 @@
                 InputScope="Number"
                 LostFocus="OnRecordingStorageLimitLostFocus"
                 PreviewTextInput="OnNonNegativeNumberPreviewTextInput"
-                Text="{Binding RecordingStorageLimitGigabytes, UpdateSourceTrigger=PropertyChanged}"
+                Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"
               />
               <TextBlock
                 Margin="8,8,0,0"
                 Foreground="{StaticResource PrimaryTextBrush}"
                 Text="GB"
+              />
+              <Button
+                Margin="12,0,0,0"
+                Command="{Binding ApplyRecordingStorageLimitCommand}"
+                Content="Apply"
               />
             </StackPanel>
             <TextBlock

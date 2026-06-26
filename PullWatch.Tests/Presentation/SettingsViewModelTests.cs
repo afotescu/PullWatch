@@ -36,7 +36,7 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
-    public async Task RecordingStorageLimitAutosavesAndDisplaysUsage()
+    public async Task RecordingStorageLimitAppliesExplicitlyAndDisplaysUsage()
     {
         const long bytesPerGigabyte = 1024L * 1024 * 1024;
         var saves = new List<PullWatchSettings>();
@@ -60,17 +60,34 @@ public sealed class SettingsViewModelTests
 
         Assert.True(viewModel.IsRecordingStorageLimitEnabled);
         Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Equal(25, viewModel.RecordingStorageLimitInputGigabytes);
+        Assert.False(viewModel.CanApplyRecordingStorageLimit);
+        Assert.False(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
         Assert.Equal(
             "Managed recordings storage: 10 GB / 25 GB",
             viewModel.RecordingStorageUsageText
         );
 
-        viewModel.RecordingStorageLimitGigabytes = 30;
+        viewModel.RecordingStorageLimitInputGigabytes = 30;
+
+        Assert.Empty(saves);
+        Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+        Assert.True(viewModel.CanApplyRecordingStorageLimit);
+        Assert.True(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
+        Assert.Equal(
+            "Managed recordings storage: 10 GB / 25 GB",
+            viewModel.RecordingStorageUsageText
+        );
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
 
         await WaitForAsync(() =>
             saves.Any(save => save.Storage.MaxUsageBytes == 30 * bytesPerGigabyte)
         );
 
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
+        Assert.False(viewModel.CanApplyRecordingStorageLimit);
+        Assert.False(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
         Assert.Equal(
             "Managed recordings storage: 10 GB / 30 GB",
             viewModel.RecordingStorageUsageText
@@ -140,6 +157,7 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.IsEditingEnabled);
         Assert.False(viewModel.PickWowLogsDirectoryCommand.CanExecute(null));
         Assert.False(viewModel.CommitWowLogsDirectoryCommand.CanExecute(null));
+        Assert.False(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
         Assert.False(viewModel.CanConfigureMythicPlus);
         Assert.False(viewModel.CanConfigureRaidEncounters);
         Assert.False(viewModel.CanStartMinimizedToTray);
