@@ -106,6 +106,101 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task PendingRecordingStorageLimitApplyChoiceSavesAndContinuesNavigation()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var dialogs = new FakeSettingsDialogs
+        {
+            PendingRecordingStorageLimitChangeAction =
+                PendingRecordingStorageLimitChangeAction.Apply,
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            dialogs: dialogs
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 30;
+
+        var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
+
+        Assert.True(canLeaveSettings);
+        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
+        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+        await WaitForAsync(() =>
+            saves.Any(save => save.Storage.MaxUsageBytes == 30 * bytesPerGigabyte)
+        );
+    }
+
+    [Fact]
+    public void PendingRecordingStorageLimitDiscardChoiceResetsDraftAndContinuesNavigation()
+    {
+        var saves = new List<PullWatchSettings>();
+        var dialogs = new FakeSettingsDialogs
+        {
+            PendingRecordingStorageLimitChangeAction =
+                PendingRecordingStorageLimitChangeAction.Discard,
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            dialogs: dialogs
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 30;
+
+        var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
+
+        Assert.True(canLeaveSettings);
+        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
+        Assert.Empty(saves);
+        Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Equal(25, viewModel.RecordingStorageLimitInputGigabytes);
+        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
+    public void PendingRecordingStorageLimitCancelChoiceKeepsDraftAndCancelsNavigation()
+    {
+        var saves = new List<PullWatchSettings>();
+        var dialogs = new FakeSettingsDialogs
+        {
+            PendingRecordingStorageLimitChangeAction =
+                PendingRecordingStorageLimitChangeAction.Cancel,
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            dialogs: dialogs
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 30;
+
+        var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
+
+        Assert.False(canLeaveSettings);
+        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
+        Assert.Empty(saves);
+        Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Equal(30, viewModel.RecordingStorageLimitInputGigabytes);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
     public async Task RecordingFilterOptionsAutosave()
     {
         var saves = new List<PullWatchSettings>();
@@ -595,9 +690,26 @@ public sealed class SettingsViewModelTests
     {
         public string? SelectedFolder { get; init; }
 
+        public PendingRecordingStorageLimitChangeAction PendingRecordingStorageLimitChangeAction { get; init; } =
+            PendingRecordingStorageLimitChangeAction.Cancel;
+
+        public List<(
+            int CurrentGigabytes,
+            int PendingGigabytes
+        )> PendingRecordingStorageLimitChangeRequests { get; } = [];
+
         public string? PickFolder(string title, string? initialDirectory)
         {
             return SelectedFolder;
+        }
+
+        public PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
+            int currentGigabytes,
+            int pendingGigabytes
+        )
+        {
+            PendingRecordingStorageLimitChangeRequests.Add((currentGigabytes, pendingGigabytes));
+            return PendingRecordingStorageLimitChangeAction;
         }
     }
 

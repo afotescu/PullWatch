@@ -6,22 +6,26 @@ public sealed class WpfRecordingDialogs : IRecordingDialogs
 {
     public bool ConfirmPermanentDelete(RecordingListItem recording)
     {
-        var owner = Application.Current?.MainWindow;
-        var result = owner is null
-            ? MessageBox.Show(
-                "Are you sure? This action is permanent.",
+        var result = WpfConfirmationDialog.Show(
+            Application.Current?.MainWindow,
+            new ConfirmationDialogRequest(
                 "Delete recording",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning
+                [$"Delete '{recording.DisplayName}' permanently?", "This action cannot be undone."],
+                [
+                    new ConfirmationDialogButton(
+                        "Delete",
+                        ConfirmationDialogResult.Primary,
+                        ConfirmationDialogButtonKind.Destructive
+                    ),
+                    new ConfirmationDialogButton(
+                        "Cancel",
+                        ConfirmationDialogResult.Cancel,
+                        IsCancel: true
+                    ),
+                ]
             )
-            : MessageBox.Show(
-                owner,
-                "Are you sure? This action is permanent.",
-                "Delete recording",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning
-            );
+        );
 
-        return result == MessageBoxResult.Yes;
+        return result == ConfirmationDialogResult.Primary;
     }
 }

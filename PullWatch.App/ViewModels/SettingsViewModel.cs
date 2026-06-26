@@ -115,9 +115,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool CanConfigureRecordingStorageLimit =>
         IsEditingEnabled && IsRecordingStorageLimitEnabled;
 
+    public bool HasPendingRecordingStorageLimitChange =>
+        RecordingStorageLimitInputGigabytes != RecordingStorageLimitGigabytes;
+
     public bool CanApplyRecordingStorageLimit =>
-        CanConfigureRecordingStorageLimit
-        && RecordingStorageLimitInputGigabytes != RecordingStorageLimitGigabytes;
+        CanConfigureRecordingStorageLimit && HasPendingRecordingStorageLimitChange;
 
     public int RecordingStorageLimitGigabytes
     {
@@ -501,6 +503,49 @@ public sealed partial class SettingsViewModel : ObservableObject
         return CommitPathAsync(includeWowLogsDirectory: false, includeRecordingsDirectory: true);
     }
 
+    public bool ConfirmPendingRecordingStorageLimitChangeForNavigation()
+    {
+        if (!HasPendingRecordingStorageLimitChange)
+        {
+            return true;
+        }
+
+        return _dialogs.ConfirmPendingRecordingStorageLimitChange(
+            RecordingStorageLimitGigabytes,
+            RecordingStorageLimitInputGigabytes
+        ) switch
+        {
+            PendingRecordingStorageLimitChangeAction.Apply =>
+                ApplyPendingRecordingStorageLimitChange(),
+            PendingRecordingStorageLimitChangeAction.Discard =>
+                DiscardPendingRecordingStorageLimitChange(),
+            _ => false,
+        };
+    }
+
+    public bool ApplyPendingRecordingStorageLimitChange()
+    {
+        if (!HasPendingRecordingStorageLimitChange)
+        {
+            return true;
+        }
+
+        if (!IsEditingEnabled)
+        {
+            ApplyLockedStatus();
+            return false;
+        }
+
+        RecordingStorageLimitGigabytes = RecordingStorageLimitInputGigabytes;
+        return true;
+    }
+
+    public bool DiscardPendingRecordingStorageLimitChange()
+    {
+        RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
+        return true;
+    }
+
     private async Task ExecuteCommandAsync(Func<Task<bool>> command)
     {
         try
@@ -528,18 +573,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanApplyRecordingStorageLimit))]
     private void ApplyRecordingStorageLimit()
     {
-        if (!IsEditingEnabled)
-        {
-            ApplyLockedStatus();
-            return;
-        }
-
-        if (!CanApplyRecordingStorageLimit)
-        {
-            return;
-        }
-
-        RecordingStorageLimitGigabytes = RecordingStorageLimitInputGigabytes;
+        ApplyPendingRecordingStorageLimitChange();
     }
 
     [RelayCommand(CanExecute = nameof(IsEditingEnabled))]
@@ -1055,6 +1089,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             return IsWowLogsDirectoryPending
                 || IsRecordingsDirectoryPending
+                || HasPendingRecordingStorageLimitChange
                 || _hasQueuedAutosave
                 || _autosaveTask is { IsCompleted: false };
         }
@@ -1071,6 +1106,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void NotifyRecordingStorageLimitApplyStateChanged()
     {
+        OnPropertyChanged(nameof(HasPendingRecordingStorageLimitChange));
         OnPropertyChanged(nameof(CanApplyRecordingStorageLimit));
         ApplyRecordingStorageLimitCommand.NotifyCanExecuteChanged();
     }

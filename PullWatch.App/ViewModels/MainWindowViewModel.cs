@@ -12,8 +12,36 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IUiDispatcher _dispatcher;
     private readonly InMemoryLogProvider _logs;
 
-    [ObservableProperty]
-    private NavigationItemViewModel _selectedNavigationItem;
+    private NavigationItemViewModel _selectedNavigationItem = null!;
+
+    public NavigationItemViewModel SelectedNavigationItem
+    {
+        get => _selectedNavigationItem;
+        set
+        {
+            if (value is null)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (ReferenceEquals(_selectedNavigationItem, value))
+            {
+                return;
+            }
+
+            if (
+                IsLeavingSettings(value)
+                && !Settings.ConfirmPendingRecordingStorageLimitChangeForNavigation()
+            )
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            SetProperty(ref _selectedNavigationItem, value);
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSidebarExpanded))]
@@ -99,6 +127,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _controller.StatusChanged -= OnStatusChanged;
         _controller.RecordingStorageStatusChanged -= OnRecordingStorageStatusChanged;
         _logs.LogsChanged -= OnLogsChanged;
+    }
+
+    public void DiscardPendingSettingsDraftsForExit()
+    {
+        Settings.DiscardPendingRecordingStorageLimitChange();
+    }
+
+    private bool IsLeavingSettings(NavigationItemViewModel nextNavigationItem)
+    {
+        return ReferenceEquals(_selectedNavigationItem.Content, Settings)
+            && !ReferenceEquals(nextNavigationItem.Content, Settings);
     }
 
     private Task OpenRecordingsFolderAsync()

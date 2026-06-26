@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     {
         if (!_lifetime.ShouldHideOnWindowClose)
         {
+            _viewModel.DiscardPendingSettingsDraftsForExit();
             SaveWindowPlacement();
             return;
         }
