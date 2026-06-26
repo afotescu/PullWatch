@@ -194,14 +194,20 @@ public sealed class ScreenRecordingService(
         return new RecorderOptions
         {
             SourceOptions = new SourceOptions { RecordingSources = [recordingSource] },
-            AudioOptions = new AudioOptions
-            {
-                IsAudioEnabled =
-                    settings.Audio.CaptureSystemAudio || settings.Audio.CaptureMicrophone,
-                IsOutputDeviceEnabled = settings.Audio.CaptureSystemAudio,
-                IsInputDeviceEnabled = settings.Audio.CaptureMicrophone,
-            },
+            AudioOptions = CreateAudioOptions(settings),
             VideoEncoderOptions = CreateVideoEncoderOptions(settings, captureSize),
+        };
+    }
+
+    internal static AudioOptions CreateAudioOptions(PullWatchSettings settings)
+    {
+        return new AudioOptions
+        {
+            IsAudioEnabled = settings.Audio.CaptureSystemAudio || settings.Audio.CaptureMicrophone,
+            IsOutputDeviceEnabled = settings.Audio.CaptureSystemAudio,
+            IsInputDeviceEnabled = settings.Audio.CaptureMicrophone,
+            Bitrate = AudioBitrate.bitrate_96kbps,
+            Channels = AudioChannels.Stereo,
         };
     }
 
@@ -212,16 +218,18 @@ public sealed class ScreenRecordingService(
     {
         return new VideoEncoderOptions
         {
-            Encoder = new H264VideoEncoder { BitrateMode = H264BitrateControlMode.CBR },
-            Bitrate = VideoBitrateCalculator.CalculateBitrate(
-                captureSize,
-                settings.Video.FrameRate,
-                settings.Video.Quality
-            ),
+            Encoder = new H264VideoEncoder
+            {
+                BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
+            },
+            Bitrate = 14_000_000,
             Framerate = settings.Video.FrameRate,
             IsHardwareEncodingEnabled = true,
-            IsFixedFramerate = true,
+            IsLowLatencyEnabled = false,
+            IsFixedFramerate = false,
             IsThrottlingDisabled = false,
+            IsFragmentedMp4Enabled = true,
+            IsMp4FastStartEnabled = false,
         };
     }
 
@@ -251,13 +259,19 @@ public sealed class ScreenRecordingService(
         VideoEncoderOptions options
     )
     {
+        var bitrateMode = options.Encoder is H264VideoEncoder encoder
+            ? encoder.BitrateMode.ToString()
+            : "unknown";
+
         logger.LogInformation(
-            "Video encoder settings: H.264 CBR, {VideoQuality}, {CaptureWidth}x{CaptureHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target",
+            "Video encoder settings: H.264 {BitrateMode}, {VideoQuality}, {CaptureWidth}x{CaptureHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target, fragmented MP4 {FragmentedMp4Enabled}",
+            bitrateMode,
             settings.Video.Quality,
             captureSize.Width,
             captureSize.Height,
             options.Framerate,
-            VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate)
+            VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
+            options.IsFragmentedMp4Enabled
         );
     }
 

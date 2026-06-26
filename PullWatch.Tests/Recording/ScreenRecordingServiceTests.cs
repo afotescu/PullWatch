@@ -5,7 +5,7 @@ namespace PullWatch.Tests;
 public sealed class ScreenRecordingServiceTests
 {
     [Fact]
-    public void VideoEncoderOptionsUseCalculatedBitrate()
+    public void VideoEncoderOptionsUseCalculatedBitrateAndLongRecordingDefaults()
     {
         var settings = new PullWatchSettings
         {
@@ -22,10 +22,32 @@ public sealed class ScreenRecordingServiceTests
         );
         var encoder = Assert.IsType<H264VideoEncoder>(options.Encoder);
 
-        Assert.Equal(24_000_000, options.Bitrate);
+        Assert.Equal(14_000_000, options.Bitrate);
         Assert.Equal(VideoFrameRates.High, options.Framerate);
-        Assert.True(options.IsFixedFramerate);
-        Assert.Equal(H264BitrateControlMode.CBR, encoder.BitrateMode);
+        Assert.True(options.IsHardwareEncodingEnabled);
+        Assert.False(options.IsLowLatencyEnabled);
+        Assert.False(options.IsFixedFramerate);
+        Assert.False(options.IsThrottlingDisabled);
+        Assert.True(options.IsFragmentedMp4Enabled);
+        Assert.False(options.IsMp4FastStartEnabled);
+        Assert.Equal(H264BitrateControlMode.UnconstrainedVBR, encoder.BitrateMode);
+    }
+
+    [Fact]
+    public void AudioOptionsUseExplicitStereoDefaults()
+    {
+        var settings = new PullWatchSettings
+        {
+            Audio = new AudioSettings { CaptureSystemAudio = true },
+        };
+
+        var options = ScreenRecordingService.CreateAudioOptions(settings);
+
+        Assert.True(options.IsAudioEnabled);
+        Assert.True(options.IsOutputDeviceEnabled);
+        Assert.False(options.IsInputDeviceEnabled);
+        Assert.Equal(AudioBitrate.bitrate_96kbps, options.Bitrate);
+        Assert.Equal(AudioChannels.Stereo, options.Channels);
     }
 
     [Fact]

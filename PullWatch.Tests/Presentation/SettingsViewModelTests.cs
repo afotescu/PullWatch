@@ -381,12 +381,12 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Contains("910 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("530 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
 
-        Assert.Contains("460 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("270 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("30 FPS", viewModel.EstimatedRecordingSize);
     }
 

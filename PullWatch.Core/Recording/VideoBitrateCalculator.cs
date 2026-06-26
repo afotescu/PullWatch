@@ -67,9 +67,9 @@ public static class VideoBitrateCalculator
     {
         return quality switch
         {
-            VideoQuality.Compact => 0.072,
-            VideoQuality.Balanced => 0.108,
-            VideoQuality.High => 0.162,
+            VideoQuality.Compact => 0.036,
+            VideoQuality.Balanced => 0.063,
+            VideoQuality.High => 0.108,
             _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
         };
     }
