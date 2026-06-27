@@ -121,7 +121,7 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
-    public async Task CallerCancellationDoesNotCancelAcceptedStart()
+    public async Task CallerCancellationAfterAcceptedStartStillWaitsForResult()
     {
         var pendingStart = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -133,12 +133,35 @@ public sealed class RecordingCoordinatorTests
         var startTask = coordinator.StartManualAsync(cancellation.Token);
         await WaitForStateAsync(coordinator, RecordingCoordinatorState.Starting);
         cancellation.Cancel();
+        Assert.False(startTask.IsCompleted);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => startTask);
         pendingStart.SetResult();
-        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Recording);
 
+        Assert.Equal(RecordingCommandResult.Started, await startTask);
         Assert.Equal(RecordingOwner.Manual, coordinator.Status.Owner);
+    }
+
+    [Fact]
+    public async Task CallerCancellationAfterAcceptedStopStillWaitsForResult()
+    {
+        var pendingStop = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var recorder = new FakeRecordingService { PendingStop = pendingStop };
+        await using var coordinator = CreateCoordinator(recorder);
+        using var cancellation = new CancellationTokenSource();
+
+        await coordinator.StartManualAsync(CancellationToken.None);
+        var stopTask = coordinator.StopManualAsync(cancellation.Token);
+        await WaitForStateAsync(coordinator, RecordingCoordinatorState.Stopping);
+        cancellation.Cancel();
+        Assert.False(stopTask.IsCompleted);
+
+        pendingStop.SetResult();
+
+        Assert.Equal(RecordingCommandResult.Stopped, await stopTask);
+        Assert.Equal(RecordingCoordinatorState.Idle, coordinator.Status.State);
+        Assert.Equal(["start", "stop"], recorder.Calls);
     }
 
     [Fact]

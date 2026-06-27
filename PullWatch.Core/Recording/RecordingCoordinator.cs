@@ -76,14 +76,13 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return StartCoreAsync(context).WaitAsync(cancellationToken);
+        return StartCoreAsync(context, cancellationToken);
     }
 
     public Task<RecordingCommandResult> StartManualAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StartCoreAsync(new ManualRecordingContext(DateTimeOffset.Now))
-            .WaitAsync(cancellationToken);
+        return StartCoreAsync(new ManualRecordingContext(DateTimeOffset.Now), cancellationToken);
     }
 
     public Task<RecordingCommandResult> StopAutomaticAsync(
@@ -111,21 +110,25 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(owner, identity, activityEnd, StopRequestKind.Automatic)
-            .WaitAsync(cancellationToken);
+        return StopCoreAsync(
+            owner,
+            identity,
+            activityEnd,
+            StopRequestKind.Automatic,
+            cancellationToken
+        );
     }
 
     public Task<RecordingCommandResult> StopManualAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(null, null, null, StopRequestKind.Manual).WaitAsync(cancellationToken);
+        return StopCoreAsync(null, null, null, StopRequestKind.Manual, cancellationToken);
     }
 
     public Task<RecordingCommandResult> ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return StopCoreAsync(null, null, null, StopRequestKind.Shutdown)
-            .WaitAsync(cancellationToken);
+        return StopCoreAsync(null, null, null, StopRequestKind.Shutdown, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -178,12 +181,16 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         }
     }
 
-    private async Task<RecordingCommandResult> StartCoreAsync(RecordingContext context)
+    private async Task<RecordingCommandResult> StartCoreAsync(
+        RecordingContext context,
+        CancellationToken cancellationToken
+    )
     {
-        await _operationLock.WaitAsync(CancellationToken.None);
+        await _operationLock.WaitAsync(cancellationToken);
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var owner = GetOwner(context);
             var identity = GetIdentity(context);
             var status = Status;
@@ -320,13 +327,15 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         RecordingOwner? requestedOwner,
         string? requestedIdentity,
         RecordingActivityEnd? activityEnd,
-        StopRequestKind requestKind
+        StopRequestKind requestKind,
+        CancellationToken cancellationToken
     )
     {
-        await _operationLock.WaitAsync(CancellationToken.None);
+        await _operationLock.WaitAsync(cancellationToken);
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var status = Status;
             var suppressionEndMatched =
                 requestKind == StopRequestKind.Automatic
@@ -580,7 +589,13 @@ public sealed class RecordingCoordinator : IAsyncDisposable
 
     private async Task StopAfterCaptureTargetExitAsync()
     {
-        var result = await StopCoreAsync(null, null, null, StopRequestKind.Shutdown);
+        var result = await StopCoreAsync(
+            null,
+            null,
+            null,
+            StopRequestKind.Shutdown,
+            CancellationToken.None
+        );
 
         if (result is RecordingCommandResult.Failed or RecordingCommandResult.TimedOut)
         {
