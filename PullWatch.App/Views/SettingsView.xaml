@@ -276,6 +276,13 @@
                 SelectedValue="{Binding SelectedFrameRate, Mode=TwoWay}"
                 SelectedValuePath="Value"
               />
+              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Output scaling" />
+              <ComboBox
+                DisplayMemberPath="Label"
+                ItemsSource="{Binding VideoScalingOptions}"
+                SelectedValue="{Binding SelectedVideoScaling, Mode=TwoWay}"
+                SelectedValuePath="Value"
+              />
               <TextBlock
                 Margin="0,10,0,0"
                 Style="{StaticResource SecondaryTextStyle}"

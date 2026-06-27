@@ -17,21 +17,25 @@ public sealed class SettingsViewModelTests
 
         Assert.Equal(VideoQuality.Balanced, viewModel.SelectedVideoQuality);
         Assert.Equal(VideoFrameRates.High, viewModel.SelectedFrameRate);
+        Assert.Equal(VideoScaling.Optimized, viewModel.SelectedVideoScaling);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedVideoQuality = VideoQuality.High;
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
+        viewModel.SelectedVideoScaling = VideoScaling.Original;
 
         await WaitForAsync(() =>
             saves.Any(save =>
                 save.Video.Quality == VideoQuality.High
                 && save.Video.FrameRate == VideoFrameRates.Standard
+                && save.Video.Scaling == VideoScaling.Original
             )
         );
 
         var saved = saves.Last();
         Assert.Equal(VideoQuality.High, saved.Video.Quality);
         Assert.Equal(VideoFrameRates.Standard, saved.Video.FrameRate);
+        Assert.Equal(VideoScaling.Original, saved.Video.Scaling);
         Assert.Equal("Settings saved.", viewModel.SaveMessage);
     }
 
@@ -405,19 +409,30 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Contains("530 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("310 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
+        Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
         Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
+        Assert.Contains("WoW window size", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
 
-        Assert.Contains("270 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("160 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("30 FPS", viewModel.EstimatedRecordingSize);
+
+        viewModel.SelectedVideoScaling = VideoScaling.Original;
+
+        Assert.Contains("270 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
     }
 
     [Fact]
     public void OptionLabelsRemainStable()
     {
-        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            estimateCaptureSize: new VideoCaptureSize(2560, 1440)
+        );
 
         Assert.Equal(
             ["Compact", "Balanced", "High"],
@@ -426,6 +441,38 @@ public sealed class SettingsViewModelTests
         Assert.Equal(
             ["30 FPS", "60 FPS"],
             viewModel.FrameRateOptions.Select(option => option.Label)
+        );
+        Assert.Equal(
+            [
+                "Original (2560x1440 estimated)",
+                "1080p (1920x1080 estimated)",
+                "720p (1280x720 estimated)",
+            ],
+            viewModel.VideoScalingOptions.Select(option => option.Label)
+        );
+    }
+
+    [Fact]
+    public void SelectedNoOpScalingOptionRemainsVisible()
+    {
+        var settings = new PullWatchSettings
+        {
+            RecordingsDirectory = Path.Combine(Path.GetTempPath(), "PullWatchViewModelTests"),
+            Video = new VideoSettings { Scaling = VideoScaling.Target1440p },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            estimateCaptureSize: new VideoCaptureSize(2560, 1440)
+        );
+
+        Assert.Equal(
+            [
+                "Original (2560x1440 estimated)",
+                "1440p (2560x1440 estimated)",
+                "1080p (1920x1080 estimated)",
+                "720p (1280x720 estimated)",
+            ],
+            viewModel.VideoScalingOptions.Select(option => option.Label)
         );
     }
 

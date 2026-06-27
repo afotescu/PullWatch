@@ -45,6 +45,18 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsEntireSettingsObjectWhenVideoScalingIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Video = new VideoSettings { Scaling = (VideoScaling)999 } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Video scaling must be Original, 1440p, 1080p, or 720p.", result.Errors);
+    }
+
+    [Fact]
     public void RejectsEntireSettingsObjectWhenSelectedRecordingCategoryIsInvalid()
     {
         var result = SettingsValidator.Validate(

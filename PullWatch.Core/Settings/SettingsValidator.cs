@@ -35,6 +35,11 @@ public static class SettingsValidator
             errors.Add("Video quality must be Compact, Balanced, or High.");
         }
 
+        if (!Enum.IsDefined(settings.Video.Scaling))
+        {
+            errors.Add("Video scaling must be Original, 1440p, 1080p, or 720p.");
+        }
+
         if (!Enum.IsDefined(settings.Ui.SelectedRecordingCategory))
         {
             errors.Add(

@@ -5,10 +5,10 @@ namespace PullWatch.Tests;
 public sealed class ScreenRecordingServiceTests
 {
     [Theory]
-    [InlineData(VideoQuality.Compact, 8_000_000)]
-    [InlineData(VideoQuality.Balanced, 14_000_000)]
-    [InlineData(VideoQuality.High, 24_000_000)]
-    public void VideoEncoderOptionsUseCalculatedBitrateAndLongRecordingDefaults(
+    [InlineData(VideoQuality.Compact, 4_000_000)]
+    [InlineData(VideoQuality.Balanced, 8_000_000)]
+    [InlineData(VideoQuality.High, 14_000_000)]
+    public void VideoEncoderOptionsUseOptimizedOutputSizeAndLongRecordingDefaults(
         VideoQuality quality,
         int expectedBitrate
     )
@@ -37,8 +37,10 @@ public sealed class ScreenRecordingServiceTests
 
     [Theory]
     [InlineData(1920, 1080, 8_000_000)]
-    [InlineData(2560, 1440, 14_000_000)]
-    public void VideoEncoderOptionsUseCaptureSizeWhenCalculatingBitrate(
+    [InlineData(2560, 1440, 8_000_000)]
+    [InlineData(3440, 1440, 10_000_000)]
+    [InlineData(3840, 2160, 8_000_000)]
+    public void VideoEncoderOptionsUseOutputSizeWhenCalculatingBitrate(
         int width,
         int height,
         int expectedBitrate
@@ -59,6 +61,72 @@ public sealed class ScreenRecordingServiceTests
         );
 
         Assert.Equal(expectedBitrate, options.Bitrate);
+    }
+
+    [Theory]
+    [InlineData(VideoScaling.Target1440p, 14_000_000)]
+    [InlineData(VideoScaling.Target720p, 4_000_000)]
+    public void VideoEncoderOptionsUseSelectedScalingTarget(
+        VideoScaling scaling,
+        int expectedBitrate
+    )
+    {
+        var settings = new PullWatchSettings
+        {
+            Video = new VideoSettings
+            {
+                Quality = VideoQuality.Balanced,
+                FrameRate = VideoFrameRates.High,
+                Scaling = scaling,
+            },
+        };
+
+        var options = ScreenRecordingService.CreateVideoEncoderOptions(
+            settings,
+            new VideoCaptureSize(3840, 2160)
+        );
+
+        Assert.Equal(expectedBitrate, options.Bitrate);
+    }
+
+    [Fact]
+    public void OriginalScalingKeepsCaptureSizeWhenCalculatingBitrate()
+    {
+        var settings = new PullWatchSettings
+        {
+            Video = new VideoSettings
+            {
+                Quality = VideoQuality.Balanced,
+                FrameRate = VideoFrameRates.High,
+                Scaling = VideoScaling.Original,
+            },
+        };
+
+        var options = ScreenRecordingService.CreateVideoEncoderOptions(
+            settings,
+            new VideoCaptureSize(2560, 1440)
+        );
+
+        Assert.Equal(14_000_000, options.Bitrate);
+    }
+
+    [Fact]
+    public void CreateOptionsAppliesOptimizedOutputSizeToRecorderAndSource()
+    {
+        var source = new WindowRecordingSource(nint.Zero);
+
+        var options = ScreenRecordingService.CreateOptions(
+            source,
+            new PullWatchSettings(),
+            new VideoCaptureSize(2560, 1440)
+        );
+
+        Assert.Equal(1920, options.OutputOptions.OutputFrameSize.Width);
+        Assert.Equal(1080, options.OutputOptions.OutputFrameSize.Height);
+        Assert.Equal(StretchMode.Fill, options.OutputOptions.Stretch);
+        Assert.Equal(1920, source.OutputSize.Width);
+        Assert.Equal(1080, source.OutputSize.Height);
+        Assert.Equal(StretchMode.Fill, source.Stretch);
     }
 
     [Fact]

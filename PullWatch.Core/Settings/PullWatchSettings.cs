@@ -57,6 +57,7 @@ public sealed record VideoSettings
 {
     public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
     public int FrameRate { get; init; } = VideoFrameRates.High;
+    public VideoScaling Scaling { get; init; } = VideoScaling.Optimized;
     public bool CaptureCursor { get; init; } = true;
     public bool ShowCaptureBorder { get; init; }
 }
@@ -66,6 +67,14 @@ public enum VideoQuality
     Compact,
     Balanced,
     High,
+}
+
+public enum VideoScaling
+{
+    Optimized,
+    Original,
+    Target1440p,
+    Target720p,
 }
 
 public static class VideoFrameRates

@@ -45,7 +45,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         _saveSettings = saveSettings;
         _dialogs = dialogs;
-        _getEstimateCaptureSize = getEstimateCaptureSize ?? GetPrimaryDisplayCaptureSize;
+        _getEstimateCaptureSize = getEstimateCaptureSize ?? GetEstimatedCaptureSize;
         _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
         _recordingStorageStatus = initialRecordingStorageStatus ?? RecordingStorageStatus.Initial;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
@@ -76,6 +76,34 @@ public sealed partial class SettingsViewModel : ObservableObject
         VideoFrameRates
             .Supported.Select(frameRate => new FrameRateOption(frameRate, $"{frameRate} FPS"))
             .ToArray();
+
+    public IReadOnlyList<VideoScalingOption> VideoScalingOptions
+    {
+        get
+        {
+            var captureSize = _getEstimateCaptureSize();
+            var candidates = new (VideoScaling Value, string Label, VideoCaptureSize OutputSize)[]
+            {
+                (
+                    VideoScaling.Original,
+                    FormatScalingOptionLabel("Original", captureSize),
+                    captureSize
+                ),
+                CreateScalingOption("1440p", VideoScaling.Target1440p, captureSize),
+                CreateScalingOption("1080p", VideoScaling.Optimized, captureSize),
+                CreateScalingOption("720p", VideoScaling.Target720p, captureSize),
+            };
+
+            return candidates
+                .Where(option =>
+                    option.Value == VideoScaling.Original
+                    || option.Value == SelectedVideoScaling
+                    || option.OutputSize != captureSize
+                )
+                .Select(option => new VideoScalingOption(option.Value, option.Label))
+                .ToArray();
+        }
+    }
 
     public string? WowLogsDirectory
     {
@@ -349,6 +377,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => SetEditableProperty(ref field, value);
     }
 
+    public VideoScaling SelectedVideoScaling
+    {
+        get;
+        set => SetEditableProperty(ref field, value);
+    }
+
     public bool CaptureSystemAudio
     {
         get;
@@ -436,8 +470,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         get
         {
             var captureSize = _getEstimateCaptureSize();
-            var bitrate = VideoBitrateCalculator.CalculateBitrate(
+            var outputSize = VideoOutputSizeCalculator.CalculateOutputSize(
                 captureSize,
+                SelectedVideoScaling
+            );
+            var bitrate = VideoBitrateCalculator.CalculateBitrate(
+                outputSize,
                 SelectedFrameRate,
                 SelectedVideoQuality
             );
@@ -454,9 +492,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             return string.Join(
                 " ",
                 $"About {FormatFileSize(megabytes)} per 5 minutes",
-                $"at full-screen {captureSize.Width}x{captureSize.Height},",
+                FormatEstimateSizeText(captureSize, outputSize),
                 $"{SelectedFrameRate} FPS",
-                $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target)."
+                $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target).",
+                "Actual recording uses the WoW window size."
             );
         }
     }
@@ -672,6 +711,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             {
                 Quality = SelectedVideoQuality,
                 FrameRate = SelectedFrameRate,
+                Scaling = SelectedVideoScaling,
                 CaptureCursor = CaptureCursor,
                 ShowCaptureBorder = ShowCaptureBorder,
             },
@@ -918,6 +958,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;
             SelectedVideoQuality = settings.Video.Quality;
             SelectedFrameRate = settings.Video.FrameRate;
+            SelectedVideoScaling = settings.Video.Scaling;
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
             CaptureMicrophone = settings.Audio.CaptureMicrophone;
             CaptureCursor = settings.Video.CaptureCursor;
@@ -966,6 +1007,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (ShouldRefreshEstimate(propertyName))
         {
             OnPropertyChanged(nameof(EstimatedRecordingSize));
+        }
+
+        if (propertyName == nameof(SelectedVideoScaling))
+        {
+            OnPropertyChanged(nameof(VideoScalingOptions));
         }
 
         if (ShouldRefreshRecordingStorageUsage(propertyName))
@@ -1175,6 +1221,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         return propertyName
             is nameof(SelectedVideoQuality)
                 or nameof(SelectedFrameRate)
+                or nameof(SelectedVideoScaling)
                 or nameof(CaptureSystemAudio)
                 or nameof(CaptureMicrophone);
     }
@@ -1251,6 +1298,46 @@ public sealed partial class SettingsViewModel : ObservableObject
         return $"{roundedMegabytes} MB";
     }
 
+    private static string FormatEstimateSizeText(
+        VideoCaptureSize captureSize,
+        VideoCaptureSize outputSize
+    )
+    {
+        if (outputSize == captureSize)
+        {
+            return $"at estimated {FormatCaptureSize(captureSize)} capture,";
+        }
+
+        return $"at estimated {FormatCaptureSize(outputSize)} output from {FormatCaptureSize(captureSize)} capture,";
+    }
+
+    private static (
+        VideoScaling Value,
+        string Label,
+        VideoCaptureSize OutputSize
+    ) CreateScalingOption(string label, VideoScaling scaling, VideoCaptureSize captureSize)
+    {
+        var outputSize = VideoOutputSizeCalculator.CalculateOutputSize(captureSize, scaling);
+        return (scaling, FormatScalingOptionLabel(label, outputSize), outputSize);
+    }
+
+    private static string FormatScalingOptionLabel(string label, VideoCaptureSize size)
+    {
+        return $"{label} ({FormatCaptureSize(size)} estimated)";
+    }
+
+    private static string FormatCaptureSize(VideoCaptureSize size)
+    {
+        return $"{size.Width}x{size.Height}";
+    }
+
+    private static VideoCaptureSize GetEstimatedCaptureSize()
+    {
+        return WowWindowCaptureSizeDetector.TryGetCurrentCaptureSize(out var wowCaptureSize)
+            ? wowCaptureSize
+            : GetPrimaryDisplayCaptureSize();
+    }
+
     private static VideoCaptureSize GetPrimaryDisplayCaptureSize()
     {
         var bounds = Forms.Screen.PrimaryScreen?.Bounds;
@@ -1283,3 +1370,5 @@ public sealed partial class SettingsViewModel : ObservableObject
 public sealed record VideoQualityOption(VideoQuality Value, string Label);
 
 public sealed record FrameRateOption(int Value, string Label);
+
+public sealed record VideoScalingOption(VideoScaling Value, string Label);

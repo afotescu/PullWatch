@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Extensions.Logging;
 using ScreenRecorderLib;
@@ -11,8 +10,6 @@ public sealed class ScreenRecordingService(
     ILogger<ScreenRecordingService> logger
 ) : IRecordingService
 {
-    private const string WowProcessName = "Wow";
-
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private Recorder? _recorder;
     private Process? _wowProcess;
@@ -64,7 +61,13 @@ public sealed class ScreenRecordingService(
 
             var recorderCreationTimestamp = Stopwatch.GetTimestamp();
             var recorderOptions = CreateOptions(recordingSource, settings, captureSize);
-            LogVideoEncoderOptions(settings, captureSize, recorderOptions.VideoEncoderOptions);
+            var outputSize = CalculateOutputSize(settings, captureSize);
+            LogVideoEncoderOptions(
+                settings,
+                captureSize,
+                outputSize,
+                recorderOptions.VideoEncoderOptions
+            );
             var recorder = Recorder.CreateRecorder(recorderOptions);
             logger.LogInformation(
                 "Created screen recorder in {ElapsedMilliseconds:F1} ms",
@@ -185,18 +188,63 @@ public sealed class ScreenRecordingService(
         }
     }
 
-    private static RecorderOptions CreateOptions(
+    internal static RecorderOptions CreateOptions(
         RecordingSourceBase recordingSource,
         PullWatchSettings settings,
         VideoCaptureSize captureSize
     )
     {
+        var outputSize = CalculateOutputSize(settings, captureSize);
+
         return new RecorderOptions
         {
-            SourceOptions = new SourceOptions { RecordingSources = [recordingSource] },
+            SourceOptions = CreateSourceOptions(recordingSource, outputSize, captureSize),
             AudioOptions = CreateAudioOptions(settings),
+            OutputOptions = CreateOutputOptions(outputSize, captureSize),
             VideoEncoderOptions = CreateVideoEncoderOptions(settings, captureSize),
         };
+    }
+
+    private static OutputOptions CreateOutputOptions(
+        VideoCaptureSize outputSize,
+        VideoCaptureSize captureSize
+    )
+    {
+        var options = new OutputOptions();
+
+        if (outputSize == captureSize)
+        {
+            return options;
+        }
+
+        options.OutputFrameSize = new ScreenSize(outputSize.Width, outputSize.Height);
+        options.Stretch = StretchMode.Fill;
+        return options;
+    }
+
+    private static SourceOptions CreateSourceOptions(
+        RecordingSourceBase recordingSource,
+        VideoCaptureSize outputSize,
+        VideoCaptureSize captureSize
+    )
+    {
+        ConfigureOutputScaling(recordingSource, outputSize, captureSize);
+        return new SourceOptions { RecordingSources = [recordingSource] };
+    }
+
+    private static void ConfigureOutputScaling(
+        RecordingSourceBase recordingSource,
+        VideoCaptureSize outputSize,
+        VideoCaptureSize captureSize
+    )
+    {
+        if (outputSize == captureSize)
+        {
+            return;
+        }
+
+        recordingSource.OutputSize = new ScreenSize(outputSize.Width, outputSize.Height);
+        recordingSource.Stretch = StretchMode.Fill;
     }
 
     internal static AudioOptions CreateAudioOptions(PullWatchSettings settings)
@@ -216,6 +264,8 @@ public sealed class ScreenRecordingService(
         VideoCaptureSize captureSize
     )
     {
+        var outputSize = CalculateOutputSize(settings, captureSize);
+
         return new VideoEncoderOptions
         {
             Encoder = new H264VideoEncoder
@@ -223,7 +273,7 @@ public sealed class ScreenRecordingService(
                 BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
             },
             Bitrate = VideoBitrateCalculator.CalculateBitrate(
-                captureSize,
+                outputSize,
                 settings.Video.FrameRate,
                 settings.Video.Quality
             ),
@@ -235,6 +285,16 @@ public sealed class ScreenRecordingService(
             IsFragmentedMp4Enabled = true,
             IsMp4FastStartEnabled = false,
         };
+    }
+
+    internal static VideoCaptureSize CalculateOutputSize(
+        PullWatchSettings settings,
+        VideoCaptureSize captureSize
+    )
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return VideoOutputSizeCalculator.CalculateOutputSize(captureSize, settings.Video.Scaling);
     }
 
     private static (
@@ -253,13 +313,14 @@ public sealed class ScreenRecordingService(
                 IsCursorCaptureEnabled = settings.Video.CaptureCursor,
             },
             "World of Warcraft window",
-            GetWindowCaptureSize(windowHandle)
+            WowWindowCaptureSizeDetector.GetCaptureSize(windowHandle)
         );
     }
 
     private void LogVideoEncoderOptions(
         PullWatchSettings settings,
         VideoCaptureSize captureSize,
+        VideoCaptureSize outputSize,
         VideoEncoderOptions options
     )
     {
@@ -268,11 +329,14 @@ public sealed class ScreenRecordingService(
             : "unknown";
 
         logger.LogInformation(
-            "Video encoder settings: H.264 {BitrateMode}, {VideoQuality}, {CaptureWidth}x{CaptureHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target, fragmented MP4 {FragmentedMp4Enabled}",
+            "Video encoder settings: H.264 {BitrateMode}, {VideoQuality}, {VideoScaling}, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target, fragmented MP4 {FragmentedMp4Enabled}",
             bitrateMode,
             settings.Video.Quality,
+            settings.Video.Scaling,
             captureSize.Width,
             captureSize.Height,
+            outputSize.Width,
+            outputSize.Height,
             options.Framerate,
             VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
             options.IsFragmentedMp4Enabled
@@ -281,23 +345,9 @@ public sealed class ScreenRecordingService(
 
     private static (Process Process, nint WindowHandle) FindWowProcess()
     {
-        foreach (var process in Process.GetProcessesByName(WowProcessName))
+        if (WowWindowCaptureSizeDetector.TryFindWowWindow(out var process, out var windowHandle))
         {
-            try
-            {
-                var windowHandle = process.MainWindowHandle;
-
-                if (windowHandle != nint.Zero)
-                {
-                    return (process, windowHandle);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                // The process exited while it was being inspected.
-            }
-
-            process.Dispose();
+            return (process, windowHandle);
         }
 
         throw new CaptureTargetUnavailableException(
@@ -509,64 +559,4 @@ public sealed class ScreenRecordingService(
     {
         return new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     }
-
-    private static VideoCaptureSize GetWindowCaptureSize(nint windowHandle)
-    {
-        if (TryGetPositiveSize(GetClientRect, windowHandle, out var clientSize))
-        {
-            return clientSize;
-        }
-
-        if (TryGetPositiveSize(GetWindowRect, windowHandle, out var windowSize))
-        {
-            return windowSize;
-        }
-
-        throw new CaptureTargetUnavailableException(
-            "Could not determine the World of Warcraft window size."
-        );
-    }
-
-    private static bool TryGetPositiveSize(
-        TryGetNativeRect tryGetRect,
-        nint windowHandle,
-        out VideoCaptureSize captureSize
-    )
-    {
-        if (tryGetRect(windowHandle, out var rect))
-        {
-            var width = rect.Right - rect.Left;
-            var height = rect.Bottom - rect.Top;
-
-            if (width > 0 && height > 0)
-            {
-                captureSize = new VideoCaptureSize(width, height);
-                return true;
-            }
-        }
-
-        captureSize = default;
-        return false;
-    }
-
-    private delegate bool TryGetNativeRect(nint windowHandle, out NativeRect rect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetClientRect(nint hWnd, out NativeRect rect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint hWnd, out NativeRect rect);
-
-    [StructLayout(LayoutKind.Sequential)]
-#pragma warning disable CS0649
-    private struct NativeRect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-#pragma warning restore CS0649
 }

@@ -40,6 +40,7 @@ public sealed class SettingsStoreTests
             {
                 Quality = VideoQuality.High,
                 FrameRate = VideoFrameRates.Standard,
+                Scaling = VideoScaling.Original,
                 CaptureCursor = false,
                 ShowCaptureBorder = true,
             },
