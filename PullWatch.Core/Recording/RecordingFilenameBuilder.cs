@@ -30,7 +30,7 @@ internal static class RecordingFilenameBuilder
             ChallengeRecordingContext challenge =>
                 $"{timestamp}_mythic-plus_{Sanitize(challenge.DungeonName)}_{challenge.KeystoneLevel}",
             EncounterRecordingContext encounter =>
-                $"{timestamp}_raid_{Sanitize(encounter.EncounterName)}_{GetDifficultyName(encounter.DifficultyId)}",
+                $"{timestamp}_raid_{Sanitize(encounter.EncounterName)}_{WowRaidDifficultyFormatter.FormatFilenameToken(encounter.DifficultyId)}",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(context),
                 context,
@@ -63,19 +63,5 @@ internal static class RecordingFilenameBuilder
         }
 
         return result.Length > 0 ? result.ToString() : "unknown";
-    }
-
-    private static string GetDifficultyName(int difficultyId)
-    {
-        // Blizzard Difficulty DB2 IDs: https://wago.tools/db2/Difficulty
-        return difficultyId switch
-        {
-            WowDifficultyIds.NormalRaid => "normal",
-            WowDifficultyIds.HeroicRaid => "heroic",
-            WowDifficultyIds.MythicRaid => "mythic",
-            WowDifficultyIds.RaidFinder => "raid-finder",
-            WowDifficultyIds.FlexibleMythicRaid => "mythic",
-            _ => $"difficulty-{difficultyId}",
-        };
     }
 }

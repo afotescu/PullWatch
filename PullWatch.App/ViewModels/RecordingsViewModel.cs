@@ -11,11 +11,6 @@ public sealed partial class RecordingsViewModel : ObservableObject
         "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
     private const string MissingMetadataValue = "-";
-    private const int NormalRaidDifficultyId = 14;
-    private const int HeroicRaidDifficultyId = 15;
-    private const int MythicRaidDifficultyId = 16;
-    private const int RaidFinderDifficultyId = 17;
-    private const int FlexibleMythicRaidDifficultyId = 233;
     private const double PullNumberColumnWidthValue = 64;
     private const double ContextColumnWidthValue = 92;
     private const double ResultColumnWidthValue = 92;
@@ -534,15 +529,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
-            return raidEncounter.DifficultyId switch
-            {
-                NormalRaidDifficultyId => "Normal",
-                HeroicRaidDifficultyId => "Heroic",
-                MythicRaidDifficultyId => "Mythic",
-                RaidFinderDifficultyId => "Raid Finder",
-                FlexibleMythicRaidDifficultyId => "Mythic",
-                _ => $"Difficulty {raidEncounter.DifficultyId}",
-            };
+            return WowRaidDifficultyFormatter.FormatDisplayName(raidEncounter.DifficultyId);
         }
 
         return file.ChallengeMode is { } challengeMode ? $"+{challengeMode.KeystoneLevel}"
