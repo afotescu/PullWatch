@@ -29,12 +29,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly object _autosaveSync = new();
     private PullWatchSettings _savedSettings;
     private Task? _autosaveTask;
-    private bool _hasQueuedAutosave;
-    private bool _queuedSaveIncludesWowLogsDirectory;
-    private bool _queuedSaveIncludesRecordingsDirectory;
-    private bool _retryWowLogsDirectoryOnNextAutosave;
-    private bool _retryRecordingsDirectoryOnNextAutosave;
-    private bool _retryStartupShortcutOnNextAutosave;
+    private PendingSettingsSave? _pendingAutosave;
+    private PendingSettingsSave _retryOnNextAutosave = PendingSettingsSave.None;
     private RecordingStorageStatus _recordingStorageStatus = RecordingStorageStatus.Initial;
     private bool _isLoading;
 
@@ -640,21 +636,20 @@ public sealed partial class SettingsViewModel : ObservableObject
             return true;
         }
 
-        await QueueAutosaveAsync(includeWowLogsDirectory, includeRecordingsDirectory);
+        await QueueAutosaveAsync(
+            CreatePendingSettingsSave(includeWowLogsDirectory, includeRecordingsDirectory)
+        );
         return !IsSaveError;
     }
 
-    private PullWatchSettings BuildSettings(
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory
-    )
+    private PullWatchSettings BuildSettings(PendingSettingsSave pendingSave)
     {
         return _savedSettings with
         {
-            WowLogsDirectory = includeWowLogsDirectory
+            WowLogsDirectory = Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
                 ? NormalizeEmpty(WowLogsDirectory)
                 : _savedSettings.WowLogsDirectory,
-            RecordingsDirectory = includeRecordingsDirectory
+            RecordingsDirectory = Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
                 ? NormalizeEmpty(RecordingsDirectory)
                 : _savedSettings.RecordingsDirectory,
             RecordMythicPlus = RecordMythicPlus,
@@ -699,15 +694,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         };
     }
 
-    private Task QueueAutosaveAsync(bool includeWowLogsDirectory, bool includeRecordingsDirectory)
+    private Task QueueAutosaveAsync(PendingSettingsSave requestedSave)
     {
         lock (_autosaveSync)
         {
-            _hasQueuedAutosave = true;
-            _queuedSaveIncludesWowLogsDirectory |=
-                includeWowLogsDirectory || _retryWowLogsDirectoryOnNextAutosave;
-            _queuedSaveIncludesRecordingsDirectory |=
-                includeRecordingsDirectory || _retryRecordingsDirectoryOnNextAutosave;
+            _pendingAutosave = (_pendingAutosave ?? PendingSettingsSave.None) | requestedSave;
             _autosaveTask ??= ProcessAutosavesAsync();
 
             if (_autosaveTask.IsCompleted)
@@ -725,32 +716,25 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         while (true)
         {
-            bool includeWowLogsDirectory;
-            bool includeRecordingsDirectory;
+            PendingSettingsSave pendingSave;
 
             lock (_autosaveSync)
             {
-                if (!_hasQueuedAutosave)
+                if (_pendingAutosave is null)
                 {
                     _autosaveTask = null;
                     return;
                 }
 
-                _hasQueuedAutosave = false;
-                includeWowLogsDirectory = _queuedSaveIncludesWowLogsDirectory;
-                includeRecordingsDirectory = _queuedSaveIncludesRecordingsDirectory;
-                _queuedSaveIncludesWowLogsDirectory = false;
-                _queuedSaveIncludesRecordingsDirectory = false;
+                pendingSave = _pendingAutosave.Value | _retryOnNextAutosave;
+                _pendingAutosave = null;
             }
 
-            await RunAutosaveAsync(includeWowLogsDirectory, includeRecordingsDirectory);
+            await RunAutosaveAsync(pendingSave);
         }
     }
 
-    private async Task RunAutosaveAsync(
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory
-    )
+    private async Task RunAutosaveAsync(PendingSettingsSave pendingSave)
     {
         if (!IsEditingEnabled)
         {
@@ -758,9 +742,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        var settings = BuildSettings(includeWowLogsDirectory, includeRecordingsDirectory);
+        var settings = BuildSettings(pendingSave);
         var shouldSyncStartupShortcut =
-            _retryStartupShortcutOnNextAutosave || settings.Startup != _savedSettings.Startup;
+            Includes(pendingSave, PendingSettingsSave.StartupShortcut)
+            || settings.Startup != _savedSettings.Startup;
 
         try
         {
@@ -768,16 +753,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             if (!result.IsSaved)
             {
-                ApplySaveFailure(
-                    result,
-                    includeWowLogsDirectory,
-                    includeRecordingsDirectory,
-                    settings
-                );
+                ApplySaveFailure(result, pendingSave, settings);
                 return;
             }
 
-            ApplySaveSuccess(result, includeWowLogsDirectory, includeRecordingsDirectory);
+            ApplySaveSuccess(result, pendingSave);
 
             if (shouldSyncStartupShortcut)
             {
@@ -786,42 +766,33 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            HandleAutosaveException(
-                exception,
-                includeWowLogsDirectory,
-                includeRecordingsDirectory,
-                settings
-            );
+            HandleAutosaveException(exception, pendingSave, settings);
         }
     }
 
-    private void ApplySaveSuccess(
-        SettingsSaveResult result,
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory
-    )
+    private void ApplySaveSuccess(SettingsSaveResult result, PendingSettingsSave pendingSave)
     {
         var savedSettings = result.Settings!;
         _savedSettings = savedSettings;
 
         if (
-            includeWowLogsDirectory
+            Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
             && PathsMatchSaved(WowLogsDirectory, savedSettings.WowLogsDirectory)
         )
         {
             IsWowLogsDirectoryPending = false;
-            _retryWowLogsDirectoryOnNextAutosave = false;
+            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
             SetLoadedValue(() => WowLogsDirectory = savedSettings.WowLogsDirectory);
             WowLogsDirectoryError = null;
         }
 
         if (
-            includeRecordingsDirectory
+            Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
             && PathsMatchSaved(RecordingsDirectory, savedSettings.RecordingsDirectory)
         )
         {
             IsRecordingsDirectoryPending = false;
-            _retryRecordingsDirectoryOnNextAutosave = false;
+            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
             SetLoadedValue(() => RecordingsDirectory = savedSettings.RecordingsDirectory);
             RecordingsDirectoryError = null;
         }
@@ -851,7 +822,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         try
         {
             await _windowsStartupShortcut.SyncAsync(settings);
-            _retryStartupShortcutOnNextAutosave = false;
+            SetRetryOnNextAutosave(PendingSettingsSave.StartupShortcut, shouldRetry: false);
         }
         catch (Exception exception)
             when (exception
@@ -861,7 +832,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                         or COMException
             )
         {
-            _retryStartupShortcutOnNextAutosave = true;
+            SetRetryOnNextAutosave(PendingSettingsSave.StartupShortcut, shouldRetry: true);
             IsSaveError = true;
             SaveMessage =
                 $"Settings saved, but Windows startup could not be updated: {exception.Message}";
@@ -870,8 +841,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void ApplySaveFailure(
         SettingsSaveResult result,
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory,
+        PendingSettingsSave pendingSave,
         PullWatchSettings attemptedSettings
     )
     {
@@ -885,16 +855,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         if (result.Status == SettingsSaveStatus.PersistenceFailed)
         {
-            MarkIncludedPathsForRetry(
-                includeWowLogsDirectory,
-                includeRecordingsDirectory,
-                attemptedSettings
-            );
+            MarkIncludedPathsForRetry(pendingSave, attemptedSettings);
             SaveMessage = $"Could not save settings: {result.Error?.Message}";
             return;
         }
 
-        ClearIncludedPathRetries(includeWowLogsDirectory, includeRecordingsDirectory);
+        ClearIncludedPathRetries(pendingSave);
         SaveMessage = FixHighlightedSettingsMessage;
 
         foreach (var error in result.ValidationErrors)
@@ -912,27 +878,17 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void HandleCommandFailure(Exception exception)
     {
-        HandleAutosaveException(
-            exception,
-            includeWowLogsDirectory: false,
-            includeRecordingsDirectory: false,
-            attemptedSettings: null
-        );
+        HandleAutosaveException(exception, PendingSettingsSave.None, attemptedSettings: null);
     }
 
     private void HandleAutosaveException(
         Exception exception,
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory,
+        PendingSettingsSave pendingSave,
         PullWatchSettings? attemptedSettings
     )
     {
         IsSaveError = true;
-        MarkIncludedPathsForRetry(
-            includeWowLogsDirectory,
-            includeRecordingsDirectory,
-            attemptedSettings
-        );
+        MarkIncludedPathsForRetry(pendingSave, attemptedSettings);
         SaveMessage = $"Could not save settings: {exception.Message}";
     }
 
@@ -1003,10 +959,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
             else
             {
-                _ = QueueAutosaveAsync(
-                    includeWowLogsDirectory: false,
-                    includeRecordingsDirectory: false
-                );
+                _ = QueueAutosaveAsync(PendingSettingsSave.None);
             }
         }
 
@@ -1028,14 +981,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (propertyName == nameof(WowLogsDirectory))
         {
             IsWowLogsDirectoryPending = true;
-            _retryWowLogsDirectoryOnNextAutosave = false;
+            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
             return true;
         }
 
         if (propertyName == nameof(RecordingsDirectory))
         {
             IsRecordingsDirectoryPending = true;
-            _retryRecordingsDirectoryOnNextAutosave = false;
+            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
             return true;
         }
 
@@ -1090,7 +1043,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return IsWowLogsDirectoryPending
                 || IsRecordingsDirectoryPending
                 || HasPendingRecordingStorageLimitChange
-                || _hasQueuedAutosave
+                || _pendingAutosave is not null
                 || _autosaveTask is { IsCompleted: false };
         }
     }
@@ -1112,46 +1065,74 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private void MarkIncludedPathsForRetry(
-        bool includeWowLogsDirectory,
-        bool includeRecordingsDirectory,
+        PendingSettingsSave pendingSave,
         PullWatchSettings? attemptedSettings
     )
     {
         if (
-            includeWowLogsDirectory
+            Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
             && IsWowLogsDirectoryPending
             && attemptedSettings is not null
             && PathsMatchSaved(WowLogsDirectory, attemptedSettings.WowLogsDirectory)
         )
         {
-            _retryWowLogsDirectoryOnNextAutosave = true;
+            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: true);
         }
 
         if (
-            includeRecordingsDirectory
+            Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
             && IsRecordingsDirectoryPending
             && attemptedSettings is not null
             && PathsMatchSaved(RecordingsDirectory, attemptedSettings.RecordingsDirectory)
         )
         {
-            _retryRecordingsDirectoryOnNextAutosave = true;
+            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: true);
         }
     }
 
-    private void ClearIncludedPathRetries(
+    private void ClearIncludedPathRetries(PendingSettingsSave pendingSave)
+    {
+        if (Includes(pendingSave, PendingSettingsSave.WowLogsDirectory))
+        {
+            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
+        }
+
+        if (Includes(pendingSave, PendingSettingsSave.RecordingsDirectory))
+        {
+            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
+        }
+    }
+
+    private void SetRetryOnNextAutosave(PendingSettingsSave scope, bool shouldRetry)
+    {
+        _retryOnNextAutosave = shouldRetry
+            ? _retryOnNextAutosave | scope
+            : _retryOnNextAutosave & ~scope;
+    }
+
+    private static PendingSettingsSave CreatePendingSettingsSave(
         bool includeWowLogsDirectory,
         bool includeRecordingsDirectory
     )
     {
+        var pendingSave = PendingSettingsSave.None;
+
         if (includeWowLogsDirectory)
         {
-            _retryWowLogsDirectoryOnNextAutosave = false;
+            pendingSave |= PendingSettingsSave.WowLogsDirectory;
         }
 
         if (includeRecordingsDirectory)
         {
-            _retryRecordingsDirectoryOnNextAutosave = false;
+            pendingSave |= PendingSettingsSave.RecordingsDirectory;
         }
+
+        return pendingSave;
+    }
+
+    private static bool Includes(PendingSettingsSave pendingSave, PendingSettingsSave scope)
+    {
+        return (pendingSave & scope) != PendingSettingsSave.None;
     }
 
     private static string? NormalizeEmpty(string? value)
@@ -1277,6 +1258,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         return bounds is { Width: > 0, Height: > 0 }
             ? new VideoCaptureSize(bounds.Value.Width, bounds.Value.Height)
             : FallbackEstimateCaptureSize;
+    }
+
+    [Flags]
+    private enum PendingSettingsSave
+    {
+        None = 0,
+        WowLogsDirectory = 1,
+        RecordingsDirectory = 2,
+        StartupShortcut = 4,
     }
 
     private sealed class NoOpWindowsStartupShortcut : IWindowsStartupShortcut

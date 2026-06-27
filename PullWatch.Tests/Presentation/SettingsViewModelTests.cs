@@ -350,6 +350,30 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task StartupShortcutFailureRetriesOnNextAutosave()
+    {
+        var shortcut = new FakeWindowsStartupShortcut
+        {
+            Exception = new IOException("startup folder denied"),
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            windowsStartupShortcut: shortcut
+        );
+
+        viewModel.StartWithWindows = true;
+        await WaitForAsync(() => shortcut.SyncedSettings.Count == 1 && viewModel.IsSaveError);
+
+        shortcut.Exception = null;
+        viewModel.CaptureCursor = false;
+
+        await WaitForAsync(() => shortcut.SyncedSettings.Count == 2 && !viewModel.IsSaveError);
+
+        Assert.True(shortcut.SyncedSettings.Last().StartWithWindows);
+        Assert.Equal("Settings saved.", viewModel.SaveMessage);
+    }
+
+    [Fact]
     public async Task ValidationFailureKeepsEditsAndShowsSaveError()
     {
         var viewModel = CreateViewModel(
@@ -717,7 +741,7 @@ public sealed class SettingsViewModelTests
     {
         public List<StartupSettings> SyncedSettings { get; } = [];
 
-        public Exception? Exception { get; init; }
+        public Exception? Exception { get; set; }
 
         public Task SyncAsync(StartupSettings settings)
         {
