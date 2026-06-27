@@ -222,7 +222,11 @@ public sealed class ScreenRecordingService(
             {
                 BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
             },
-            Bitrate = 14_000_000,
+            Bitrate = VideoBitrateCalculator.CalculateBitrate(
+                captureSize,
+                settings.Video.FrameRate,
+                settings.Video.Quality
+            ),
             Framerate = settings.Video.FrameRate,
             IsHardwareEncodingEnabled = true,
             IsLowLatencyEnabled = false,

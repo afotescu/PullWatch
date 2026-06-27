@@ -4,8 +4,45 @@ namespace PullWatch.Tests;
 
 public sealed class ScreenRecordingServiceTests
 {
-    [Fact]
-    public void VideoEncoderOptionsUseCalculatedBitrateAndLongRecordingDefaults()
+    [Theory]
+    [InlineData(VideoQuality.Compact, 8_000_000)]
+    [InlineData(VideoQuality.Balanced, 14_000_000)]
+    [InlineData(VideoQuality.High, 24_000_000)]
+    public void VideoEncoderOptionsUseCalculatedBitrateAndLongRecordingDefaults(
+        VideoQuality quality,
+        int expectedBitrate
+    )
+    {
+        var settings = new PullWatchSettings
+        {
+            Video = new VideoSettings { Quality = quality, FrameRate = VideoFrameRates.High },
+        };
+
+        var options = ScreenRecordingService.CreateVideoEncoderOptions(
+            settings,
+            new VideoCaptureSize(2560, 1440)
+        );
+        var encoder = Assert.IsType<H264VideoEncoder>(options.Encoder);
+
+        Assert.Equal(expectedBitrate, options.Bitrate);
+        Assert.Equal(VideoFrameRates.High, options.Framerate);
+        Assert.True(options.IsHardwareEncodingEnabled);
+        Assert.False(options.IsLowLatencyEnabled);
+        Assert.False(options.IsFixedFramerate);
+        Assert.False(options.IsThrottlingDisabled);
+        Assert.True(options.IsFragmentedMp4Enabled);
+        Assert.False(options.IsMp4FastStartEnabled);
+        Assert.Equal(H264BitrateControlMode.UnconstrainedVBR, encoder.BitrateMode);
+    }
+
+    [Theory]
+    [InlineData(1920, 1080, 8_000_000)]
+    [InlineData(2560, 1440, 14_000_000)]
+    public void VideoEncoderOptionsUseCaptureSizeWhenCalculatingBitrate(
+        int width,
+        int height,
+        int expectedBitrate
+    )
     {
         var settings = new PullWatchSettings
         {
@@ -18,19 +55,10 @@ public sealed class ScreenRecordingServiceTests
 
         var options = ScreenRecordingService.CreateVideoEncoderOptions(
             settings,
-            new VideoCaptureSize(2560, 1440)
+            new VideoCaptureSize(width, height)
         );
-        var encoder = Assert.IsType<H264VideoEncoder>(options.Encoder);
 
-        Assert.Equal(14_000_000, options.Bitrate);
-        Assert.Equal(VideoFrameRates.High, options.Framerate);
-        Assert.True(options.IsHardwareEncodingEnabled);
-        Assert.False(options.IsLowLatencyEnabled);
-        Assert.False(options.IsFixedFramerate);
-        Assert.False(options.IsThrottlingDisabled);
-        Assert.True(options.IsFragmentedMp4Enabled);
-        Assert.False(options.IsMp4FastStartEnabled);
-        Assert.Equal(H264BitrateControlMode.UnconstrainedVBR, encoder.BitrateMode);
+        Assert.Equal(expectedBitrate, options.Bitrate);
     }
 
     [Fact]
