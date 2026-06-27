@@ -118,7 +118,7 @@ quality presets instead of exposing raw bitrate controls:
 - `High` for cleaner motion and larger files
 
 Frame rate is selectable as `30 FPS` or `60 FPS`. The settings screen shows an
-approximate recording size per 5 minutes based on the primary display; actual
+approximate recording size per minute based on the primary display; actual
 recordings use the captured WoW window size.
 
 Automatic recording starts only when PullWatch can see the WoW window and read

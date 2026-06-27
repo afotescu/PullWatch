@@ -5,9 +5,9 @@ namespace PullWatch.Tests;
 public sealed class ScreenRecordingServiceTests
 {
     [Theory]
-    [InlineData(VideoQuality.Compact, 4_000_000)]
-    [InlineData(VideoQuality.Balanced, 8_000_000)]
-    [InlineData(VideoQuality.High, 14_000_000)]
+    [InlineData(VideoQuality.Compact, 9_000_000)]
+    [InlineData(VideoQuality.Balanced, 12_000_000)]
+    [InlineData(VideoQuality.High, 18_000_000)]
     public void VideoEncoderOptionsUseOptimizedOutputSizeAndLongRecordingDefaults(
         VideoQuality quality,
         int expectedBitrate
@@ -36,10 +36,10 @@ public sealed class ScreenRecordingServiceTests
     }
 
     [Theory]
-    [InlineData(1920, 1080, 8_000_000)]
-    [InlineData(2560, 1440, 8_000_000)]
-    [InlineData(3440, 1440, 10_000_000)]
-    [InlineData(3840, 2160, 8_000_000)]
+    [InlineData(1920, 1080, 12_000_000)]
+    [InlineData(2560, 1440, 12_000_000)]
+    [InlineData(3440, 1440, 16_000_000)]
+    [InlineData(3840, 2160, 12_000_000)]
     public void VideoEncoderOptionsUseOutputSizeWhenCalculatingBitrate(
         int width,
         int height,
@@ -64,8 +64,8 @@ public sealed class ScreenRecordingServiceTests
     }
 
     [Theory]
-    [InlineData(VideoScaling.Target1440p, 14_000_000)]
-    [InlineData(VideoScaling.Target720p, 4_000_000)]
+    [InlineData(VideoScaling.Target1440p, 22_000_000)]
+    [InlineData(VideoScaling.Target720p, 6_000_000)]
     public void VideoEncoderOptionsUseSelectedScalingTarget(
         VideoScaling scaling,
         int expectedBitrate
@@ -107,7 +107,7 @@ public sealed class ScreenRecordingServiceTests
             new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Equal(14_000_000, options.Bitrate);
+        Assert.Equal(22_000_000, options.Bitrate);
     }
 
     [Fact]

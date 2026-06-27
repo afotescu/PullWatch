@@ -20,7 +20,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const int MaximumRecordingStorageLimitGigabytes = 10_000;
 
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
-    private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
 
     private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
     private readonly ISettingsDialogs _dialogs;
@@ -491,7 +491,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             return string.Join(
                 " ",
-                $"About {FormatFileSize(megabytes)} per 5 minutes",
+                $"About {FormatFileSize(megabytes)} per minute",
                 FormatEstimateSizeText(captureSize, outputSize),
                 $"{SelectedFrameRate} FPS",
                 $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target).",

@@ -409,20 +409,21 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Contains("310 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
         Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
+        Assert.Contains("per minute", viewModel.EstimatedRecordingSize);
         Assert.Contains("WoW window size", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
 
-        Assert.Contains("160 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("50 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("30 FPS", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedVideoScaling = VideoScaling.Original;
 
-        Assert.Contains("270 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
     }
 

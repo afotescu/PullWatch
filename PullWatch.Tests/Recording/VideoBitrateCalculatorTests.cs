@@ -3,17 +3,17 @@ namespace PullWatch.Tests;
 public sealed class VideoBitrateCalculatorTests
 {
     [Theory]
-    [InlineData(1920, 1080, 60, VideoQuality.Compact, 4)]
-    [InlineData(1920, 1080, 60, VideoQuality.Balanced, 8)]
-    [InlineData(1920, 1080, 60, VideoQuality.High, 14)]
-    [InlineData(2560, 1440, 60, VideoQuality.Compact, 8)]
-    [InlineData(2560, 1440, 60, VideoQuality.Balanced, 14)]
-    [InlineData(2560, 1440, 60, VideoQuality.High, 24)]
-    [InlineData(3840, 2160, 60, VideoQuality.Compact, 18)]
-    [InlineData(3840, 2160, 60, VideoQuality.Balanced, 30)]
-    [InlineData(3840, 2160, 60, VideoQuality.High, 55)]
-    [InlineData(2560, 1440, 30, VideoQuality.Balanced, 7)]
-    [InlineData(3440, 1440, 60, VideoQuality.Balanced, 18)]
+    [InlineData(1920, 1080, 60, VideoQuality.Compact, 9)]
+    [InlineData(1920, 1080, 60, VideoQuality.Balanced, 12)]
+    [InlineData(1920, 1080, 60, VideoQuality.High, 18)]
+    [InlineData(2560, 1440, 60, VideoQuality.Compact, 16)]
+    [InlineData(2560, 1440, 60, VideoQuality.Balanced, 22)]
+    [InlineData(2560, 1440, 60, VideoQuality.High, 30)]
+    [InlineData(3840, 2160, 60, VideoQuality.Compact, 35)]
+    [InlineData(3840, 2160, 60, VideoQuality.Balanced, 50)]
+    [InlineData(3840, 2160, 60, VideoQuality.High, 70)]
+    [InlineData(2560, 1440, 30, VideoQuality.Balanced, 12)]
+    [InlineData(3440, 1440, 60, VideoQuality.Balanced, 30)]
     public void CalculatesFriendlyBitrateFromCaptureSize(
         int width,
         int height,
