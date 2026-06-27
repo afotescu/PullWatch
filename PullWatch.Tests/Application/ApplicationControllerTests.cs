@@ -40,13 +40,7 @@ public sealed class ApplicationControllerTests
             () => null,
             () => CreateTestDefaults(directory.Path)
         );
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ => new FakeRecordingService(),
-            _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance,
-            UnavailableWowMonitor
-        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper).Build();
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
 
@@ -74,13 +68,7 @@ public sealed class ApplicationControllerTests
             NullLogger<SettingsBootstrapper>.Instance,
             () => null
         );
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ => new FakeRecordingService(),
-            _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance,
-            UnavailableWowMonitor
-        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper).Build();
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
 
@@ -109,18 +97,14 @@ public sealed class ApplicationControllerTests
             () => null
         );
         var initializer = new FakeRecordingStorageInitializer();
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ =>
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper)
+            .WithRecordingServiceFactory(_ =>
             {
                 Assert.Equal(1, initializer.Calls);
                 return new FakeRecordingService();
-            },
-            _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance,
-            UnavailableWowMonitor,
-            storageInitializer: initializer
-        );
+            })
+            .WithStorageInitializer(initializer)
+            .Build();
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
 
@@ -147,17 +131,14 @@ public sealed class ApplicationControllerTests
         var recorders = new List<FakeRecordingService>();
         var failure = new InvalidOperationException("Monitor failed.");
         var wowMonitorCalls = 0;
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ =>
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper)
+            .WithRecordingServiceFactory(_ =>
             {
                 var recorder = new FakeRecordingService();
                 recorders.Add(recorder);
                 return recorder;
-            },
-            _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance,
-            () =>
+            })
+            .WithWowProcessMonitorFactory(() =>
             {
                 wowMonitorCalls++;
 
@@ -167,8 +148,8 @@ public sealed class ApplicationControllerTests
                 }
 
                 return new FakeWowProcessMonitor();
-            }
-        );
+            })
+            .Build();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             controller.StartAsync(TestContext.Current.CancellationToken)
@@ -241,17 +222,17 @@ public sealed class ApplicationControllerTests
         var monitor = new FakeCombatLogMonitor();
         var recorder = new FakeRecordingService();
         Func<bool>? canDiscoverCombatLog = null;
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ => recorder,
-            (_, discoveryGate) =>
-            {
-                canDiscoverCombatLog = discoveryGate;
-                return monitor;
-            },
-            NullLoggerFactory.Instance,
-            AvailableWowMonitor
-        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper)
+            .WithRecordingService(recorder)
+            .WithCombatLogDiscoveryFactory(
+                (_, discoveryGate) =>
+                {
+                    canDiscoverCombatLog = discoveryGate;
+                    return monitor;
+                }
+            )
+            .WithWowProcessMonitorFactory(AvailableWowMonitor)
+            .Build();
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
         await WaitForAsync(() => monitor.Started && canDiscoverCombatLog is not null);
@@ -395,17 +376,16 @@ public sealed class ApplicationControllerTests
                 null
             )
         );
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ => new FakeRecordingService(),
-            (_, processStartedAtUtc, _) =>
-            {
-                processStartedAtUtcValues.Add(processStartedAtUtc);
-                return monitors.Dequeue();
-            },
-            NullLoggerFactory.Instance,
-            () => wowMonitor
-        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper)
+            .WithCombatLogSessionFactory(
+                (_, processStartedAtUtc, _) =>
+                {
+                    processStartedAtUtcValues.Add(processStartedAtUtc);
+                    return monitors.Dequeue();
+                }
+            )
+            .WithWowProcessMonitor(wowMonitor)
+            .Build();
 
         await controller.StartAsync(TestContext.Current.CancellationToken);
         await WaitForAsync(() => firstMonitor.Started);
@@ -661,13 +641,7 @@ public sealed class ApplicationControllerTests
             NullLogger<SettingsBootstrapper>.Instance,
             () => null
         );
-        await using var controller = new ApplicationController(
-            bootstrapper,
-            _ => new FakeRecordingService(),
-            _ => new FakeCombatLogMonitor(),
-            NullLoggerFactory.Instance,
-            UnavailableWowMonitor
-        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper).Build();
         await controller.StartAsync(TestContext.Current.CancellationToken);
         await controller.StartManualRecordingAsync(TestContext.Current.CancellationToken);
         var ui = new UiSettings
@@ -764,13 +738,11 @@ public sealed class ApplicationControllerTests
             NullLogger<SettingsBootstrapper>.Instance,
             () => null
         );
-        var controller = new ApplicationController(
-            bootstrapper,
-            _ => recorder,
-            createMonitor,
-            NullLoggerFactory.Instance,
-            createWowProcessMonitor
-        );
+        var controller = new ApplicationControllerTestBuilder(bootstrapper)
+            .WithRecordingService(recorder)
+            .WithCombatLogMonitorFactory(createMonitor)
+            .WithWowProcessMonitorFactory(createWowProcessMonitor)
+            .Build();
         await controller.StartAsync(TestContext.Current.CancellationToken);
         return controller;
     }

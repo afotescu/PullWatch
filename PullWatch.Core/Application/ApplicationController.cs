@@ -89,49 +89,6 @@ public sealed class ApplicationController : IAsyncDisposable
     internal ApplicationController(
         SettingsBootstrapper settingsBootstrapper,
         Func<SettingsProvider, IRecordingService> createRecordingService,
-        Func<string, ICombatLogMonitor> createCombatLogMonitor,
-        ILoggerFactory loggerFactory,
-        Func<IWowProcessMonitor> createWowProcessMonitor,
-        IRecordingStorageInitializer? storageInitializer = null,
-        RecordingCatalog? recordingCatalog = null,
-        RecordingStorageRetentionService? recordingStorageRetention = null
-    )
-        : this(
-            settingsBootstrapper,
-            createRecordingService,
-            (logsDirectory, _, _) => createCombatLogMonitor(logsDirectory),
-            loggerFactory,
-            createWowProcessMonitor,
-            storageInitializer,
-            recordingCatalog,
-            recordingStorageRetention
-        ) { }
-
-    internal ApplicationController(
-        SettingsBootstrapper settingsBootstrapper,
-        Func<SettingsProvider, IRecordingService> createRecordingService,
-        Func<string, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
-        ILoggerFactory loggerFactory,
-        Func<IWowProcessMonitor> createWowProcessMonitor,
-        IRecordingStorageInitializer? storageInitializer = null,
-        RecordingCatalog? recordingCatalog = null,
-        RecordingStorageRetentionService? recordingStorageRetention = null
-    )
-        : this(
-            settingsBootstrapper,
-            createRecordingService,
-            (logsDirectory, _, canDiscoverCombatLog) =>
-                createCombatLogMonitor(logsDirectory, canDiscoverCombatLog),
-            loggerFactory,
-            createWowProcessMonitor,
-            storageInitializer,
-            recordingCatalog,
-            recordingStorageRetention
-        ) { }
-
-    internal ApplicationController(
-        SettingsBootstrapper settingsBootstrapper,
-        Func<SettingsProvider, IRecordingService> createRecordingService,
         Func<string, DateTimeOffset?, Func<bool>, ICombatLogMonitor> createCombatLogMonitor,
         ILoggerFactory loggerFactory,
         Func<IWowProcessMonitor> createWowProcessMonitor,
