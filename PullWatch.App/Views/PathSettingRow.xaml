@@ -1,0 +1,29 @@
+<UserControl
+  x:Class="PullWatch.PathSettingRow"
+  x:Name="Root"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+>
+  <StackPanel>
+    <TextBlock Style="{StaticResource InputLabelStyle}" Text="{Binding Label, ElementName=Root}" />
+    <DockPanel>
+      <Button
+        x:Name="BrowseButton"
+        DockPanel.Dock="Right"
+        Margin="10,0,0,0"
+        Command="{Binding BrowseCommand, ElementName=Root}"
+        Content="{Binding BrowseButtonText, ElementName=Root}"
+      />
+      <TextBox
+        x:Name="PathTextBox"
+        KeyDown="OnPathTextBoxKeyDown"
+        LostFocus="OnPathTextBoxLostFocus"
+        Text="{Binding Text, ElementName=Root, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+      />
+    </DockPanel>
+    <TextBlock
+      Style="{StaticResource ValidationTextStyle}"
+      Text="{Binding Error, ElementName=Root}"
+    />
+  </StackPanel>
+</UserControl>

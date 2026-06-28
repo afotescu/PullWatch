@@ -2,6 +2,7 @@
   x:Class="PullWatch.DiagnosticsView"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:local="clr-namespace:PullWatch"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <Grid Margin="36">
@@ -20,43 +21,37 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate>
-            <Border Margin="9,0" Style="{StaticResource CardStyle}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding Title}" />
-                <ItemsControl ItemsSource="{Binding Rows}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <StackPanel>
-                        <TextBlock
-                          Style="{StaticResource DiagnosticLabelStyle}"
-                          Text="{Binding Label}"
-                        />
-                        <TextBlock Text="{Binding Value}" TextWrapping="Wrap" />
-                      </StackPanel>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-            </Border>
+            <local:SectionCard Margin="9,0" Header="{Binding Title}">
+              <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel>
+                      <TextBlock
+                        Style="{StaticResource DiagnosticLabelStyle}"
+                        Text="{Binding Label}"
+                      />
+                      <TextBlock Text="{Binding Value}" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </local:SectionCard>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <Border Grid.Row="1" Margin="0,0,0,18" Style="{StaticResource CardStyle}">
-        <StackPanel>
-          <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Recent application logs" />
-          <TextBox
-            Margin="0,15,0,0"
-            Height="320"
-            FontFamily="Consolas"
-            IsReadOnly="True"
-            Text="{Binding RecentLogs, Mode=OneWay}"
-            TextWrapping="NoWrap"
-            VerticalScrollBarVisibility="Auto"
-            HorizontalScrollBarVisibility="Auto"
-          />
-        </StackPanel>
-      </Border>
+      <local:SectionCard Grid.Row="1" Header="Recent application logs">
+        <TextBox
+          Margin="0,15,0,0"
+          Height="320"
+          FontFamily="Consolas"
+          IsReadOnly="True"
+          Text="{Binding RecentLogs, Mode=OneWay}"
+          TextWrapping="NoWrap"
+          VerticalScrollBarVisibility="Auto"
+          HorizontalScrollBarVisibility="Auto"
+        />
+      </local:SectionCard>
 
       <TextBlock
         Grid.Row="2"

@@ -71,6 +71,24 @@
     <Setter Property="Padding" Value="22" />
   </Style>
 
+  <Style TargetType="{x:Type local:SectionCard}">
+    <Setter Property="Margin" Value="0,0,0,18" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type local:SectionCard}">
+          <Border Style="{StaticResource CardStyle}">
+            <StackPanel>
+              <TextBlock
+                Style="{StaticResource SectionTitleStyle}"
+                Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+              />
+              <ContentPresenter ContentSource="Content" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
   <ControlTemplate x:Key="ButtonTemplate" TargetType="Button">
     <Grid x:Name="ButtonRoot">
       <Border

@@ -34,70 +34,6 @@
         </DataTrigger>
       </Style.Triggers>
     </Style>
-
-    <Style x:Key="StatusIndicatorStyle" TargetType="Ellipse">
-      <Setter Property="Fill" Value="{StaticResource StatusNeutralBrush}" />
-      <Setter Property="Opacity" Value="1" />
-      <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-      <Setter Property="RenderTransform">
-        <Setter.Value>
-          <ScaleTransform ScaleX="1" ScaleY="1" />
-        </Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Active}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Ready}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.ManualOnly}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}"
-        >
-          <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding IsRecordingPulseActive}" Value="True">
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-          <DataTrigger.EnterActions>
-            <BeginStoryboard x:Name="RecordingPulseStoryboard">
-              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                <DoubleAnimation
-                  Storyboard.TargetProperty="Opacity"
-                  To="0.48"
-                  Duration="0:0:0.75"
-                />
-                <DoubleAnimation
-                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                  To="1.18"
-                  Duration="0:0:0.75"
-                />
-                <DoubleAnimation
-                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                  To="1.18"
-                  Duration="0:0:0.75"
-                />
-              </Storyboard>
-            </BeginStoryboard>
-          </DataTrigger.EnterActions>
-          <DataTrigger.ExitActions>
-            <StopStoryboard BeginStoryboardName="RecordingPulseStoryboard" />
-          </DataTrigger.ExitActions>
-        </DataTrigger>
-      </Style.Triggers>
-    </Style>
   </UserControl.Resources>
 
   <Border
@@ -117,12 +53,13 @@
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Ellipse
+        <local:RecordingStatusIndicator
           Grid.Column="0"
           Width="9"
           Height="9"
           Margin="0,5,8,0"
-          Style="{StaticResource StatusIndicatorStyle}"
+          Health="{Binding StatusHealth}"
+          IsPulseActive="{Binding IsRecordingPulseActive}"
         />
 
         <StackPanel Grid.Column="1">

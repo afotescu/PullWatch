@@ -13,80 +13,6 @@
   WindowStartupLocation="CenterScreen"
 >
   <Window.Resources>
-    <Style x:Key="CollapsedStatusDotStyle" TargetType="Ellipse">
-      <Setter Property="Width" Value="18" />
-      <Setter Property="Height" Value="18" />
-      <Setter Property="HorizontalAlignment" Value="Center" />
-      <Setter Property="Fill" Value="{StaticResource StatusNeutralBrush}" />
-      <Setter Property="Stroke" Value="{StaticResource BorderBrush}" />
-      <Setter Property="StrokeThickness" Value="1" />
-      <Setter Property="Opacity" Value="1" />
-      <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-      <Setter Property="RenderTransform">
-        <Setter.Value>
-          <ScaleTransform ScaleX="1" ScaleY="1" />
-        </Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <DataTrigger
-          Binding="{Binding Recordings.StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Active}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding Recordings.StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.ManualOnly}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding Recordings.StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Ready}"
-        >
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding Recordings.StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}"
-        >
-          <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
-          <Setter Property="Stroke" Value="{StaticResource FailureBrush}" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding Recordings.IsRecordingPulseActive}" Value="True">
-          <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-          <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
-          <DataTrigger.EnterActions>
-            <BeginStoryboard x:Name="RecordingPulseStoryboard">
-              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                <DoubleAnimation
-                  Storyboard.TargetProperty="Opacity"
-                  To="0.48"
-                  Duration="0:0:0.75"
-                />
-                <DoubleAnimation
-                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                  To="1.18"
-                  Duration="0:0:0.75"
-                />
-                <DoubleAnimation
-                  Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                  To="1.18"
-                  Duration="0:0:0.75"
-                />
-              </Storyboard>
-            </BeginStoryboard>
-          </DataTrigger.EnterActions>
-          <DataTrigger.ExitActions>
-            <StopStoryboard BeginStoryboardName="RecordingPulseStoryboard" />
-          </DataTrigger.ExitActions>
-        </DataTrigger>
-      </Style.Triggers>
-    </Style>
-
     <Style x:Key="CollapsedStatusButtonStyle" TargetType="Button">
       <Setter Property="Width" Value="44" />
       <Setter Property="Height" Value="28" />
@@ -250,7 +176,14 @@
               ToolTipService.InitialShowDelay="250"
               ToolTipService.ShowDuration="12000"
             >
-              <Ellipse Style="{StaticResource CollapsedStatusDotStyle}" />
+              <local:RecordingStatusIndicator
+                Width="18"
+                Height="18"
+                HorizontalAlignment="Center"
+                Health="{Binding Recordings.StatusHealth}"
+                IndicatorStrokeThickness="1"
+                IsPulseActive="{Binding Recordings.IsRecordingPulseActive}"
+              />
             </Button>
           </StackPanel>
 
