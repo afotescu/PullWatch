@@ -358,14 +358,12 @@
     </Border>
 
     <Grid Grid.Column="1">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="*" />
-      </Grid.RowDefinitions>
+      <ContentControl Content="{Binding SelectedNavigationItem.Content}" />
 
       <ItemsControl
-        Grid.Row="0"
         Margin="18,18,18,0"
+        Panel.ZIndex="10"
+        VerticalAlignment="Top"
         ItemsSource="{Binding Notifications.Items}"
         Visibility="{Binding Notifications.HasNotifications, Converter={StaticResource BooleanToVisibilityConverter}}"
       >
@@ -462,8 +460,6 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-
-      <ContentControl Grid.Row="1" Content="{Binding SelectedNavigationItem.Content}" />
     </Grid>
   </Grid>
 </Window>
