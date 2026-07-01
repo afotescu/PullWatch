@@ -8,24 +8,29 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     private readonly IUiDispatcher _dispatcher;
     private readonly Func<bool> _canRestartForUpdate;
     private readonly Action _requestShutdownForUpdate;
+    private readonly TimeSpan _statusMessageDuration;
 
     private ApplicationUpdateState _state;
     private IApplicationUpdate? _availableUpdate;
     private IApplicationUpdate? _pendingUpdate;
     private int? _downloadProgress;
     private string? _lastMessage;
+    private string? _statusMessage;
+    private int _statusMessageVersion;
 
     internal ApplicationUpdateViewModel(
         IApplicationUpdater updater,
         IUiDispatcher dispatcher,
         Func<bool> canRestartForUpdate,
-        Action requestShutdownForUpdate
+        Action requestShutdownForUpdate,
+        TimeSpan? statusMessageDuration = null
     )
     {
         _updater = updater;
         _dispatcher = dispatcher;
         _canRestartForUpdate = canRestartForUpdate;
         _requestShutdownForUpdate = requestShutdownForUpdate;
+        _statusMessageDuration = statusMessageDuration ?? TimeSpan.FromSeconds(4);
         _pendingUpdate = updater.PendingUpdate;
         _state =
             _pendingUpdate is not null ? ApplicationUpdateState.ReadyToRestart
@@ -37,7 +42,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         _state switch
         {
             ApplicationUpdateState.Checking => "Checking...",
-            ApplicationUpdateState.UpToDate => "Up to date",
             ApplicationUpdateState.UpdateAvailable => "Download update",
             ApplicationUpdateState.Downloading => _downloadProgress is { } progress
                 ? $"Downloading {progress}%"
@@ -53,7 +57,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             ApplicationUpdateState.ReadyToCheck => _lastMessage
                 ?? "Check GitHub Releases for a PullWatch update.",
             ApplicationUpdateState.Checking => "Checking GitHub Releases for a PullWatch update.",
-            ApplicationUpdateState.UpToDate => "PullWatch is up to date. Click to check again.",
             ApplicationUpdateState.UpdateAvailable => FormatUpdateAvailableToolTip(),
             ApplicationUpdateState.Downloading => FormatDownloadingToolTip(),
             ApplicationUpdateState.ReadyToRestart => FormatReadyToRestartToolTip(),
@@ -66,6 +69,10 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         };
 
     public Geometry ActionIcon => ShellIconGeometries.Update;
+
+    public string? StatusMessage => _statusMessage;
+
+    public bool IsStatusMessageVisible => !string.IsNullOrWhiteSpace(_statusMessage);
 
     public bool IsActionProminent =>
         _state
@@ -95,7 +102,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         return _state switch
         {
             ApplicationUpdateState.ReadyToCheck => true,
-            ApplicationUpdateState.UpToDate => true,
             ApplicationUpdateState.UpdateAvailable => true,
             ApplicationUpdateState.ReadyToRestart => _canRestartForUpdate(),
             ApplicationUpdateState.Failed => true,
@@ -109,7 +115,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         switch (_state)
         {
             case ApplicationUpdateState.ReadyToCheck:
-            case ApplicationUpdateState.UpToDate:
             case ApplicationUpdateState.Failed:
                 await CheckForUpdatesAsync(isAutomatic: false);
                 break;
@@ -133,11 +138,13 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             if (update is null)
             {
                 _lastMessage = null;
-                SetState(
-                    isAutomatic
-                        ? ApplicationUpdateState.ReadyToCheck
-                        : ApplicationUpdateState.UpToDate
-                );
+                SetState(ApplicationUpdateState.ReadyToCheck);
+
+                if (!isAutomatic)
+                {
+                    ShowTemporaryStatusMessage("Up to date");
+                }
+
                 return;
             }
 
@@ -282,6 +289,11 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
 
     private void SetState(ApplicationUpdateState state)
     {
+        if (state != ApplicationUpdateState.ReadyToCheck)
+        {
+            ClearStatusMessage();
+        }
+
         if (_state == state)
         {
             return;
@@ -298,6 +310,48 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         OnPropertyChanged(nameof(ActionIcon));
         OnPropertyChanged(nameof(IsActionProminent));
         UpdateCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ShowTemporaryStatusMessage(string message)
+    {
+        var statusMessageVersion = ++_statusMessageVersion;
+
+        _statusMessage = message;
+        NotifyStatusMessageChanged();
+
+        _ = ClearStatusMessageAfterDelayAsync(statusMessageVersion);
+    }
+
+    private async Task ClearStatusMessageAfterDelayAsync(int statusMessageVersion)
+    {
+        await Task.Delay(_statusMessageDuration);
+
+        _dispatcher.Post(() =>
+        {
+            if (statusMessageVersion == _statusMessageVersion)
+            {
+                ClearStatusMessage();
+            }
+        });
+    }
+
+    private void ClearStatusMessage()
+    {
+        _statusMessageVersion++;
+
+        if (_statusMessage is null)
+        {
+            return;
+        }
+
+        _statusMessage = null;
+        NotifyStatusMessageChanged();
+    }
+
+    private void NotifyStatusMessageChanged()
+    {
+        OnPropertyChanged(nameof(StatusMessage));
+        OnPropertyChanged(nameof(IsStatusMessageVisible));
     }
 
     private static string FormatBytes(long bytes)
@@ -318,7 +372,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     {
         ReadyToCheck,
         Checking,
-        UpToDate,
         UpdateAvailable,
         Downloading,
         ReadyToRestart,

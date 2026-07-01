@@ -9,6 +9,7 @@ public sealed class ApplicationUpdateViewModelTests
         var viewModel = CreateViewModel(updater);
 
         Assert.Equal("Check for updates", viewModel.ActionText);
+        Assert.False(viewModel.IsStatusMessageVisible);
         Assert.False(viewModel.IsActionProminent);
         Assert.False(viewModel.UpdateCommand.CanExecute(null));
         Assert.Contains(
@@ -19,17 +20,34 @@ public sealed class ApplicationUpdateViewModelTests
     }
 
     [Fact]
-    public async Task ManualCheckWithoutUpdateReportsUpToDate()
+    public async Task ManualCheckWithoutUpdateShowsTemporaryStatusMessage()
     {
         var updater = new FakeApplicationUpdater();
         var viewModel = CreateViewModel(updater);
 
         await viewModel.UpdateCommand.ExecuteAsync(null);
 
-        Assert.Equal("Up to date", viewModel.ActionText);
+        Assert.Equal("Check for updates", viewModel.ActionText);
+        Assert.Equal("Up to date", viewModel.StatusMessage);
+        Assert.True(viewModel.IsStatusMessageVisible);
         Assert.False(viewModel.IsActionProminent);
-        Assert.Contains("up to date", viewModel.ActionToolTip, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, updater.CheckCount);
+    }
+
+    [Fact]
+    public async Task ManualCheckWithoutUpdateClearsTemporaryStatusMessage()
+    {
+        var updater = new FakeApplicationUpdater();
+        var viewModel = CreateViewModel(
+            updater,
+            statusMessageDuration: TimeSpan.FromMilliseconds(20)
+        );
+
+        await viewModel.UpdateCommand.ExecuteAsync(null);
+
+        await WaitForAsync(() => !viewModel.IsStatusMessageVisible);
+
+        Assert.Null(viewModel.StatusMessage);
     }
 
     [Fact]
@@ -132,14 +150,16 @@ public sealed class ApplicationUpdateViewModelTests
     private static ApplicationUpdateViewModel CreateViewModel(
         FakeApplicationUpdater updater,
         Func<bool>? canRestartForUpdate = null,
-        Action? requestShutdownForUpdate = null
+        Action? requestShutdownForUpdate = null,
+        TimeSpan? statusMessageDuration = null
     )
     {
         return new ApplicationUpdateViewModel(
             updater,
             ImmediateUiDispatcher.Instance,
             canRestartForUpdate ?? (() => true),
-            requestShutdownForUpdate ?? (() => { })
+            requestShutdownForUpdate ?? (() => { }),
+            statusMessageDuration
         );
     }
 
