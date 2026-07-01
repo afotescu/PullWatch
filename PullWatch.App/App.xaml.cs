@@ -2,7 +2,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.Extensions.Logging;
-using Velopack;
 
 namespace PullWatch;
 
@@ -19,16 +18,6 @@ public partial class App : Application
     private TrayIconManager? _trayIcon;
     private MainWindow? _mainWindow;
     private int _upgradeShutdownStarted;
-
-    [STAThread]
-    private static void Main(string[] args)
-    {
-        VelopackApp.Build().Run();
-
-        App app = new();
-        app.InitializeComponent();
-        app.Run();
-    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
