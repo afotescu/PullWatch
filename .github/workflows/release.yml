@@ -162,12 +162,16 @@ jobs:
             throw "No Velopack release files found in $releaseDir"
           }
 
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
+          $releaseJson = gh release view $tag --json isImmutable 2>$null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if (-not $releaseExists) {
             $createArguments = @(
               "release",
               "create",
-              $tag,
+              $tag
+            )
+            $createArguments += $releaseFiles
+            $createArguments += @(
               "--title",
               $title,
               "--generate-notes",
@@ -183,12 +187,20 @@ jobs:
               throw "Failed to create GitHub Release $tag"
             }
           } else {
+            $existingRelease = $releaseJson | ConvertFrom-Json
+            if ($existingRelease.isImmutable) {
+              throw "GitHub Release $tag already exists and is immutable. Create a new tag instead of replacing release assets."
+            }
+
             gh release edit $tag $prereleaseArgument
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to update GitHub Release prerelease metadata for $tag"
             }
-          }
 
-          foreach ($releaseFile in $releaseFiles) {
-            gh release upload $tag $releaseFile --clobber
+            foreach ($releaseFile in $releaseFiles) {
+              gh release upload $tag $releaseFile --clobber
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to upload $releaseFile to GitHub Release $tag. If release immutability is enabled, create a new tag instead of replacing assets on an existing release."
+              }
+            }
           }
