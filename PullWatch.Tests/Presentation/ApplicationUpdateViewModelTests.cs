@@ -23,7 +23,8 @@ public sealed class ApplicationUpdateViewModelTests
     public async Task ManualCheckWithoutUpdateShowsTemporaryStatusMessage()
     {
         var updater = new FakeApplicationUpdater();
-        var viewModel = CreateViewModel(updater);
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(updater, notifications: notifications);
 
         await viewModel.UpdateCommand.ExecuteAsync(null);
 
@@ -32,6 +33,8 @@ public sealed class ApplicationUpdateViewModelTests
         Assert.True(viewModel.IsStatusMessageVisible);
         Assert.False(viewModel.IsActionProminent);
         Assert.Equal(1, updater.CheckCount);
+        Assert.False(notifications.HasNotifications);
+        Assert.Empty(notifications.Items);
     }
 
     [Fact]
@@ -57,7 +60,8 @@ public sealed class ApplicationUpdateViewModelTests
         {
             CheckResult = new FakeApplicationUpdate("1.2.3", 52 * 1024 * 1024),
         };
-        var viewModel = CreateViewModel(updater);
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(updater, notifications: notifications);
 
         viewModel.StartAutomaticCheck();
 
@@ -68,6 +72,41 @@ public sealed class ApplicationUpdateViewModelTests
         Assert.Empty(updater.DownloadedUpdates);
         Assert.Contains("1.2.3", viewModel.ActionToolTip, StringComparison.Ordinal);
         Assert.Contains("52 MB", viewModel.ActionToolTip, StringComparison.Ordinal);
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal(ApplicationUpdateViewModel.UpdateNotificationId, notification.Id);
+        Assert.Equal(NotificationSeverity.Information, notification.Severity);
+        Assert.Equal("PullWatch update available", notification.Title);
+        Assert.Contains("1.2.3", notification.Message, StringComparison.Ordinal);
+        Assert.Equal("Download update", notification.ActionText);
+        Assert.Same(viewModel.UpdateCommand, notification.ActionCommand);
+        Assert.True(notification.IsDismissVisible);
+    }
+
+    [Fact]
+    public async Task DismissedAvailableUpdateNotificationStaysHiddenUntilUpdateStateChanges()
+    {
+        var update = new FakeApplicationUpdate("1.2.3", 12 * 1024 * 1024);
+        var updater = new FakeApplicationUpdater { CheckResult = update };
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(updater, notifications: notifications);
+
+        viewModel.StartAutomaticCheck();
+        await WaitForAsync(() => notifications.HasNotifications);
+
+        var notification = Assert.Single(notifications.Items);
+
+        notification.DismissCommand.Execute(null);
+        viewModel.RefreshCanRestart();
+
+        Assert.Empty(notifications.Items);
+        Assert.True(viewModel.UpdateCommand.CanExecute(null));
+
+        await viewModel.UpdateCommand.ExecuteAsync(null);
+
+        var readyNotification = Assert.Single(notifications.Items);
+        Assert.Equal("Update ready to install", readyNotification.Title);
+        Assert.Equal("Restart to update", readyNotification.ActionText);
     }
 
     [Fact]
@@ -75,7 +114,8 @@ public sealed class ApplicationUpdateViewModelTests
     {
         var update = new FakeApplicationUpdate("1.2.3", 12 * 1024 * 1024);
         var updater = new FakeApplicationUpdater { CheckResult = update };
-        var viewModel = CreateViewModel(updater);
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(updater, notifications: notifications);
 
         await viewModel.UpdateCommand.ExecuteAsync(null);
 
@@ -89,6 +129,11 @@ public sealed class ApplicationUpdateViewModelTests
         Assert.True(viewModel.IsActionProminent);
         Assert.Equal([update], updater.DownloadedUpdates);
         Assert.Contains("1.2.3", viewModel.ActionToolTip, StringComparison.Ordinal);
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal("Update ready to install", notification.Title);
+        Assert.Contains("1.2.3", notification.Message, StringComparison.Ordinal);
+        Assert.Equal("Restart to update", notification.ActionText);
     }
 
     [Fact]
@@ -117,7 +162,12 @@ public sealed class ApplicationUpdateViewModelTests
         {
             PendingUpdate = new FakeApplicationUpdate("1.2.3", 12 * 1024 * 1024),
         };
-        var viewModel = CreateViewModel(updater, canRestartForUpdate: () => false);
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(
+            updater,
+            canRestartForUpdate: () => false,
+            notifications: notifications
+        );
 
         Assert.False(viewModel.UpdateCommand.CanExecute(null));
         Assert.True(viewModel.IsActionProminent);
@@ -126,6 +176,15 @@ public sealed class ApplicationUpdateViewModelTests
             viewModel.ActionToolTip,
             StringComparison.Ordinal
         );
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal("Update ready to install", notification.Title);
+        Assert.Contains(
+            "Finish the active recording",
+            notification.Message,
+            StringComparison.Ordinal
+        );
+        Assert.False(notification.ActionCommand!.CanExecute(null));
     }
 
     [Fact]
@@ -151,7 +210,8 @@ public sealed class ApplicationUpdateViewModelTests
         FakeApplicationUpdater updater,
         Func<bool>? canRestartForUpdate = null,
         Action? requestShutdownForUpdate = null,
-        TimeSpan? statusMessageDuration = null
+        TimeSpan? statusMessageDuration = null,
+        NotificationCenterViewModel? notifications = null
     )
     {
         return new ApplicationUpdateViewModel(
@@ -159,7 +219,8 @@ public sealed class ApplicationUpdateViewModelTests
             ImmediateUiDispatcher.Instance,
             canRestartForUpdate ?? (() => true),
             requestShutdownForUpdate ?? (() => { }),
-            statusMessageDuration
+            statusMessageDuration,
+            notifications
         );
     }
 

@@ -84,11 +84,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             initialRecordingStorageStatus: controller.RecordingStorageStatus
         );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
+        Notifications = new NotificationCenterViewModel();
         Updates = new ApplicationUpdateViewModel(
             applicationUpdater,
             dispatcher,
             CanRestartForUpdate,
-            requestShutdownForUpdate
+            requestShutdownForUpdate,
+            notifications: Notifications
         );
         NavigationItems =
         [
@@ -129,6 +131,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public SettingsViewModel Settings { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
+
+    public NotificationCenterViewModel Notifications { get; }
 
     public ApplicationUpdateViewModel Updates { get; }
 

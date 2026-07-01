@@ -2,7 +2,7 @@ using System.Windows.Media;
 
 namespace PullWatch;
 
-internal static class ShellIconGeometries
+public static class ShellIconGeometries
 {
     public static Geometry Recordings { get; } =
         CreateIcon(
@@ -30,6 +30,8 @@ internal static class ShellIconGeometries
     public static Geometry Collapse { get; } = CreateIcon("M10.5 2 L4.5 8 L10.5 14");
 
     public static Geometry Expand { get; } = CreateIcon("M5.5 2 L11.5 8 L5.5 14");
+
+    public static Geometry Close { get; } = CreateIcon("M4 4 L12 12 M12 4 L4 12");
 
     private static Geometry CreateIcon(params string[] pathData)
     {

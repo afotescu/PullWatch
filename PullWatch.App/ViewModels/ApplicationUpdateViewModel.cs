@@ -4,11 +4,14 @@ namespace PullWatch;
 
 public sealed partial class ApplicationUpdateViewModel : ObservableObject
 {
+    internal const string UpdateNotificationId = "application-update";
+
     private readonly IApplicationUpdater _updater;
     private readonly IUiDispatcher _dispatcher;
     private readonly Func<bool> _canRestartForUpdate;
     private readonly Action _requestShutdownForUpdate;
     private readonly TimeSpan _statusMessageDuration;
+    private readonly NotificationCenterViewModel? _notifications;
 
     private ApplicationUpdateState _state;
     private IApplicationUpdate? _availableUpdate;
@@ -16,6 +19,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     private int? _downloadProgress;
     private string? _lastMessage;
     private string? _statusMessage;
+    private string? _dismissedNotificationKey;
     private int _statusMessageVersion;
 
     internal ApplicationUpdateViewModel(
@@ -23,7 +27,8 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         IUiDispatcher dispatcher,
         Func<bool> canRestartForUpdate,
         Action requestShutdownForUpdate,
-        TimeSpan? statusMessageDuration = null
+        TimeSpan? statusMessageDuration = null,
+        NotificationCenterViewModel? notifications = null
     )
     {
         _updater = updater;
@@ -31,11 +36,13 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         _canRestartForUpdate = canRestartForUpdate;
         _requestShutdownForUpdate = requestShutdownForUpdate;
         _statusMessageDuration = statusMessageDuration ?? TimeSpan.FromSeconds(4);
+        _notifications = notifications;
         _pendingUpdate = updater.PendingUpdate;
         _state =
             _pendingUpdate is not null ? ApplicationUpdateState.ReadyToRestart
             : !_updater.CanCheckForUpdates ? ApplicationUpdateState.Unavailable
             : ApplicationUpdateState.ReadyToCheck;
+        UpdateNotification();
     }
 
     public string ActionText =>
@@ -95,6 +102,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     {
         UpdateCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ActionToolTip));
+        UpdateNotification();
     }
 
     private bool CanRunUpdateAction()
@@ -285,6 +293,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         _downloadProgress = progress;
         OnPropertyChanged(nameof(ActionText));
         OnPropertyChanged(nameof(ActionToolTip));
+        UpdateNotification();
     }
 
     private void SetState(ApplicationUpdateState state)
@@ -301,6 +310,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
 
         _state = state;
         NotifyActionChanged();
+        UpdateNotification();
     }
 
     private void NotifyActionChanged()
@@ -352,6 +362,125 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(StatusMessage));
         OnPropertyChanged(nameof(IsStatusMessageVisible));
+    }
+
+    private void UpdateNotification()
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        var content = CreateNotificationContent();
+
+        if (content is null)
+        {
+            _notifications.Dismiss(UpdateNotificationId);
+            return;
+        }
+
+        _notifications.ShowOrUpdate(UpdateNotificationId, content);
+    }
+
+    private NotificationContent? CreateNotificationContent()
+    {
+        var notificationKey = GetNotificationKey();
+
+        if (notificationKey is not null && notificationKey == _dismissedNotificationKey)
+        {
+            return null;
+        }
+
+        return _state switch
+        {
+            ApplicationUpdateState.UpdateAvailable => new NotificationContent(
+                string.IsNullOrWhiteSpace(_lastMessage)
+                    ? NotificationSeverity.Information
+                    : NotificationSeverity.Warning,
+                "PullWatch update available",
+                FormatUpdateAvailableNotificationMessage(),
+                ActionText,
+                UpdateCommand,
+                Dismissed: () => DismissUpdateNotification(notificationKey)
+            ),
+            ApplicationUpdateState.Downloading => new NotificationContent(
+                NotificationSeverity.Information,
+                "Downloading update",
+                FormatDownloadingNotificationMessage(),
+                IsDismissible: false
+            ),
+            ApplicationUpdateState.ReadyToRestart => new NotificationContent(
+                NotificationSeverity.Success,
+                "Update ready to install",
+                FormatReadyToRestartNotificationMessage(),
+                ActionText,
+                UpdateCommand,
+                Dismissed: () => DismissUpdateNotification(notificationKey)
+            ),
+            ApplicationUpdateState.Restarting => new NotificationContent(
+                NotificationSeverity.Information,
+                "Restarting to update",
+                "PullWatch is closing so the update can be installed.",
+                IsDismissible: false
+            ),
+            _ => null,
+        };
+    }
+
+    private void DismissUpdateNotification(string? notificationKey)
+    {
+        _dismissedNotificationKey = notificationKey;
+    }
+
+    private string? GetNotificationKey()
+    {
+        return _state switch
+        {
+            ApplicationUpdateState.UpdateAvailable =>
+                $"available:{_availableUpdate?.Version ?? "unknown"}:{_lastMessage}",
+            ApplicationUpdateState.ReadyToRestart =>
+                $"ready:{_pendingUpdate?.Version ?? "unknown"}:{_canRestartForUpdate()}:{_lastMessage}",
+            _ => null,
+        };
+    }
+
+    private string FormatUpdateAvailableNotificationMessage()
+    {
+        var message = _availableUpdate is null
+            ? "A new PullWatch version is available."
+            : $"Version {_availableUpdate.Version} is available.";
+
+        return WithLastMessage(message);
+    }
+
+    private string FormatDownloadingNotificationMessage()
+    {
+        var version = _availableUpdate?.Version;
+
+        if (_downloadProgress is { } progress)
+        {
+            return version is null
+                ? $"Downloading update: {progress}%."
+                : $"Downloading version {version}: {progress}%.";
+        }
+
+        return version is null ? "Downloading update." : $"Downloading version {version}.";
+    }
+
+    private string FormatReadyToRestartNotificationMessage()
+    {
+        if (!_canRestartForUpdate())
+        {
+            return WithLastMessage(
+                "Finish the active recording before restarting to update PullWatch."
+            );
+        }
+
+        var message = _pendingUpdate is null
+            ? "Restart PullWatch to install the update."
+            : $"Restart PullWatch to install version {_pendingUpdate.Version}.";
+
+        return WithLastMessage(message);
     }
 
     private static string FormatBytes(long bytes)
