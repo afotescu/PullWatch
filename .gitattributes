@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.bmp binary -eol
+*.dll binary -eol
+*.exe binary -eol
+*.gif binary -eol
+*.ico binary -eol
+*.jpg binary -eol
+*.jpeg binary -eol
+*.nupkg binary -eol
+*.pdb binary -eol
+*.png binary -eol
+*.zip binary -eol
