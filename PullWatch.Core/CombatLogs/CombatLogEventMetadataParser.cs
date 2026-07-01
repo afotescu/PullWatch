@@ -90,7 +90,7 @@ internal static class CombatLogEventMetadataParser
                 ChallengeEndOnTimeSecondsIndex,
                 out var onTimeSeconds
             )
-            || !TryParseOptionalInt(
+            || !TryParseOptionalTruncatedInt(
                 arguments,
                 ChallengeEndTimerLimitSecondsIndex,
                 out var timerLimitSeconds
@@ -291,6 +291,38 @@ internal static class CombatLogEventMetadataParser
         }
 
         result = parsed;
+        return true;
+    }
+
+    private static bool TryParseOptionalTruncatedInt(
+        IReadOnlyList<string> arguments,
+        int index,
+        out int? result
+    )
+    {
+        result = null;
+
+        if (arguments.Count <= index)
+        {
+            return true;
+        }
+
+        if (
+            !double.TryParse(
+                arguments[index],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed
+            )
+            || !double.IsFinite(parsed)
+            || parsed < int.MinValue
+            || parsed > int.MaxValue
+        )
+        {
+            return false;
+        }
+
+        result = (int)Math.Truncate(parsed);
         return true;
     }
 

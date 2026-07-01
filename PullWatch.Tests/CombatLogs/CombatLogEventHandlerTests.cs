@@ -291,6 +291,36 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
+    public async Task ChallengeModeEndWithFractionalTrailingRatingCompletesChallengeAsTimed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var outputPath = Path.Combine(database.DirectoryPath, "maisara-caverns.mp4");
+        var recorder = new FakeRecordingService { ActiveOutputPath = outputPath };
+        var catalog = new RecordingCatalog(database.Repository);
+        await using var handler = CreateHandler(recorder, recordingCatalog: catalog);
+
+        await HandleLineAsync(
+            handler,
+            "6/29/2026 15:50:22.4823  CHALLENGE_MODE_START,\"Maisara Caverns\",2874,560,12,[9,10,147]"
+        );
+        File.WriteAllText(outputPath, "recording");
+        await HandleLineAsync(
+            handler,
+            "6/29/2026 16:09:44.3263  CHALLENGE_MODE_END,2874,1,12,1153679,380.000000,3512.041992"
+        );
+
+        var recordings = await catalog.ListAvailableFilesAsync(
+            database.DirectoryPath,
+            cancellationToken
+        );
+        var recording = Assert.Single(recordings);
+        Assert.NotNull(recording.ChallengeMode);
+        Assert.Equal(ChallengeModeOutcome.Timed, recording.ChallengeMode.Outcome);
+        Assert.Equal(3512, recording.ChallengeMode.TimerLimitSeconds);
+    }
+
+    [Fact]
     public async Task FailedStartDoesNotClaimOwnership()
     {
         var recorder = new FakeRecordingService

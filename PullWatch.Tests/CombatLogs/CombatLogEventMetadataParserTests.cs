@@ -53,6 +53,26 @@ public sealed class CombatLogEventMetadataParserTests
     }
 
     [Fact]
+    public void ParsesChallengeEndWithFractionalTrailingRating()
+    {
+        var endedAt = StartedAt.AddMinutes(19);
+        var combatLogEvent = CreateEvent(
+            WowEvents.ChallengeModeEnd,
+            "2874,1,12,1153679,380.000000,3512.041992"
+        );
+
+        var parsed = CombatLogEventMetadataParser.TryParseChallengeEnd(
+            combatLogEvent,
+            endedAt,
+            out var challengeEnd
+        );
+
+        Assert.True(parsed);
+        Assert.Equal(ChallengeModeOutcome.Timed, challengeEnd.Outcome);
+        Assert.Equal(3512, challengeEnd.TimerLimitSeconds);
+    }
+
+    [Fact]
     public void ParsesEncounterStart()
     {
         var combatLogEvent = CreateEvent(
