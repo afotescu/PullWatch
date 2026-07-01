@@ -27,6 +27,8 @@ public static class ShellIconGeometries
             "M2 8A6 6 0 0 1 12.5 4L14 5.5M14 2v3.5h-3.5M14 8a6 6 0 0 1-10.5 4L2 10.5M2 14v-3.5h3.5"
         );
 
+    public static Geometry Check { get; } = CreateIcon("M3 8.2 L6.4 11.6 L13 4");
+
     public static Geometry Collapse { get; } = CreateIcon("M10.5 2 L4.5 8 L10.5 14");
 
     public static Geometry Expand { get; } = CreateIcon("M5.5 2 L11.5 8 L5.5 14");

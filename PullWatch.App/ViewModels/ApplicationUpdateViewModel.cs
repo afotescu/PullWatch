@@ -10,7 +10,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     private readonly IUiDispatcher _dispatcher;
     private readonly Func<bool> _canRestartForUpdate;
     private readonly Action _requestShutdownForUpdate;
-    private readonly TimeSpan _statusMessageDuration;
+    private readonly TimeSpan _upToDateDisplayDuration;
     private readonly NotificationCenterViewModel? _notifications;
 
     private ApplicationUpdateState _state;
@@ -18,16 +18,15 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     private IApplicationUpdate? _pendingUpdate;
     private int? _downloadProgress;
     private string? _lastMessage;
-    private string? _statusMessage;
     private string? _dismissedNotificationKey;
-    private int _statusMessageVersion;
+    private int _upToDateStateVersion;
 
     internal ApplicationUpdateViewModel(
         IApplicationUpdater updater,
         IUiDispatcher dispatcher,
         Func<bool> canRestartForUpdate,
         Action requestShutdownForUpdate,
-        TimeSpan? statusMessageDuration = null,
+        TimeSpan? upToDateDisplayDuration = null,
         NotificationCenterViewModel? notifications = null
     )
     {
@@ -35,7 +34,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         _dispatcher = dispatcher;
         _canRestartForUpdate = canRestartForUpdate;
         _requestShutdownForUpdate = requestShutdownForUpdate;
-        _statusMessageDuration = statusMessageDuration ?? TimeSpan.FromSeconds(4);
+        _upToDateDisplayDuration = upToDateDisplayDuration ?? TimeSpan.FromSeconds(10);
         _notifications = notifications;
         _pendingUpdate = updater.PendingUpdate;
         _state =
@@ -49,6 +48,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         _state switch
         {
             ApplicationUpdateState.Checking => "Checking...",
+            ApplicationUpdateState.UpToDate => "Up to date",
             ApplicationUpdateState.UpdateAvailable => "Download update",
             ApplicationUpdateState.Downloading => _downloadProgress is { } progress
                 ? $"Downloading {progress}%"
@@ -64,6 +64,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             ApplicationUpdateState.ReadyToCheck => _lastMessage
                 ?? "Check GitHub Releases for a PullWatch update.",
             ApplicationUpdateState.Checking => "Checking GitHub Releases for a PullWatch update.",
+            ApplicationUpdateState.UpToDate => "PullWatch is up to date.",
             ApplicationUpdateState.UpdateAvailable => FormatUpdateAvailableToolTip(),
             ApplicationUpdateState.Downloading => FormatDownloadingToolTip(),
             ApplicationUpdateState.ReadyToRestart => FormatReadyToRestartToolTip(),
@@ -75,11 +76,16 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             _ => "Check GitHub Releases for a PullWatch update.",
         };
 
-    public Geometry ActionIcon => ShellIconGeometries.Update;
+    public Geometry ActionIcon =>
+        _state == ApplicationUpdateState.UpToDate
+            ? ShellIconGeometries.Check
+            : ShellIconGeometries.Update;
 
-    public string? StatusMessage => _statusMessage;
-
-    public bool IsStatusMessageVisible => !string.IsNullOrWhiteSpace(_statusMessage);
+    public bool IsActionIconSpinning =>
+        _state
+            is ApplicationUpdateState.Checking
+                or ApplicationUpdateState.Downloading
+                or ApplicationUpdateState.Restarting;
 
     public bool IsActionProminent =>
         _state
@@ -146,11 +152,14 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             if (update is null)
             {
                 _lastMessage = null;
-                SetState(ApplicationUpdateState.ReadyToCheck);
 
                 if (!isAutomatic)
                 {
-                    ShowTemporaryStatusMessage("Up to date");
+                    ShowUpToDateAction();
+                }
+                else
+                {
+                    SetState(ApplicationUpdateState.ReadyToCheck);
                 }
 
                 return;
@@ -298,11 +307,6 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
 
     private void SetState(ApplicationUpdateState state)
     {
-        if (state != ApplicationUpdateState.ReadyToCheck)
-        {
-            ClearStatusMessage();
-        }
-
         if (_state == state)
         {
             return;
@@ -318,50 +322,34 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
         OnPropertyChanged(nameof(ActionText));
         OnPropertyChanged(nameof(ActionToolTip));
         OnPropertyChanged(nameof(ActionIcon));
+        OnPropertyChanged(nameof(IsActionIconSpinning));
         OnPropertyChanged(nameof(IsActionProminent));
         UpdateCommand.NotifyCanExecuteChanged();
     }
 
-    private void ShowTemporaryStatusMessage(string message)
+    private void ShowUpToDateAction()
     {
-        var statusMessageVersion = ++_statusMessageVersion;
+        var upToDateStateVersion = ++_upToDateStateVersion;
 
-        _statusMessage = message;
-        NotifyStatusMessageChanged();
+        SetState(ApplicationUpdateState.UpToDate);
 
-        _ = ClearStatusMessageAfterDelayAsync(statusMessageVersion);
+        _ = RestoreReadyToCheckAfterDelayAsync(upToDateStateVersion);
     }
 
-    private async Task ClearStatusMessageAfterDelayAsync(int statusMessageVersion)
+    private async Task RestoreReadyToCheckAfterDelayAsync(int upToDateStateVersion)
     {
-        await Task.Delay(_statusMessageDuration);
+        await Task.Delay(_upToDateDisplayDuration);
 
         _dispatcher.Post(() =>
         {
-            if (statusMessageVersion == _statusMessageVersion)
+            if (
+                _state == ApplicationUpdateState.UpToDate
+                && upToDateStateVersion == _upToDateStateVersion
+            )
             {
-                ClearStatusMessage();
+                SetState(ApplicationUpdateState.ReadyToCheck);
             }
         });
-    }
-
-    private void ClearStatusMessage()
-    {
-        _statusMessageVersion++;
-
-        if (_statusMessage is null)
-        {
-            return;
-        }
-
-        _statusMessage = null;
-        NotifyStatusMessageChanged();
-    }
-
-    private void NotifyStatusMessageChanged()
-    {
-        OnPropertyChanged(nameof(StatusMessage));
-        OnPropertyChanged(nameof(IsStatusMessageVisible));
     }
 
     private void UpdateNotification()
@@ -501,6 +489,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
     {
         ReadyToCheck,
         Checking,
+        UpToDate,
         UpdateAvailable,
         Downloading,
         ReadyToRestart,

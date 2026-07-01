@@ -9,7 +9,6 @@ public sealed class ApplicationUpdateViewModelTests
         var viewModel = CreateViewModel(updater);
 
         Assert.Equal("Check for updates", viewModel.ActionText);
-        Assert.False(viewModel.IsStatusMessageVisible);
         Assert.False(viewModel.IsActionProminent);
         Assert.False(viewModel.UpdateCommand.CanExecute(null));
         Assert.Contains(
@@ -20,7 +19,7 @@ public sealed class ApplicationUpdateViewModelTests
     }
 
     [Fact]
-    public async Task ManualCheckWithoutUpdateShowsTemporaryStatusMessage()
+    public async Task ManualCheckWithoutUpdateShowsDisabledUpToDateAction()
     {
         var updater = new FakeApplicationUpdater();
         var notifications = new NotificationCenterViewModel();
@@ -28,29 +27,50 @@ public sealed class ApplicationUpdateViewModelTests
 
         await viewModel.UpdateCommand.ExecuteAsync(null);
 
-        Assert.Equal("Check for updates", viewModel.ActionText);
-        Assert.Equal("Up to date", viewModel.StatusMessage);
-        Assert.True(viewModel.IsStatusMessageVisible);
+        Assert.Equal("Up to date", viewModel.ActionText);
+        Assert.Same(ShellIconGeometries.Check, viewModel.ActionIcon);
+        Assert.False(viewModel.IsActionIconSpinning);
         Assert.False(viewModel.IsActionProminent);
+        Assert.False(viewModel.UpdateCommand.CanExecute(null));
         Assert.Equal(1, updater.CheckCount);
         Assert.False(notifications.HasNotifications);
         Assert.Empty(notifications.Items);
     }
 
     [Fact]
-    public async Task ManualCheckWithoutUpdateClearsTemporaryStatusMessage()
+    public async Task ManualCheckWithoutUpdateReenablesCheckActionAfterDelay()
     {
         var updater = new FakeApplicationUpdater();
         var viewModel = CreateViewModel(
             updater,
-            statusMessageDuration: TimeSpan.FromMilliseconds(20)
+            upToDateDisplayDuration: TimeSpan.FromMilliseconds(20)
         );
 
         await viewModel.UpdateCommand.ExecuteAsync(null);
 
-        await WaitForAsync(() => !viewModel.IsStatusMessageVisible);
+        await WaitForAsync(() => viewModel.UpdateCommand.CanExecute(null));
 
-        Assert.Null(viewModel.StatusMessage);
+        Assert.Equal("Check for updates", viewModel.ActionText);
+        Assert.Same(ShellIconGeometries.Update, viewModel.ActionIcon);
+    }
+
+    [Fact]
+    public async Task CheckingUsesSpinningUpdateIcon()
+    {
+        var checkCompletion = new TaskCompletionSource<IApplicationUpdate?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var updater = new FakeApplicationUpdater { CheckTask = checkCompletion.Task };
+        var viewModel = CreateViewModel(updater);
+
+        var checkTask = viewModel.UpdateCommand.ExecuteAsync(null);
+
+        Assert.Equal("Checking...", viewModel.ActionText);
+        Assert.Same(ShellIconGeometries.Update, viewModel.ActionIcon);
+        Assert.True(viewModel.IsActionIconSpinning);
+
+        checkCompletion.SetResult(null);
+        await checkTask;
     }
 
     [Fact]
@@ -137,6 +157,31 @@ public sealed class ApplicationUpdateViewModelTests
     }
 
     [Fact]
+    public async Task DownloadingUsesSpinningUpdateIcon()
+    {
+        var update = new FakeApplicationUpdate("1.2.3", 12 * 1024 * 1024);
+        var downloadCompletion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var updater = new FakeApplicationUpdater
+        {
+            CheckResult = update,
+            DownloadTask = downloadCompletion.Task,
+        };
+        var viewModel = CreateViewModel(updater);
+
+        await viewModel.UpdateCommand.ExecuteAsync(null);
+        var downloadTask = viewModel.UpdateCommand.ExecuteAsync(null);
+
+        Assert.Equal("Downloading...", viewModel.ActionText);
+        Assert.Same(ShellIconGeometries.Update, viewModel.ActionIcon);
+        Assert.True(viewModel.IsActionIconSpinning);
+
+        downloadCompletion.SetResult();
+        await downloadTask;
+    }
+
+    [Fact]
     public async Task ReadyUpdateStartsUpdaterAndRequestsShutdown()
     {
         var update = new FakeApplicationUpdate("1.2.3", 12 * 1024 * 1024);
@@ -210,7 +255,7 @@ public sealed class ApplicationUpdateViewModelTests
         FakeApplicationUpdater updater,
         Func<bool>? canRestartForUpdate = null,
         Action? requestShutdownForUpdate = null,
-        TimeSpan? statusMessageDuration = null,
+        TimeSpan? upToDateDisplayDuration = null,
         NotificationCenterViewModel? notifications = null
     )
     {
@@ -219,7 +264,7 @@ public sealed class ApplicationUpdateViewModelTests
             ImmediateUiDispatcher.Instance,
             canRestartForUpdate ?? (() => true),
             requestShutdownForUpdate ?? (() => { }),
-            statusMessageDuration,
+            upToDateDisplayDuration,
             notifications
         );
     }
@@ -239,6 +284,8 @@ public sealed class ApplicationUpdateViewModelTests
         public bool CanCheckForUpdates { get; init; } = true;
         public IApplicationUpdate? PendingUpdate { get; set; }
         public IApplicationUpdate? CheckResult { get; init; }
+        public Task<IApplicationUpdate?>? CheckTask { get; init; }
+        public Task DownloadTask { get; init; } = Task.CompletedTask;
         public Exception? CheckException { get; init; }
         public Exception? DownloadException { get; init; }
         public Exception? ApplyException { get; init; }
@@ -255,10 +302,15 @@ public sealed class ApplicationUpdateViewModelTests
                 throw CheckException;
             }
 
+            if (CheckTask is not null)
+            {
+                return CheckTask;
+            }
+
             return Task.FromResult(CheckResult);
         }
 
-        public Task DownloadUpdateAsync(
+        public async Task DownloadUpdateAsync(
             IApplicationUpdate update,
             IProgress<int> progress,
             CancellationToken cancellationToken
@@ -269,10 +321,10 @@ public sealed class ApplicationUpdateViewModelTests
                 throw DownloadException;
             }
 
+            await DownloadTask;
             progress.Report(100);
             DownloadedUpdates.Add(update);
             PendingUpdate = update;
-            return Task.CompletedTask;
         }
 
         public void WaitForExitThenApplyUpdateAndRestart(IApplicationUpdate update)

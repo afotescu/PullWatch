@@ -149,6 +149,7 @@
           <StackPanel DockPanel.Dock="Bottom" Margin="0,24,0,0">
             <Button
               Margin="0,0,0,8"
+              Width="190"
               HorizontalAlignment="Left"
               Command="{Binding Updates.UpdateCommand}"
               Style="{StaticResource SidebarUpdateButtonStyle}"
@@ -160,12 +161,6 @@
                 TextWrapping="NoWrap"
               />
             </Button>
-            <TextBlock
-              Margin="0,0,0,8"
-              Style="{StaticResource SecondaryTextStyle}"
-              Text="{Binding Updates.StatusMessage}"
-              Visibility="{Binding Updates.IsStatusMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-            />
             <TextBlock
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding AppVersionLabel}"
@@ -266,13 +261,50 @@
                 Width="15"
                 Height="15"
                 Data="{Binding Updates.ActionIcon}"
+                RenderTransformOrigin="0.5,0.5"
                 Stretch="Uniform"
                 Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                 StrokeEndLineCap="Round"
                 StrokeLineJoin="Round"
                 StrokeStartLineCap="Round"
                 StrokeThickness="1.8"
-              />
+              >
+                <Path.RenderTransform>
+                  <RotateTransform />
+                </Path.RenderTransform>
+                <Path.Style>
+                  <Style TargetType="Path">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Updates.IsActionIconSpinning}" Value="True">
+                        <DataTrigger.EnterActions>
+                          <BeginStoryboard x:Name="SpinUpdateIconStoryboard">
+                            <Storyboard RepeatBehavior="Forever">
+                              <DoubleAnimation
+                                From="0"
+                                To="360"
+                                Duration="0:0:1.8"
+                                Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                              />
+                            </Storyboard>
+                          </BeginStoryboard>
+                        </DataTrigger.EnterActions>
+                        <DataTrigger.ExitActions>
+                          <StopStoryboard BeginStoryboardName="SpinUpdateIconStoryboard" />
+                          <BeginStoryboard>
+                            <Storyboard>
+                              <DoubleAnimation
+                                To="0"
+                                Duration="0:0:0"
+                                Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                              />
+                            </Storyboard>
+                          </BeginStoryboard>
+                        </DataTrigger.ExitActions>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Path.Style>
+              </Path>
             </Button>
             <TextBlock
               Margin="0,0,0,10"
