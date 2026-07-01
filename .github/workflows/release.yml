@@ -10,6 +10,11 @@ on:
         description: Existing tag to release, for example v0.1.0
         required: true
         type: string
+      prerelease:
+        description: Mark the GitHub Release as a prerelease
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -33,8 +38,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
+          $prerelease = "false"
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $tag = "${{ inputs.tag }}"
+            $prerelease = "${{ inputs.prerelease }}"
           }
 
           if (-not $tag.StartsWith("v")) {
@@ -46,8 +53,13 @@ jobs:
             throw "Release tag must look like v0.1.0 or v0.1.0-beta.1. Received: $tag"
           }
 
+          if ($version -match '^\d+\.\d+\.\d+-') {
+            $prerelease = "true"
+          }
+
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -92,7 +104,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
           .\.tools\vpk.exe pack `
-            --packId PullWatch `
+            --packId PullWatch.Desktop `
             --packTitle PullWatch `
             --packVersion ${{ steps.release-tag.outputs.version }} `
             --packDir ${{ env.PUBLISH_DIR }} `
@@ -140,6 +152,11 @@ jobs:
               ForEach-Object { $_.FullName }
           )
           $title = "PullWatch $tag"
+          $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            "${{ steps.release-tag.outputs.prerelease }}",
+            "true"
+          )
+          $prereleaseArgument = "--prerelease=$($prerelease.ToString().ToLowerInvariant())"
 
           if ($releaseFiles.Count -eq 0) {
             throw "No Velopack release files found in $releaseDir"
@@ -147,7 +164,29 @@ jobs:
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title $title --generate-notes --verify-tag
+            $createArguments = @(
+              "release",
+              "create",
+              $tag,
+              "--title",
+              $title,
+              "--generate-notes",
+              "--verify-tag"
+            )
+
+            if ($prerelease) {
+              $createArguments += "--prerelease"
+            }
+
+            gh @createArguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create GitHub Release $tag"
+            }
+          } else {
+            gh release edit $tag $prereleaseArgument
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update GitHub Release prerelease metadata for $tag"
+            }
           }
 
           foreach ($releaseFile in $releaseFiles) {

@@ -50,7 +50,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(SidebarToggleIcon))]
     private bool _isSidebarCollapsed;
 
-    public MainWindowViewModel(
+    internal MainWindowViewModel(
         ApplicationController controller,
         IUiDispatcher dispatcher,
         ISettingsDialogs settingsDialogs,
@@ -58,6 +58,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IDiagnosticsDialogs diagnosticsDialogs,
         IRecordingDialogs recordingDialogs,
         IWindowsStartupShortcut windowsStartupShortcut,
+        IApplicationUpdater applicationUpdater,
+        Action requestShutdownForUpdate,
         bool showSettingsOnStartup = false
     )
     {
@@ -82,6 +84,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             initialRecordingStorageStatus: controller.RecordingStorageStatus
         );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
+        Updates = new ApplicationUpdateViewModel(
+            applicationUpdater,
+            dispatcher,
+            CanRestartForUpdate,
+            requestShutdownForUpdate
+        );
         NavigationItems =
         [
             new NavigationItemViewModel("Recordings", ShellIconGeometries.Recordings, Recordings),
@@ -122,6 +130,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public DiagnosticsViewModel Diagnostics { get; }
 
+    public ApplicationUpdateViewModel Updates { get; }
+
     public void Dispose()
     {
         _controller.StatusChanged -= OnStatusChanged;
@@ -132,6 +142,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void DiscardPendingSettingsDraftsForExit()
     {
         Settings.DiscardPendingRecordingStorageLimitChange();
+    }
+
+    public void StartAutomaticUpdateCheck()
+    {
+        Updates.StartAutomaticCheck();
+    }
+
+    private bool CanRestartForUpdate()
+    {
+        return _controller.Status.Recording.State == RecordingCoordinatorState.Idle;
     }
 
     private bool IsLeavingSettings(NavigationItemViewModel nextNavigationItem)
@@ -195,6 +215,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Recordings.ApplyStatus(status);
             Settings.ApplyStatus(status);
             Diagnostics.ApplyStatus(status);
+            Updates.RefreshCanRestart();
         });
     }
 

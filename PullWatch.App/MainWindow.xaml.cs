@@ -31,6 +31,8 @@ public partial class MainWindow : Window
             new WpfDiagnosticsDialogs(),
             new WpfRecordingDialogs(),
             windowsStartupShortcut,
+            new VelopackApplicationUpdater(),
+            RequestShutdownForUpdate,
             showSettingsOnStartup
         );
         DataContext = _viewModel;
@@ -43,6 +45,7 @@ public partial class MainWindow : Window
         );
         Closed += OnClosed;
         Closing += OnClosing;
+        _viewModel.StartAutomaticUpdateCheck();
     }
 
     private void OnClosing(object? sender, CancelEventArgs eventArgs)
@@ -68,6 +71,13 @@ public partial class MainWindow : Window
         SaveWindowPlacement();
         _durationTimer.Stop();
         _viewModel.Dispose();
+    }
+
+    private void RequestShutdownForUpdate()
+    {
+        SaveWindowPlacement();
+        _lifetime.BeginForcedExit();
+        Application.Current.Shutdown();
     }
 
     private void RestoreWindowPlacement(WindowPlacementSettings? placement)

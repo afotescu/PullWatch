@@ -3,6 +3,9 @@
 PullWatch is a local desktop recorder. It does not include telemetry, analytics,
 cloud sync, or any upload feature.
 
+PullWatch may contact GitHub Releases to check whether a newer version is
+available. It does not download update packages until you choose to update.
+
 PullWatch records only the World of Warcraft window. Recording starts when:
 
 - you press manual start, or

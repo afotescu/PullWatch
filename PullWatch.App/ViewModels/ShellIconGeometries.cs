@@ -22,6 +22,11 @@ internal static class ShellIconGeometries
             "M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2"
         );
 
+    public static Geometry Update { get; } =
+        CreateIcon(
+            "M2 8A6 6 0 0 1 12.5 4L14 5.5M14 2v3.5h-3.5M14 8a6 6 0 0 1-10.5 4L2 10.5M2 14v-3.5h3.5"
+        );
+
     public static Geometry Collapse { get; } = CreateIcon("M10.5 2 L4.5 8 L10.5 14");
 
     public static Geometry Expand { get; } = CreateIcon("M5.5 2 L11.5 8 L5.5 14");

@@ -57,6 +57,30 @@
         </Setter.Value>
       </Setter>
     </Style>
+
+    <Style
+      x:Key="SidebarUpdateButtonStyle"
+      BasedOn="{StaticResource BaseButtonStyle}"
+      TargetType="Button"
+    >
+      <Setter Property="MaxWidth" Value="190" />
+      <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Updates.IsActionProminent}" Value="True">
+          <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+          <Setter Property="Foreground" Value="{StaticResource FilledButtonTextBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+          <Setter
+            Property="local:ButtonChrome.HoverOverlayBrush"
+            Value="{StaticResource FilledButtonHoverOverlayBrush}"
+          />
+          <Setter
+            Property="local:ButtonChrome.PressedOverlayBrush"
+            Value="{StaticResource FilledButtonPressedOverlayBrush}"
+          />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
   </Window.Resources>
 
   <Grid Background="{StaticResource WindowBrush}">
@@ -100,6 +124,19 @@
           </StackPanel>
 
           <StackPanel DockPanel.Dock="Bottom" Margin="0,24,0,0">
+            <Button
+              Margin="0,0,0,8"
+              HorizontalAlignment="Left"
+              Command="{Binding Updates.UpdateCommand}"
+              Style="{StaticResource SidebarUpdateButtonStyle}"
+              ToolTip="{Binding Updates.ActionToolTip}"
+            >
+              <TextBlock
+                Text="{Binding Updates.ActionText}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+              />
+            </Button>
             <TextBlock
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding AppVersionLabel}"
@@ -188,6 +225,26 @@
           </StackPanel>
 
           <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Center">
+            <Button
+              Margin="0,0,0,8"
+              HorizontalAlignment="Center"
+              Command="{Binding Updates.UpdateCommand}"
+              Style="{StaticResource SidebarUpdateButtonStyle}"
+              ToolTip="{Binding Updates.ActionToolTip}"
+              ToolTipService.ShowOnDisabled="True"
+            >
+              <Path
+                Width="15"
+                Height="15"
+                Data="{Binding Updates.ActionIcon}"
+                Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                StrokeStartLineCap="Round"
+                StrokeThickness="1.8"
+              />
+            </Button>
             <TextBlock
               Margin="0,0,0,10"
               HorizontalAlignment="Center"
