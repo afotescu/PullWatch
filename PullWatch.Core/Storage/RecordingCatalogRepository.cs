@@ -731,7 +731,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.FormatNullableUtc(challengeMode.ChallengeEndedAtUtc),
             challengeMode.TotalTimeMilliseconds,
             challengeMode.OnTimeSeconds,
-            challengeMode.TimerLimitSeconds
+            challengeMode.MythicRatingAfterRun
         );
     }
 
@@ -762,7 +762,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.FormatUtc(challengeModeCompletion.ChallengeEndedAtUtc),
             challengeModeCompletion.TotalTimeMilliseconds,
             challengeModeCompletion.OnTimeSeconds,
-            challengeModeCompletion.TimerLimitSeconds
+            challengeModeCompletion.MythicRatingAfterRun
         );
     }
 

@@ -49,7 +49,7 @@ public sealed class CombatLogEventMetadataParserTests
         Assert.Equal(22, challengeEnd.KeystoneLevel);
         Assert.Equal(1850000, challengeEnd.TotalTimeMilliseconds);
         Assert.Equal(32.5, challengeEnd.OnTimeSeconds);
-        Assert.Equal(1800, challengeEnd.TimerLimitSeconds);
+        Assert.Equal(1800, challengeEnd.MythicRatingAfterRun);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class CombatLogEventMetadataParserTests
 
         Assert.True(parsed);
         Assert.Equal(ChallengeModeOutcome.Timed, challengeEnd.Outcome);
-        Assert.Equal(3512, challengeEnd.TimerLimitSeconds);
+        Assert.Equal(3512, challengeEnd.MythicRatingAfterRun);
     }
 
     [Fact]

@@ -42,7 +42,7 @@ public sealed record ChallengeRecordingEnd(
     int KeystoneLevel,
     int? TotalTimeMilliseconds,
     double? OnTimeSeconds,
-    int? TimerLimitSeconds
+    int? MythicRatingAfterRun
 ) : RecordingActivityEnd(EndedAt);
 
 public sealed record ZoneChangeContext(

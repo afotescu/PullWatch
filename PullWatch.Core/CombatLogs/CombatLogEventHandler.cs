@@ -433,7 +433,7 @@ public sealed class CombatLogEventHandler(
         if (combatLogEvent.Name == WowEvents.ChallengeModeEnd && arguments.Count >= 6)
         {
             logger.LogInformation(
-                "Challenge ended: instance {InstanceId}, success {Success}, level {Level}, total time {TotalTimeMilliseconds} ms, on-time delta {OnTimeSeconds} s, timer limit {TimerLimitSeconds} s",
+                "Challenge ended: instance {InstanceId}, success {Success}, level {Level}, total time {TotalTimeMilliseconds} ms, on-time delta {OnTimeSeconds} s, mythic rating after run {MythicRatingAfterRun}",
                 arguments[0],
                 arguments[1],
                 arguments[2],

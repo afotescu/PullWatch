@@ -15,7 +15,7 @@ internal static class CombatLogEventMetadataParser
     private const int ChallengeEndLevelIndex = 2;
     private const int ChallengeEndTotalTimeMillisecondsIndex = 3;
     private const int ChallengeEndOnTimeSecondsIndex = 4;
-    private const int ChallengeEndTimerLimitSecondsIndex = 5;
+    private const int ChallengeEndMythicRatingAfterRunIndex = 5;
     private const int ZoneIdIndex = 0;
     private const int ZoneNameIndex = 1;
     private const int ZoneInstanceTypeIndex = 2;
@@ -92,8 +92,8 @@ internal static class CombatLogEventMetadataParser
             )
             || !TryParseOptionalTruncatedInt(
                 arguments,
-                ChallengeEndTimerLimitSecondsIndex,
-                out var timerLimitSeconds
+                ChallengeEndMythicRatingAfterRunIndex,
+                out var mythicRatingAfterRun
             )
         )
         {
@@ -107,7 +107,7 @@ internal static class CombatLogEventMetadataParser
             level,
             totalTimeMilliseconds,
             onTimeSeconds,
-            timerLimitSeconds
+            mythicRatingAfterRun
         );
         return true;
     }

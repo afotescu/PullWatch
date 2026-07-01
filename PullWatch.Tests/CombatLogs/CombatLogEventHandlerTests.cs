@@ -317,7 +317,7 @@ public sealed class CombatLogEventHandlerTests
         var recording = Assert.Single(recordings);
         Assert.NotNull(recording.ChallengeMode);
         Assert.Equal(ChallengeModeOutcome.Timed, recording.ChallengeMode.Outcome);
-        Assert.Equal(3512, recording.ChallengeMode.TimerLimitSeconds);
+        Assert.Equal(3512, recording.ChallengeMode.MythicRatingAfterRun);
     }
 
     [Fact]

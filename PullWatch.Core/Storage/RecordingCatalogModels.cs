@@ -101,7 +101,7 @@ public sealed record ChallengeModeEntry(
     DateTimeOffset? ChallengeEndedAtUtc,
     int? TotalTimeMilliseconds,
     double? OnTimeSeconds,
-    int? TimerLimitSeconds
+    int? MythicRatingAfterRun
 );
 
 public sealed record ChallengeModeSave(
@@ -116,7 +116,7 @@ public sealed record ChallengeModeSave(
     DateTimeOffset? ChallengeEndedAtUtc,
     int? TotalTimeMilliseconds,
     double? OnTimeSeconds,
-    int? TimerLimitSeconds
+    int? MythicRatingAfterRun
 );
 
 public sealed record ChallengeModeCompletionSave(
@@ -125,5 +125,5 @@ public sealed record ChallengeModeCompletionSave(
     DateTimeOffset ChallengeEndedAtUtc,
     int? TotalTimeMilliseconds,
     double? OnTimeSeconds,
-    int? TimerLimitSeconds
+    int? MythicRatingAfterRun
 );

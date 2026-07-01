@@ -122,7 +122,7 @@ public sealed class RecordingCatalogTests
         );
         Assert.Equal(1850000, completedChallengeMode.TotalTimeMilliseconds);
         Assert.Equal(32.5, completedChallengeMode.OnTimeSeconds);
-        Assert.Equal(1800, completedChallengeMode.TimerLimitSeconds);
+        Assert.Equal(1800, completedChallengeMode.MythicRatingAfterRun);
 
         var recordings = await catalog.ListAvailableFilesAsync(
             directory.FullName,

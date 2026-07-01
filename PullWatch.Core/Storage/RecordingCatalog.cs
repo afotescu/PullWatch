@@ -318,7 +318,7 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                 challengeEnd.EndedAt.ToUniversalTime(),
                 challengeEnd.TotalTimeMilliseconds,
                 challengeEnd.OnTimeSeconds,
-                challengeEnd.TimerLimitSeconds
+                challengeEnd.MythicRatingAfterRun
             )
             : null;
     }
