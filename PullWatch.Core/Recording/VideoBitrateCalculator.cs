@@ -81,7 +81,7 @@ public static class VideoBitrateCalculator
         return codec switch
         {
             VideoCodec.H264 => 1,
-            VideoCodec.H265 => 0.7,
+            VideoCodec.H265 => 0.6,
             _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
         };
     }

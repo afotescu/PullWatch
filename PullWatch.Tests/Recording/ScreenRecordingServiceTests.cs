@@ -37,7 +37,7 @@ public sealed class ScreenRecordingServiceTests
     }
 
     [Fact]
-    public void VideoEncoderOptionsUseQualityModeForSelectedH265Encoder()
+    public void VideoEncoderOptionsUseCbrModeForSelectedH265Encoder()
     {
         var settings = new PullWatchSettings
         {
@@ -55,9 +55,10 @@ public sealed class ScreenRecordingServiceTests
         );
         var encoder = Assert.IsType<H265VideoEncoder>(options.Encoder);
 
+        Assert.Equal(7_000_000, options.Bitrate);
         Assert.Equal(70, options.Quality);
         Assert.False(options.IsFragmentedMp4Enabled);
-        Assert.Equal(H265BitrateControlMode.Quality, encoder.BitrateMode);
+        Assert.Equal(H265BitrateControlMode.CBR, encoder.BitrateMode);
     }
 
     [Theory]

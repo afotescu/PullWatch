@@ -5,45 +5,7 @@
   xmlns:local="clr-namespace:PullWatch"
 >
   <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
-
-    <Border
-      Grid.Row="0"
-      Margin="18"
-      Background="{StaticResource WarningSurfaceBrush}"
-      BorderBrush="{StaticResource FailureBrush}"
-      BorderThickness="1"
-      CornerRadius="8"
-      Padding="16"
-      Visibility="{Binding IsFailureVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-    >
-      <Grid>
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-
-        <StackPanel>
-          <TextBlock
-            Foreground="{StaticResource FailureBrush}"
-            FontWeight="SemiBold"
-            Text="Recorder needs attention"
-          />
-          <TextBlock
-            Margin="0,5,12,0"
-            Style="{StaticResource SecondaryTextStyle}"
-            Text="{Binding FailureMessage}"
-          />
-        </StackPanel>
-
-        <Button Grid.Column="1" Command="{Binding DismissFailureCommand}" Content="Dismiss" />
-      </Grid>
-    </Border>
-
-    <Grid Grid.Row="1">
+    <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="*" MinHeight="320" />
         <RowDefinition Height="18" />

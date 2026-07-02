@@ -280,6 +280,41 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public void RecorderFailureUsesNotificationCenterWhenAvailable()
+    {
+        var failure = new InvalidOperationException("capture failed");
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, lastFailure: failure),
+            notifications: notifications
+        );
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal("recorder-failure", notification.Id);
+        Assert.Equal(NotificationSeverity.Error, notification.Severity);
+        Assert.Equal("Recorder needs attention", notification.Title);
+        Assert.Equal("capture failed", notification.Message);
+        Assert.True(viewModel.IsFailureVisible);
+
+        notification.DismissCommand.Execute(null);
+        viewModel.ApplyStatus(Status(RecordingCoordinatorState.Idle, lastFailure: failure));
+
+        Assert.Empty(notifications.Items);
+        Assert.False(viewModel.IsFailureVisible);
+
+        viewModel.ApplyStatus(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException("finalization failed")
+            )
+        );
+
+        var newNotification = Assert.Single(notifications.Items);
+        Assert.Equal("finalization failed", newNotification.Message);
+        Assert.True(viewModel.IsFailureVisible);
+    }
+
+    [Fact]
     public void IdleRecorderReportsIdleHealth()
     {
         var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle));
@@ -999,7 +1034,8 @@ public sealed class RecordingsViewModelTests
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null,
         Func<Guid, Task>? deleteRecording = null,
         Func<RecordingListItem, bool>? confirmPermanentDelete = null,
-        Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null
+        Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null,
+        NotificationCenterViewModel? notifications = null
     )
     {
         return new RecordingsViewModel(
@@ -1010,7 +1046,8 @@ public sealed class RecordingsViewModelTests
             deleteRecording ?? (_ => Task.CompletedTask),
             confirmPermanentDelete ?? (_ => true),
             () => Task.CompletedTask,
-            saveSelectedRecordingCategory ?? (_ => Task.CompletedTask)
+            saveSelectedRecordingCategory ?? (_ => Task.CompletedTask),
+            notifications
         );
     }
 

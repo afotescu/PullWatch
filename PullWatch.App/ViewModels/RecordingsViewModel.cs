@@ -6,6 +6,7 @@ namespace PullWatch;
 
 public sealed partial class RecordingsViewModel : ObservableObject
 {
+    private const string FailureNotificationId = "recorder-failure";
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string NoRecordingsDirectoryMessage =
         "Choose a recordings directory in settings to review videos here.";
@@ -23,6 +24,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private readonly Func<RecordingListItem, bool> _confirmPermanentDelete;
     private readonly Func<Task> _openRecordingsFolder;
     private readonly Func<RecordingListCategory, Task> _saveSelectedRecordingCategory;
+    private readonly NotificationCenterViewModel? _notifications;
     private readonly List<RecordingListItem> _allRecordings = new();
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
@@ -44,7 +46,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         Func<Guid, Task> deleteRecording,
         Func<RecordingListItem, bool> confirmPermanentDelete,
         Func<Task> openRecordingsFolder,
-        Func<RecordingListCategory, Task> saveSelectedRecordingCategory
+        Func<RecordingListCategory, Task> saveSelectedRecordingCategory,
+        NotificationCenterViewModel? notifications = null
     )
     {
         _recording = initialStatus.Recording;
@@ -59,6 +62,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _confirmPermanentDelete = confirmPermanentDelete;
         _openRecordingsFolder = openRecordingsFolder;
         _saveSelectedRecordingCategory = saveSelectedRecordingCategory;
+        _notifications = notifications;
         RecordingCategories =
         [
             new RecordingCategoryTab(RecordingListCategory.ChallengeMode, "Mythic+"),
@@ -238,6 +242,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(string.Empty);
+        UpdateFailureNotification();
         ManualRecordingCommand.NotifyCanExecuteChanged();
         DeleteSelectedRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
@@ -801,7 +806,27 @@ public sealed partial class RecordingsViewModel : ObservableObject
     {
         _dismissedFailure = _recording.LastFailure;
         OnPropertyChanged(nameof(IsFailureVisible));
+        UpdateFailureNotification();
         DismissFailureCommand.NotifyCanExecuteChanged();
+    }
+
+    private void UpdateFailureNotification()
+    {
+        if (!IsFailureVisible || string.IsNullOrWhiteSpace(FailureMessage))
+        {
+            _notifications?.Dismiss(FailureNotificationId);
+            return;
+        }
+
+        _notifications?.ShowOrUpdate(
+            FailureNotificationId,
+            new NotificationContent(
+                NotificationSeverity.Error,
+                "Recorder needs attention",
+                FailureMessage,
+                Dismissed: DismissFailure
+            )
+        );
     }
 
     private void HandleCommandFailure(Exception exception)

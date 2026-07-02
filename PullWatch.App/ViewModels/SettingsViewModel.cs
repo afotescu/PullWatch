@@ -7,6 +7,7 @@ namespace PullWatch;
 
 public sealed partial class SettingsViewModel : ObservableObject
 {
+    private const string SettingsNotificationId = "settings-save";
     private const string SettingsSavedMessage = "Settings saved.";
     private const string FixHighlightedSettingsMessage = "Fix the highlighted settings.";
     private const string SettingsLockedMessage = "Settings are locked while recording.";
@@ -21,17 +22,23 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan SettingsSuccessNotificationDuration = TimeSpan.FromSeconds(5);
 
     private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
     private readonly ISettingsDialogs _dialogs;
     private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
     private readonly IWindowsStartupShortcut _windowsStartupShortcut;
+    private readonly NotificationCenterViewModel? _notifications;
+    private readonly IUiDispatcher? _notificationDispatcher;
+    private readonly TimeSpan _settingsSuccessNotificationDuration;
     private readonly object _autosaveSync = new();
     private PullWatchSettings _savedSettings;
     private Task? _autosaveTask;
     private PendingSettingsSave? _pendingAutosave;
     private PendingSettingsSave _retryOnNextAutosave = PendingSettingsSave.None;
     private RecordingStorageStatus _recordingStorageStatus = RecordingStorageStatus.Initial;
+    private CancellationTokenSource? _settingsSuccessNotificationCancellation;
+    private SettingsNotificationKind? _activeSettingsNotificationKind;
     private bool _isLoading;
 
     public SettingsViewModel(
@@ -40,7 +47,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         ISettingsDialogs dialogs,
         Func<VideoCaptureSize>? getEstimateCaptureSize = null,
         IWindowsStartupShortcut? windowsStartupShortcut = null,
-        RecordingStorageStatus? initialRecordingStorageStatus = null
+        RecordingStorageStatus? initialRecordingStorageStatus = null,
+        NotificationCenterViewModel? notifications = null,
+        IUiDispatcher? notificationDispatcher = null,
+        TimeSpan? settingsSuccessNotificationDuration = null
     )
     {
         _saveSettings = saveSettings;
@@ -48,6 +58,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetEstimatedCaptureSize;
         _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
         _recordingStorageStatus = initialRecordingStorageStatus ?? RecordingStorageStatus.Initial;
+        _notifications = notifications;
+        _notificationDispatcher = notificationDispatcher;
+        _settingsSuccessNotificationDuration =
+            settingsSuccessNotificationDuration ?? SettingsSuccessNotificationDuration;
         _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
             () => ExecuteCommandAsync(CommitWowLogsDirectoryAsync),
@@ -465,13 +479,25 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string? SaveMessage
     {
         get;
-        private set => SetProperty(ref field, value);
+        private set
+        {
+            if (SetProperty(ref field, value))
+            {
+                UpdateSettingsNotification();
+            }
+        }
     }
 
     public bool IsSaveError
     {
         get;
-        private set => SetProperty(ref field, value);
+        private set
+        {
+            if (SetProperty(ref field, value))
+            {
+                UpdateSettingsNotification();
+            }
+        }
     }
 
     public string EstimatedRecordingSize
@@ -505,7 +531,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 FormatEstimateSizeText(captureSize, outputSize),
                 FormatCodecName(SelectedVideoCodec),
                 $"{SelectedFrameRate} FPS",
-                FormatBitrateText(bitrate, SelectedVideoCodec),
+                FormatBitrateText(bitrate),
                 "Actual recording uses the WoW window size."
             );
         }
@@ -867,6 +893,154 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         SaveMessage =
             IsWowLogsDirectoryPending || IsRecordingsDirectoryPending ? null : SettingsSavedMessage;
+    }
+
+    private void UpdateSettingsNotification()
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SaveMessage))
+        {
+            if (_activeSettingsNotificationKind == SettingsNotificationKind.Error)
+            {
+                ClearSettingsNotification();
+            }
+
+            return;
+        }
+
+        if (IsSaveError)
+        {
+            ShowSettingsErrorNotification(SaveMessage);
+            return;
+        }
+
+        if (SaveMessage == SettingsSavedMessage)
+        {
+            ShowSettingsSuccessNotification();
+            return;
+        }
+
+        if (_activeSettingsNotificationKind == SettingsNotificationKind.Error)
+        {
+            ClearSettingsNotification();
+        }
+    }
+
+    private void ShowSettingsSuccessNotification()
+    {
+        if (
+            _notifications is null
+            || _activeSettingsNotificationKind == SettingsNotificationKind.Success
+        )
+        {
+            return;
+        }
+
+        CancelSettingsSuccessNotificationTimer();
+        _activeSettingsNotificationKind = SettingsNotificationKind.Success;
+        _notifications.ShowOrUpdate(
+            SettingsNotificationId,
+            new NotificationContent(
+                NotificationSeverity.Success,
+                SettingsSavedMessage,
+                "Your changes have been saved.",
+                Dismissed: ClearSettingsNotificationState
+            )
+        );
+
+        _settingsSuccessNotificationCancellation = new CancellationTokenSource();
+        _ = DismissSettingsSuccessNotificationAfterDelayAsync(
+            _settingsSuccessNotificationCancellation.Token
+        );
+    }
+
+    private void ShowSettingsErrorNotification(string message)
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        CancelSettingsSuccessNotificationTimer();
+        _activeSettingsNotificationKind = SettingsNotificationKind.Error;
+        _notifications.ShowOrUpdate(
+            SettingsNotificationId,
+            new NotificationContent(
+                NotificationSeverity.Error,
+                "Settings need attention",
+                message,
+                Dismissed: ClearSettingsNotificationState
+            )
+        );
+    }
+
+    private async Task DismissSettingsSuccessNotificationAfterDelayAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await Task.Delay(_settingsSuccessNotificationDuration, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        PostNotificationUpdate(() =>
+        {
+            if (
+                cancellationToken.IsCancellationRequested
+                || _activeSettingsNotificationKind != SettingsNotificationKind.Success
+            )
+            {
+                return;
+            }
+
+            _notifications?.Dismiss(SettingsNotificationId);
+            ClearSettingsNotificationState();
+        });
+    }
+
+    private void ClearSettingsNotification()
+    {
+        CancelSettingsSuccessNotificationTimer();
+        _notifications?.Dismiss(SettingsNotificationId);
+        ClearSettingsNotificationState();
+    }
+
+    private void ClearSettingsNotificationState()
+    {
+        CancelSettingsSuccessNotificationTimer();
+        _activeSettingsNotificationKind = null;
+    }
+
+    private void CancelSettingsSuccessNotificationTimer()
+    {
+        var cancellation = Interlocked.Exchange(ref _settingsSuccessNotificationCancellation, null);
+
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        cancellation.Cancel();
+        cancellation.Dispose();
+    }
+
+    private void PostNotificationUpdate(Action update)
+    {
+        if (_notificationDispatcher is null)
+        {
+            update();
+            return;
+        }
+
+        _notificationDispatcher.Post(update);
     }
 
     private async Task SyncStartupShortcutAsync(StartupSettings settings)
@@ -1355,10 +1529,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         };
     }
 
-    private static string FormatBitrateText(int bitrate, VideoCodec codec)
+    private static string FormatBitrateText(int bitrate)
     {
-        var description = codec == VideoCodec.H265 ? "estimate" : "target";
-        return $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps {description}).";
+        return $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target).";
     }
 
     private static VideoCaptureSize GetEstimatedCaptureSize()
@@ -1384,6 +1557,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         WowLogsDirectory = 1,
         RecordingsDirectory = 2,
         StartupShortcut = 4,
+    }
+
+    private enum SettingsNotificationKind
+    {
+        Success,
+        Error,
     }
 
     private sealed class NoOpWindowsStartupShortcut : IWindowsStartupShortcut

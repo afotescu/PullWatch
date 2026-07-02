@@ -66,6 +66,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _controller = controller;
         _dispatcher = dispatcher;
         _logs = logs;
+        Notifications = new NotificationCenterViewModel();
         Recordings = new RecordingsViewModel(
             controller.Status,
             controller.StartManualRecordingAsync,
@@ -74,17 +75,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             controller.DeleteRecordingAsync,
             recordingDialogs.ConfirmPermanentDelete,
             OpenRecordingsFolderAsync,
-            SaveSelectedRecordingCategoryAsync
+            SaveSelectedRecordingCategoryAsync,
+            Notifications
         );
         Settings = new SettingsViewModel(
             controller.Status,
             controller.SaveSettingsAsync,
             settingsDialogs,
             windowsStartupShortcut: windowsStartupShortcut,
-            initialRecordingStorageStatus: controller.RecordingStorageStatus
+            initialRecordingStorageStatus: controller.RecordingStorageStatus,
+            notifications: Notifications,
+            notificationDispatcher: dispatcher
         );
         Diagnostics = new DiagnosticsViewModel(controller.Status, logs, diagnosticsDialogs);
-        Notifications = new NotificationCenterViewModel();
         Updates = new ApplicationUpdateViewModel(
             applicationUpdater,
             dispatcher,

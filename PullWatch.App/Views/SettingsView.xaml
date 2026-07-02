@@ -6,12 +6,7 @@
 >
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <Grid Margin="36">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="Auto" />
-      </Grid.RowDefinitions>
-
-      <StackPanel Grid.Row="0" IsEnabled="{Binding IsEditingEnabled}">
+      <StackPanel IsEnabled="{Binding IsEditingEnabled}">
         <local:SectionCard Header="Folders">
           <StackPanel>
             <local:PathSettingRow
@@ -285,18 +280,6 @@
           </Grid>
         </Border>
       </StackPanel>
-
-      <TextBlock Grid.Row="1" Margin="0,0,0,0" Text="{Binding SaveMessage}">
-        <TextBlock.Style>
-          <Style TargetType="TextBlock" BasedOn="{StaticResource SecondaryTextStyle}">
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding IsSaveError}" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </TextBlock.Style>
-      </TextBlock>
     </Grid>
   </ScrollViewer>
 </UserControl>

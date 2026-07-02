@@ -44,6 +44,73 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task SuccessfulSaveShowsTemporaryNotificationWithoutDuplicates()
+    {
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            notifications: notifications,
+            settingsSuccessNotificationDuration: TimeSpan.FromMilliseconds(50)
+        );
+
+        viewModel.SelectedVideoQuality = VideoQuality.High;
+
+        await WaitForAsync(() => notifications.HasNotifications);
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal(NotificationSeverity.Success, notification.Severity);
+        Assert.Equal("Settings saved.", notification.Title);
+
+        viewModel.SelectedFrameRate = VideoFrameRates.Standard;
+
+        await WaitForAsync(() => viewModel.SelectedFrameRate == VideoFrameRates.Standard);
+
+        Assert.Single(notifications.Items);
+
+        await WaitForAsync(() => !notifications.HasNotifications);
+    }
+
+    [Fact]
+    public async Task SaveErrorNotificationOverwritesVisibleSuccessNotification()
+    {
+        var saveCount = 0;
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            _ =>
+            {
+                saveCount++;
+                return saveCount == 1
+                    ? Saved(new PullWatchSettings())
+                    : Task.FromResult(
+                        new SettingsSaveResult(
+                            SettingsSaveStatus.Invalid,
+                            null,
+                            ["Video codec must be H.264 or H.265."]
+                        )
+                    );
+            },
+            notifications: notifications
+        );
+
+        viewModel.SelectedVideoQuality = VideoQuality.High;
+        await WaitForAsync(() => notifications.HasNotifications);
+
+        Assert.Equal(NotificationSeverity.Success, Assert.Single(notifications.Items).Severity);
+
+        viewModel.SelectedFrameRate = VideoFrameRates.Standard;
+
+        await WaitForAsync(() =>
+            notifications.Items.Count == 1
+            && notifications.Items[0].Severity == NotificationSeverity.Error
+        );
+
+        var notification = Assert.Single(notifications.Items);
+        Assert.Equal("Settings need attention", notification.Title);
+        Assert.Equal("Fix the highlighted settings.", notification.Message);
+    }
+
+    [Fact]
     public async Task RecordingStorageLimitAppliesExplicitlyAndDisplaysUsage()
     {
         const long bytesPerGigabyte = 1024L * 1024 * 1024;
@@ -434,9 +501,9 @@ public sealed class SettingsViewModelTests
 
         viewModel.SelectedVideoCodec = VideoCodec.H265;
 
-        Assert.Contains("60 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("50 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("H.265", viewModel.EstimatedRecordingSize);
-        Assert.Contains("8 Mbps estimate", viewModel.EstimatedRecordingSize);
+        Assert.Contains("7 Mbps target", viewModel.EstimatedRecordingSize);
     }
 
     [Fact]
@@ -726,7 +793,9 @@ public sealed class SettingsViewModelTests
         VideoCaptureSize? estimateCaptureSize = null,
         ISettingsDialogs? dialogs = null,
         IWindowsStartupShortcut? windowsStartupShortcut = null,
-        RecordingStorageStatus? initialRecordingStorageStatus = null
+        RecordingStorageStatus? initialRecordingStorageStatus = null,
+        NotificationCenterViewModel? notifications = null,
+        TimeSpan? settingsSuccessNotificationDuration = null
     )
     {
         return new SettingsViewModel(
@@ -735,7 +804,10 @@ public sealed class SettingsViewModelTests
             dialogs ?? new FakeSettingsDialogs(),
             () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080),
             windowsStartupShortcut,
-            initialRecordingStorageStatus
+            initialRecordingStorageStatus,
+            notifications,
+            ImmediateUiDispatcher.Instance,
+            settingsSuccessNotificationDuration
         );
     }
 
@@ -771,6 +843,16 @@ public sealed class SettingsViewModelTests
         while (!condition())
         {
             await Task.Delay(10, cancellation.Token);
+        }
+    }
+
+    private sealed class ImmediateUiDispatcher : IUiDispatcher
+    {
+        public static ImmediateUiDispatcher Instance { get; } = new();
+
+        public void Post(Action action)
+        {
+            action();
         }
     }
 

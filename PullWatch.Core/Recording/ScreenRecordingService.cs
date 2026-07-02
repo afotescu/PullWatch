@@ -294,10 +294,7 @@ public sealed class ScreenRecordingService(
             {
                 BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
             },
-            VideoCodec.H265 => new H265VideoEncoder
-            {
-                BitrateMode = H265BitrateControlMode.Quality,
-            },
+            VideoCodec.H265 => new H265VideoEncoder { BitrateMode = H265BitrateControlMode.CBR },
             _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
         };
     }
@@ -352,10 +349,9 @@ public sealed class ScreenRecordingService(
     {
         var encoderName = GetEncoderName(options.Encoder);
         var bitrateMode = GetEncoderBitrateMode(options.Encoder);
-        var bitrateDescription = options.Encoder is H265VideoEncoder ? "estimate" : "target";
 
         logger.LogInformation(
-            "Video encoder settings: {VideoEncoder} {BitrateMode}, {VideoQuality}, {VideoScaling}, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps {BitrateDescription}, fragmented MP4 {FragmentedMp4Enabled}",
+            "Video encoder settings: {VideoEncoder} {BitrateMode}, {VideoQuality}, {VideoScaling}, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target, fragmented MP4 {FragmentedMp4Enabled}",
             encoderName,
             bitrateMode,
             settings.Video.Quality,
@@ -366,7 +362,6 @@ public sealed class ScreenRecordingService(
             outputSize.Height,
             options.Framerate,
             VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
-            bitrateDescription,
             options.IsFragmentedMp4Enabled
         );
     }

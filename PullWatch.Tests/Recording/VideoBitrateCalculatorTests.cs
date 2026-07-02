@@ -32,7 +32,7 @@ public sealed class VideoBitrateCalculatorTests
     }
 
     [Fact]
-    public void CalculatesLowerEstimatedBitrateForH265()
+    public void CalculatesLowerTargetBitrateForH265()
     {
         var bitrate = VideoBitrateCalculator.CalculateBitrate(
             new VideoCaptureSize(1920, 1080),
@@ -41,7 +41,7 @@ public sealed class VideoBitrateCalculatorTests
             VideoCodec.H265
         );
 
-        Assert.Equal(9_000_000, bitrate);
+        Assert.Equal(7_000_000, bitrate);
     }
 
     [Fact]
