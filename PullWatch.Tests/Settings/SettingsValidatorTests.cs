@@ -45,6 +45,18 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsEntireSettingsObjectWhenVideoCodecIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Video = new VideoSettings { Codec = (VideoCodec)999 } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Video codec must be H.264 or H.265.", result.Errors);
+    }
+
+    [Fact]
     public void RejectsEntireSettingsObjectWhenVideoScalingIsInvalid()
     {
         var result = SettingsValidator.Validate(

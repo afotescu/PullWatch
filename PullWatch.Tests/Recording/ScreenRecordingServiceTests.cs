@@ -32,7 +32,32 @@ public sealed class ScreenRecordingServiceTests
         Assert.False(options.IsThrottlingDisabled);
         Assert.True(options.IsFragmentedMp4Enabled);
         Assert.False(options.IsMp4FastStartEnabled);
+        Assert.Equal(GetExpectedEncoderQuality(quality), options.Quality);
         Assert.Equal(H264BitrateControlMode.UnconstrainedVBR, encoder.BitrateMode);
+    }
+
+    [Fact]
+    public void VideoEncoderOptionsUseQualityModeForSelectedH265Encoder()
+    {
+        var settings = new PullWatchSettings
+        {
+            Video = new VideoSettings
+            {
+                Codec = VideoCodec.H265,
+                Quality = VideoQuality.Balanced,
+                FrameRate = VideoFrameRates.High,
+            },
+        };
+
+        var options = ScreenRecordingService.CreateVideoEncoderOptions(
+            settings,
+            new VideoCaptureSize(2560, 1440)
+        );
+        var encoder = Assert.IsType<H265VideoEncoder>(options.Encoder);
+
+        Assert.Equal(70, options.Quality);
+        Assert.False(options.IsFragmentedMp4Enabled);
+        Assert.Equal(H265BitrateControlMode.Quality, encoder.BitrateMode);
     }
 
     [Theory]
@@ -178,5 +203,16 @@ public sealed class ScreenRecordingServiceTests
         {
             Directory.Delete(Path, true);
         }
+    }
+
+    private static int GetExpectedEncoderQuality(VideoQuality quality)
+    {
+        return quality switch
+        {
+            VideoQuality.Compact => 60,
+            VideoQuality.Balanced => 70,
+            VideoQuality.High => 80,
+            _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
+        };
     }
 }

@@ -30,6 +30,11 @@ public static class SettingsValidator
             );
         }
 
+        if (!Enum.IsDefined(settings.Video.Codec))
+        {
+            errors.Add("Video codec must be H.264 or H.265.");
+        }
+
         if (!Enum.IsDefined(settings.Video.Quality))
         {
             errors.Add("Video quality must be Compact, Balanced, or High.");

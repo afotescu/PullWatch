@@ -13,7 +13,8 @@ public static class VideoBitrateCalculator
     public static int CalculateBitrate(
         VideoCaptureSize captureSize,
         int frameRate,
-        VideoQuality quality
+        VideoQuality quality,
+        VideoCodec codec = VideoCodec.H264
     )
     {
         if (captureSize.Width <= 0 || captureSize.Height <= 0)
@@ -29,6 +30,7 @@ public static class VideoBitrateCalculator
             * (double)captureSize.Height
             * frameRate
             * GetQualityFactor(quality)
+            * GetCodecFactor(codec)
             / BitsPerMegabit;
         var clampedMegabits = Math.Clamp(
             rawMegabits,
@@ -71,6 +73,16 @@ public static class VideoBitrateCalculator
             VideoQuality.Balanced => 0.10,
             VideoQuality.High => 0.14,
             _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
+        };
+    }
+
+    private static double GetCodecFactor(VideoCodec codec)
+    {
+        return codec switch
+        {
+            VideoCodec.H264 => 1,
+            VideoCodec.H265 => 0.7,
+            _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
         };
     }
 

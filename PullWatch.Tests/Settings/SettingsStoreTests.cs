@@ -38,6 +38,7 @@ public sealed class SettingsStoreTests
             },
             Video = new VideoSettings
             {
+                Codec = VideoCodec.H265,
                 Quality = VideoQuality.High,
                 FrameRate = VideoFrameRates.Standard,
                 Scaling = VideoScaling.Original,

@@ -223,6 +223,13 @@
 
             <StackPanel Grid.Column="0" Margin="0,0,18,0">
               <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Video" />
+              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Codec" />
+              <ComboBox
+                DisplayMemberPath="Label"
+                ItemsSource="{Binding VideoCodecOptions}"
+                SelectedValue="{Binding SelectedVideoCodec, Mode=TwoWay}"
+                SelectedValuePath="Value"
+              />
               <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video quality" />
               <ComboBox
                 DisplayMemberPath="Label"

@@ -65,6 +65,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IAsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
 
+    public IReadOnlyList<VideoCodecOption> VideoCodecOptions { get; } =
+    [new(VideoCodec.H264, "H.264 / AVC"), new(VideoCodec.H265, "H.265 / HEVC")];
+
     public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
     [
         new(VideoQuality.Compact, "Compact"),
@@ -365,6 +368,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool CanStartMinimizedToTray => IsEditingEnabled && StartWithWindows;
 
+    public VideoCodec SelectedVideoCodec
+    {
+        get;
+        set => SetEditableProperty(ref field, value);
+    }
+
     public VideoQuality SelectedVideoQuality
     {
         get;
@@ -477,7 +486,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             var bitrate = VideoBitrateCalculator.CalculateBitrate(
                 outputSize,
                 SelectedFrameRate,
-                SelectedVideoQuality
+                SelectedVideoQuality,
+                SelectedVideoCodec
             );
             var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(
                 bitrate,
@@ -493,8 +503,9 @@ public sealed partial class SettingsViewModel : ObservableObject
                 " ",
                 $"About {FormatFileSize(megabytes)} per minute",
                 FormatEstimateSizeText(captureSize, outputSize),
+                FormatCodecName(SelectedVideoCodec),
                 $"{SelectedFrameRate} FPS",
-                $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target).",
+                FormatBitrateText(bitrate, SelectedVideoCodec),
                 "Actual recording uses the WoW window size."
             );
         }
@@ -709,6 +720,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             },
             Video = _savedSettings.Video with
             {
+                Codec = SelectedVideoCodec,
                 Quality = SelectedVideoQuality,
                 FrameRate = SelectedFrameRate,
                 Scaling = SelectedVideoScaling,
@@ -956,6 +968,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             StartWithWindows = settings.Startup.StartWithWindows;
             StartMinimizedToTray =
                 settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;
+            SelectedVideoCodec = settings.Video.Codec;
             SelectedVideoQuality = settings.Video.Quality;
             SelectedFrameRate = settings.Video.FrameRate;
             SelectedVideoScaling = settings.Video.Scaling;
@@ -1219,7 +1232,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static bool ShouldRefreshEstimate(string? propertyName)
     {
         return propertyName
-            is nameof(SelectedVideoQuality)
+            is nameof(SelectedVideoCodec)
+                or nameof(SelectedVideoQuality)
                 or nameof(SelectedFrameRate)
                 or nameof(SelectedVideoScaling)
                 or nameof(CaptureSystemAudio)
@@ -1331,6 +1345,22 @@ public sealed partial class SettingsViewModel : ObservableObject
         return $"{size.Width}x{size.Height}";
     }
 
+    private static string FormatCodecName(VideoCodec codec)
+    {
+        return codec switch
+        {
+            VideoCodec.H264 => "H.264",
+            VideoCodec.H265 => "H.265",
+            _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
+        };
+    }
+
+    private static string FormatBitrateText(int bitrate, VideoCodec codec)
+    {
+        var description = codec == VideoCodec.H265 ? "estimate" : "target";
+        return $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps {description}).";
+    }
+
     private static VideoCaptureSize GetEstimatedCaptureSize()
     {
         return WowWindowCaptureSizeDetector.TryGetCurrentCaptureSize(out var wowCaptureSize)
@@ -1368,6 +1398,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 }
 
 public sealed record VideoQualityOption(VideoQuality Value, string Label);
+
+public sealed record VideoCodecOption(VideoCodec Value, string Label);
 
 public sealed record FrameRateOption(int Value, string Label);
 

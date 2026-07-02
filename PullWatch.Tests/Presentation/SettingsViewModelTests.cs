@@ -15,24 +15,28 @@ public sealed class SettingsViewModelTests
             }
         );
 
+        Assert.Equal(VideoCodec.H264, viewModel.SelectedVideoCodec);
         Assert.Equal(VideoQuality.Balanced, viewModel.SelectedVideoQuality);
         Assert.Equal(VideoFrameRates.High, viewModel.SelectedFrameRate);
         Assert.Equal(VideoScaling.Optimized, viewModel.SelectedVideoScaling);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
 
+        viewModel.SelectedVideoCodec = VideoCodec.H265;
         viewModel.SelectedVideoQuality = VideoQuality.High;
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
         viewModel.SelectedVideoScaling = VideoScaling.Original;
 
         await WaitForAsync(() =>
             saves.Any(save =>
-                save.Video.Quality == VideoQuality.High
+                save.Video.Codec == VideoCodec.H265
+                && save.Video.Quality == VideoQuality.High
                 && save.Video.FrameRate == VideoFrameRates.Standard
                 && save.Video.Scaling == VideoScaling.Original
             )
         );
 
         var saved = saves.Last();
+        Assert.Equal(VideoCodec.H265, saved.Video.Codec);
         Assert.Equal(VideoQuality.High, saved.Video.Quality);
         Assert.Equal(VideoFrameRates.Standard, saved.Video.FrameRate);
         Assert.Equal(VideoScaling.Original, saved.Video.Scaling);
@@ -412,7 +416,9 @@ public sealed class SettingsViewModelTests
         Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
+        Assert.Contains("H.264", viewModel.EstimatedRecordingSize);
         Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
+        Assert.Contains("12 Mbps target", viewModel.EstimatedRecordingSize);
         Assert.Contains("per minute", viewModel.EstimatedRecordingSize);
         Assert.Contains("WoW window size", viewModel.EstimatedRecordingSize);
 
@@ -425,6 +431,12 @@ public sealed class SettingsViewModelTests
 
         Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
+
+        viewModel.SelectedVideoCodec = VideoCodec.H265;
+
+        Assert.Contains("60 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("H.265", viewModel.EstimatedRecordingSize);
+        Assert.Contains("8 Mbps estimate", viewModel.EstimatedRecordingSize);
     }
 
     [Fact]
@@ -435,6 +447,10 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
+        Assert.Equal(
+            ["H.264 / AVC", "H.265 / HEVC"],
+            viewModel.VideoCodecOptions.Select(option => option.Label)
+        );
         Assert.Equal(
             ["Compact", "Balanced", "High"],
             viewModel.VideoQualityOptions.Select(option => option.Label)

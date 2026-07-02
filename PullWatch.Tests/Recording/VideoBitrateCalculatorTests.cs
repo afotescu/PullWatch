@@ -32,6 +32,19 @@ public sealed class VideoBitrateCalculatorTests
     }
 
     [Fact]
+    public void CalculatesLowerEstimatedBitrateForH265()
+    {
+        var bitrate = VideoBitrateCalculator.CalculateBitrate(
+            new VideoCaptureSize(1920, 1080),
+            VideoFrameRates.High,
+            VideoQuality.Balanced,
+            VideoCodec.H265
+        );
+
+        Assert.Equal(9_000_000, bitrate);
+    }
+
+    [Fact]
     public void EstimatesFiveMinuteFileSizeWithAudio()
     {
         var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(

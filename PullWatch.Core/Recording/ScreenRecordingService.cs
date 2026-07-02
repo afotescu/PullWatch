@@ -268,22 +268,48 @@ public sealed class ScreenRecordingService(
 
         return new VideoEncoderOptions
         {
-            Encoder = new H264VideoEncoder
-            {
-                BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
-            },
+            Encoder = CreateVideoEncoder(settings.Video.Codec),
             Bitrate = VideoBitrateCalculator.CalculateBitrate(
                 outputSize,
                 settings.Video.FrameRate,
-                settings.Video.Quality
+                settings.Video.Quality,
+                settings.Video.Codec
             ),
             Framerate = settings.Video.FrameRate,
+            Quality = GetVideoEncoderQuality(settings.Video.Quality),
             IsHardwareEncodingEnabled = true,
             IsLowLatencyEnabled = false,
             IsFixedFramerate = false,
             IsThrottlingDisabled = false,
-            IsFragmentedMp4Enabled = true,
+            IsFragmentedMp4Enabled = settings.Video.Codec == VideoCodec.H264,
             IsMp4FastStartEnabled = false,
+        };
+    }
+
+    private static IVideoEncoder CreateVideoEncoder(VideoCodec codec)
+    {
+        return codec switch
+        {
+            VideoCodec.H264 => new H264VideoEncoder
+            {
+                BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
+            },
+            VideoCodec.H265 => new H265VideoEncoder
+            {
+                BitrateMode = H265BitrateControlMode.Quality,
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
+        };
+    }
+
+    private static int GetVideoEncoderQuality(VideoQuality quality)
+    {
+        return quality switch
+        {
+            VideoQuality.Compact => 60,
+            VideoQuality.Balanced => 70,
+            VideoQuality.High => 80,
+            _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
         };
     }
 
@@ -324,12 +350,13 @@ public sealed class ScreenRecordingService(
         VideoEncoderOptions options
     )
     {
-        var bitrateMode = options.Encoder is H264VideoEncoder encoder
-            ? encoder.BitrateMode.ToString()
-            : "unknown";
+        var encoderName = GetEncoderName(options.Encoder);
+        var bitrateMode = GetEncoderBitrateMode(options.Encoder);
+        var bitrateDescription = options.Encoder is H265VideoEncoder ? "estimate" : "target";
 
         logger.LogInformation(
-            "Video encoder settings: H.264 {BitrateMode}, {VideoQuality}, {VideoScaling}, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps target, fragmented MP4 {FragmentedMp4Enabled}",
+            "Video encoder settings: {VideoEncoder} {BitrateMode}, {VideoQuality}, {VideoScaling}, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, {FrameRate} FPS, {BitrateMegabits} Mbps {BitrateDescription}, fragmented MP4 {FragmentedMp4Enabled}",
+            encoderName,
             bitrateMode,
             settings.Video.Quality,
             settings.Video.Scaling,
@@ -339,8 +366,29 @@ public sealed class ScreenRecordingService(
             outputSize.Height,
             options.Framerate,
             VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
+            bitrateDescription,
             options.IsFragmentedMp4Enabled
         );
+    }
+
+    private static string GetEncoderName(IVideoEncoder encoder)
+    {
+        return encoder switch
+        {
+            H264VideoEncoder => "H.264",
+            H265VideoEncoder => "H.265",
+            _ => encoder.EncodingFormat.ToString(),
+        };
+    }
+
+    private static string GetEncoderBitrateMode(IVideoEncoder encoder)
+    {
+        return encoder switch
+        {
+            H264VideoEncoder h264 => h264.BitrateMode.ToString(),
+            H265VideoEncoder h265 => h265.BitrateMode.ToString(),
+            _ => "unknown",
+        };
     }
 
     private static (Process Process, nint WindowHandle) FindWowProcess()

@@ -55,11 +55,18 @@ public sealed record RaidEncounterRecordingFilterSettings
 
 public sealed record VideoSettings
 {
+    public VideoCodec Codec { get; init; } = VideoCodec.H264;
     public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
     public int FrameRate { get; init; } = VideoFrameRates.High;
     public VideoScaling Scaling { get; init; } = VideoScaling.Optimized;
     public bool CaptureCursor { get; init; } = true;
     public bool ShowCaptureBorder { get; init; }
+}
+
+public enum VideoCodec
+{
+    H264,
+    H265,
 }
 
 public enum VideoQuality
