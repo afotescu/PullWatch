@@ -12,11 +12,12 @@ public partial class MainWindow : Window
     private readonly ApplicationLifetimeCoordinator _lifetime;
     private bool _placementSaved;
 
-    public MainWindow(
+    internal MainWindow(
         ApplicationController controller,
         ApplicationLifetimeCoordinator lifetime,
         InMemoryLogProvider logs,
         IWindowsStartupShortcut windowsStartupShortcut,
+        IApplicationUpdater applicationUpdater,
         bool showSettingsOnStartup
     )
     {
@@ -31,7 +32,7 @@ public partial class MainWindow : Window
             new WpfDiagnosticsDialogs(),
             new WpfRecordingDialogs(),
             windowsStartupShortcut,
-            new VelopackApplicationUpdater(),
+            applicationUpdater,
             RequestShutdownForUpdate,
             showSettingsOnStartup
         );

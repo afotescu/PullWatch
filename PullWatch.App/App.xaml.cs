@@ -64,6 +64,19 @@ public partial class App : Application
             }
         }
 
+        var applicationUpdater = new VelopackApplicationUpdater();
+
+        if (
+            StartupUpdateInstaller.TryApplyPendingUpdateAndRestart(
+                applicationUpdater,
+                Shutdown,
+                logger
+            )
+        )
+        {
+            return;
+        }
+
         _singleInstance.StartActivationListener(
             HandleSingleInstanceActivationAsync,
             CompleteSingleInstanceActivationExchange
@@ -84,6 +97,7 @@ public partial class App : Application
                 _lifetime,
                 _logs,
                 windowsStartupShortcut,
+                applicationUpdater,
                 _controller.StartedWithCreatedSettingsFile
             );
             _trayIcon = new TrayIconManager(
