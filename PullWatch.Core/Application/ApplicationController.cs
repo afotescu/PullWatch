@@ -69,9 +69,9 @@ public sealed class ApplicationController : IAsyncDisposable
                 new SettingsStore(),
                 loggerFactory.CreateLogger<SettingsBootstrapper>()
             ),
-            settings => new ScreenRecordingService(
+            settings => new FfmpegRecordingService(
                 settings,
-                loggerFactory.CreateLogger<ScreenRecordingService>()
+                loggerFactory.CreateLogger<FfmpegRecordingService>()
             ),
             (path, wowProcessStartedAtUtc, canDiscoverCombatLog) =>
                 new CombatLogReader(
