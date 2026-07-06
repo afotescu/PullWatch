@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Pipes;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using NAudio.Wave;
 
 namespace PullWatch;
 
@@ -15,12 +17,14 @@ public sealed class FfmpegRecordingService(
     private const string PreferredFfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe";
     private const int StderrTailLimit = 40;
     private static readonly TimeSpan StartupConfirmationDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan AudioPipeConnectionTimeout = TimeSpan.FromSeconds(5);
 
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly object _stderrLock = new();
     private readonly Queue<string> _stderrTail = new();
     private Process? _process;
     private Process? _wowProcess;
+    private FfmpegAudioPipe? _audioPipe;
     private TaskCompletionSource _recordingStarted = CreateCompletionSource();
     private TaskCompletionSource _recordingFinished = CreateCompletionSource();
     private bool _isStopping;
@@ -58,13 +62,15 @@ public sealed class FfmpegRecordingService(
             var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
             var outputPath = ScreenRecordingService.CreateOutputPath(context, settings);
             var ffmpegPath = ResolveFfmpegPath();
+            var audioPipe = CreateAudioPipe(settings);
             var startInfo = CreateStartInfo(
                 ffmpegPath,
                 windowHandle,
                 settings,
                 captureSize,
                 outputSize,
-                outputPath
+                outputPath,
+                audioPipe
             );
 
             ClearStderrTail();
@@ -73,6 +79,7 @@ public sealed class FfmpegRecordingService(
             _isStopping = false;
             _outputPath = outputPath;
             _wowProcess = wowProcess;
+            _audioPipe = audioPipe;
             _recordingRequestedTimestamp = startRequestTimestamp;
             _recordingStartedTimestamp = 0;
             _stopRequestedTimestamp = 0;
@@ -100,6 +107,8 @@ public sealed class FfmpegRecordingService(
                 outputPath
             );
 
+            LogAudioOptions(settings, audioPipe);
+
             if (!process.Start())
             {
                 throw new InvalidOperationException("FFmpeg did not start.");
@@ -108,6 +117,11 @@ public sealed class FfmpegRecordingService(
             process.BeginErrorReadLine();
             _process = process;
             _ = MonitorProcessAsync(process);
+            if (audioPipe is not null)
+            {
+                await audioPipe.ConnectAndStartAsync(AudioPipeConnectionTimeout, cancellationToken);
+            }
+
             _ = ConfirmStartupAsync(process);
             recordingStarted = _recordingStarted.Task;
         }
@@ -152,6 +166,7 @@ public sealed class FfmpegRecordingService(
                     _outputPath
                 );
                 RequestGracefulStop(process);
+                _audioPipe?.CloseInput();
             }
         }
         catch
@@ -192,7 +207,8 @@ public sealed class FfmpegRecordingService(
         PullWatchSettings settings,
         VideoCaptureSize captureSize,
         VideoCaptureSize outputSize,
-        string outputPath
+        string outputPath,
+        FfmpegAudioPipe? audioPipe
     )
     {
         var startInfo = new ProcessStartInfo(ffmpegPath)
@@ -208,9 +224,37 @@ public sealed class FfmpegRecordingService(
         startInfo.ArgumentList.Add("-loglevel");
         startInfo.ArgumentList.Add("info");
         startInfo.ArgumentList.Add("-y");
+
+        if (audioPipe is not null)
+        {
+            startInfo.ArgumentList.Add("-thread_queue_size");
+            startInfo.ArgumentList.Add("512");
+            startInfo.ArgumentList.Add("-f");
+            startInfo.ArgumentList.Add(audioPipe.FfmpegFormat);
+            startInfo.ArgumentList.Add("-ar");
+            startInfo.ArgumentList.Add(audioPipe.SampleRate.ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("-ac");
+            startInfo.ArgumentList.Add(audioPipe.Channels.ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("-i");
+            startInfo.ArgumentList.Add(audioPipe.PipePath);
+        }
+
         startInfo.ArgumentList.Add("-filter_complex");
-        startInfo.ArgumentList.Add(CreateFilter(windowHandle, settings, captureSize, outputSize));
-        startInfo.ArgumentList.Add("-an");
+        startInfo.ArgumentList.Add(
+            $"{CreateFilter(windowHandle, settings, captureSize, outputSize)}[v]"
+        );
+        startInfo.ArgumentList.Add("-map");
+        startInfo.ArgumentList.Add("[v]");
+        if (audioPipe is not null)
+        {
+            startInfo.ArgumentList.Add("-map");
+            startInfo.ArgumentList.Add("0:a:0");
+        }
+        else
+        {
+            startInfo.ArgumentList.Add("-an");
+        }
+
         startInfo.ArgumentList.Add("-c:v");
         startInfo.ArgumentList.Add("h264_nvenc");
         startInfo.ArgumentList.Add("-preset");
@@ -223,6 +267,18 @@ public sealed class FfmpegRecordingService(
         startInfo.ArgumentList.Add("0");
         startInfo.ArgumentList.Add("-surfaces");
         startInfo.ArgumentList.Add("8");
+        if (audioPipe is not null)
+        {
+            startInfo.ArgumentList.Add("-c:a");
+            startInfo.ArgumentList.Add("aac");
+            startInfo.ArgumentList.Add("-b:a");
+            startInfo.ArgumentList.Add("192k");
+            startInfo.ArgumentList.Add("-ar");
+            startInfo.ArgumentList.Add("48000");
+            startInfo.ArgumentList.Add("-ac");
+            startInfo.ArgumentList.Add("2");
+        }
+
         startInfo.ArgumentList.Add(outputPath);
         return startInfo;
     }
@@ -279,6 +335,51 @@ public sealed class FfmpegRecordingService(
     private static string ResolveFfmpegPath()
     {
         return File.Exists(PreferredFfmpegPath) ? PreferredFfmpegPath : FfmpegExecutableName;
+    }
+
+    private FfmpegAudioPipe? CreateAudioPipe(PullWatchSettings settings)
+    {
+        if (!settings.Audio.CaptureSystemAudio)
+        {
+            if (settings.Audio.CaptureMicrophone)
+            {
+                logger.LogWarning(
+                    "FFmpeg experiment does not capture microphone-only audio yet; recording video without audio"
+                );
+            }
+
+            return null;
+        }
+
+        if (settings.Audio.CaptureMicrophone)
+        {
+            logger.LogWarning(
+                "FFmpeg experiment is capturing system audio only; microphone capture will be ignored for this recording"
+            );
+        }
+
+        return FfmpegAudioPipe.CreateSystemAudio(logger);
+    }
+
+    private void LogAudioOptions(PullWatchSettings settings, FfmpegAudioPipe? audioPipe)
+    {
+        if (audioPipe is null)
+        {
+            logger.LogInformation(
+                "FFmpeg audio disabled: system audio {CaptureSystemAudio}, microphone {CaptureMicrophone}",
+                settings.Audio.CaptureSystemAudio,
+                settings.Audio.CaptureMicrophone
+            );
+            return;
+        }
+
+        logger.LogInformation(
+            "FFmpeg audio enabled: {AudioSource}, {AudioFormat}, {SampleRate} Hz, {Channels} channels",
+            audioPipe.SourceDescription,
+            audioPipe.FfmpegFormat,
+            audioPipe.SampleRate,
+            audioPipe.Channels
+        );
     }
 
     private static (Process Process, nint WindowHandle) FindWowProcess()
@@ -463,8 +564,11 @@ public sealed class FfmpegRecordingService(
     {
         var process = Interlocked.Exchange(ref _process, null);
         var wowProcess = Interlocked.Exchange(ref _wowProcess, null);
+        var audioPipe = Interlocked.Exchange(ref _audioPipe, null);
         _isStopping = false;
         _outputPath = null;
+
+        audioPipe?.Dispose();
 
         if (wowProcess is not null)
         {
@@ -528,5 +632,188 @@ public sealed class FfmpegRecordingService(
     private static TaskCompletionSource CreateCompletionSource()
     {
         return new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed class FfmpegAudioPipe : IDisposable
+    {
+        private readonly IWaveIn _capture;
+        private readonly ILogger _logger;
+        private readonly NamedPipeServerStream _pipe;
+        private readonly object _stateLock = new();
+        private bool _disposed;
+        private bool _stopping;
+
+        private FfmpegAudioPipe(IWaveIn capture, ILogger logger, string sourceDescription)
+        {
+            _capture = capture;
+            _logger = logger;
+            SourceDescription = sourceDescription;
+            var pipeName = $"PullWatchAudio-{Guid.NewGuid():N}";
+            PipePath = @$"\\.\pipe\{pipeName}";
+            _pipe = new NamedPipeServerStream(
+                pipeName,
+                PipeDirection.Out,
+                1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous
+            );
+
+            FfmpegFormat = GetFfmpegFormat(capture.WaveFormat);
+            SampleRate = capture.WaveFormat.SampleRate;
+            Channels = capture.WaveFormat.Channels;
+            capture.DataAvailable += OnDataAvailable;
+            capture.RecordingStopped += OnRecordingStopped;
+        }
+
+        public string SourceDescription { get; }
+
+        public string PipePath { get; }
+
+        public string FfmpegFormat { get; }
+
+        public int SampleRate { get; }
+
+        public int Channels { get; }
+
+        public static FfmpegAudioPipe CreateSystemAudio(ILogger logger)
+        {
+            return new FfmpegAudioPipe(
+                new WasapiLoopbackCapture(),
+                logger,
+                "default system loopback"
+            );
+        }
+
+        public async Task ConnectAndStartAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken
+        )
+        {
+            using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken
+            );
+            timeoutCancellation.CancelAfter(timeout);
+            await _pipe.WaitForConnectionAsync(timeoutCancellation.Token);
+            _capture.StartRecording();
+        }
+
+        public void CloseInput()
+        {
+            lock (_stateLock)
+            {
+                if (_disposed || _stopping)
+                {
+                    return;
+                }
+
+                _stopping = true;
+            }
+
+            try
+            {
+                _pipe.Dispose();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(exception, "FFmpeg audio pipe close failed");
+            }
+
+            _ = Task.Run(StopCapture);
+        }
+
+        public void Dispose()
+        {
+            lock (_stateLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+            }
+
+            _capture.DataAvailable -= OnDataAvailable;
+            _capture.RecordingStopped -= OnRecordingStopped;
+
+            try
+            {
+                _capture.StopRecording();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(exception, "FFmpeg audio capture stop during disposal failed");
+            }
+
+            _capture.Dispose();
+            _pipe.Dispose();
+        }
+
+        private void StopCapture()
+        {
+            try
+            {
+                _capture.StopRecording();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(exception, "FFmpeg audio capture stop failed");
+            }
+        }
+
+        private void OnDataAvailable(object? sender, WaveInEventArgs eventArgs)
+        {
+            if (eventArgs.BytesRecorded == 0 || !_pipe.IsConnected)
+            {
+                return;
+            }
+
+            try
+            {
+                _pipe.Write(eventArgs.Buffer.AsSpan(0, eventArgs.BytesRecorded));
+            }
+            catch (IOException exception)
+            {
+                _logger.LogDebug(exception, "FFmpeg audio pipe closed while writing audio");
+            }
+            catch (ObjectDisposedException)
+            {
+                // The recorder is shutting down.
+            }
+        }
+
+        private void OnRecordingStopped(object? sender, StoppedEventArgs eventArgs)
+        {
+            if (eventArgs.Exception is not null)
+            {
+                _logger.LogWarning(
+                    eventArgs.Exception,
+                    "FFmpeg audio capture stopped unexpectedly"
+                );
+            }
+        }
+
+        private static string GetFfmpegFormat(WaveFormat format)
+        {
+            if (
+                format.Encoding is WaveFormatEncoding.IeeeFloat
+                || (format.Encoding == WaveFormatEncoding.Extensible && format.BitsPerSample == 32)
+            )
+            {
+                return "f32le";
+            }
+
+            if (
+                format.Encoding is WaveFormatEncoding.Pcm
+                || (format.Encoding == WaveFormatEncoding.Extensible && format.BitsPerSample == 16)
+            )
+            {
+                return "s16le";
+            }
+
+            throw new InvalidOperationException(
+                $"Unsupported system audio format for FFmpeg raw PCM pipe: {format.Encoding}, {format.BitsPerSample} bits."
+            );
+        }
     }
 }
