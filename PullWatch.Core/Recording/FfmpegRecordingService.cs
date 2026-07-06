@@ -18,6 +18,9 @@ public sealed class FfmpegRecordingService(
     private const int StderrTailLimit = 40;
     private static readonly TimeSpan StartupConfirmationDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan AudioPipeConnectionTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AudioStartupFailureExitProbeDelay = TimeSpan.FromMilliseconds(
+        500
+    );
 
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly object _stderrLock = new();
@@ -119,7 +122,22 @@ public sealed class FfmpegRecordingService(
             _ = MonitorProcessAsync(process);
             if (audioPipe is not null)
             {
-                await audioPipe.ConnectAndStartAsync(AudioPipeConnectionTimeout, cancellationToken);
+                try
+                {
+                    await audioPipe.ConnectAndStartAsync(
+                        AudioPipeConnectionTimeout,
+                        cancellationToken
+                    );
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    var startupFailure = await PreferFfmpegStartupFailureAsync(process, exception);
+                    throw startupFailure;
+                }
             }
 
             _ = ConfirmStartupAsync(process);
@@ -438,7 +456,7 @@ public sealed class FfmpegRecordingService(
             var exitCode = process.ExitCode;
             if (exitCode == 0)
             {
-                _recordingStarted.TrySetResult();
+                var startupFailure = CompleteSuccessfulExitStartup();
                 _recordingFinished.TrySetResult();
                 logger.LogInformation(
                     "FFmpeg recorder exited with code 0; duration {RecordingDuration}, finalization {FinalizationDuration}, size {FileSizeMegabytes:F1} MB: {OutputPath}",
@@ -448,12 +466,20 @@ public sealed class FfmpegRecordingService(
                     _outputPath
                 );
 
-                if (!Volatile.Read(ref _isStopping))
+                if (startupFailure is not null)
+                {
+                    logger.LogWarning(
+                        startupFailure,
+                        "FFmpeg recorder exited before startup confirmation"
+                    );
+                }
+                else if (!Volatile.Read(ref _isStopping))
                 {
                     logger.LogInformation("FFmpeg recorder exited while a recording was active");
                     CaptureTargetExited?.Invoke(this, EventArgs.Empty);
                 }
 
+                DisposeProcess(process);
                 return;
             }
 
@@ -462,7 +488,11 @@ public sealed class FfmpegRecordingService(
             _recordingStarted.TrySetException(failure);
             _recordingFinished.TrySetException(failure);
             Failed?.Invoke(this, new RecordingServiceFailedEventArgs(failure));
-            DisposeProcess();
+            DisposeProcess(process);
+        }
+        catch (Exception exception) when (IsStaleProcess(process))
+        {
+            logger.LogDebug(exception, "FFmpeg recorder monitoring ended after process cleanup");
         }
         catch (Exception exception)
         {
@@ -474,8 +504,93 @@ public sealed class FfmpegRecordingService(
             _recordingStarted.TrySetException(failure);
             _recordingFinished.TrySetException(failure);
             Failed?.Invoke(this, new RecordingServiceFailedEventArgs(failure));
-            DisposeProcess();
+            DisposeProcess(process);
         }
+    }
+
+    private Exception? CompleteSuccessfulExitStartup()
+    {
+        if (_recordingStarted.Task.IsCompleted)
+        {
+            _recordingStarted.TrySetResult();
+            return null;
+        }
+
+        var failure = new InvalidOperationException(
+            "FFmpeg exited before the recorder confirmed startup."
+        );
+        _recordingStarted.TrySetException(failure);
+        return failure;
+    }
+
+    private async Task<Exception> PreferFfmpegStartupFailureAsync(
+        Process process,
+        Exception fallback
+    )
+    {
+        if (TryGetRecordingStartedFailure() is { } existingFailure)
+        {
+            return existingFailure;
+        }
+
+        if (await WaitForProcessExitAfterAudioStartupFailureAsync(process))
+        {
+            if (TryGetRecordingStartedFailure() is { } monitoredFailure)
+            {
+                return monitoredFailure;
+            }
+
+            try
+            {
+                return CreateFfmpegFailure(process.ExitCode);
+            }
+            catch (Exception exception)
+                when (exception is InvalidOperationException or ObjectDisposedException)
+            {
+                logger.LogDebug(
+                    exception,
+                    "Could not read FFmpeg exit code after audio startup failed"
+                );
+            }
+        }
+
+        return fallback;
+    }
+
+    private async Task<bool> WaitForProcessExitAfterAudioStartupFailureAsync(Process process)
+    {
+        try
+        {
+            if (process.HasExited)
+            {
+                process.WaitForExit();
+                return true;
+            }
+
+            await process.WaitForExitAsync().WaitAsync(AudioStartupFailureExitProbeDelay);
+            process.WaitForExit();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            logger.LogDebug(exception, "Could not observe FFmpeg exit after audio startup failed");
+            return TryGetRecordingStartedFailure() is not null;
+        }
+    }
+
+    private Exception? TryGetRecordingStartedFailure()
+    {
+        if (!_recordingStarted.Task.IsFaulted)
+        {
+            return null;
+        }
+
+        return _recordingStarted.Task.Exception?.InnerException ?? _recordingStarted.Task.Exception;
     }
 
     private void RequestGracefulStop(Process process)
@@ -560,9 +675,21 @@ public sealed class FfmpegRecordingService(
         }
     }
 
-    private void DisposeProcess()
+    private bool IsStaleProcess(Process process)
     {
-        var process = Interlocked.Exchange(ref _process, null);
+        return !ReferenceEquals(Volatile.Read(ref _process), process);
+    }
+
+    private void DisposeProcess(Process? expectedProcess = null)
+    {
+        var process = expectedProcess is null
+            ? Interlocked.Exchange(ref _process, null)
+            : Interlocked.CompareExchange(ref _process, null, expectedProcess);
+        if (expectedProcess is not null && !ReferenceEquals(process, expectedProcess))
+        {
+            return;
+        }
+
         var wowProcess = Interlocked.Exchange(ref _wowProcess, null);
         var audioPipe = Interlocked.Exchange(ref _audioPipe, null);
         _isStopping = false;
@@ -689,11 +816,26 @@ public sealed class FfmpegRecordingService(
             CancellationToken cancellationToken
         )
         {
-            using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken
+            using var timeoutCancellation = new CancellationTokenSource(timeout);
+            using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCancellation.Token
             );
-            timeoutCancellation.CancelAfter(timeout);
-            await _pipe.WaitForConnectionAsync(timeoutCancellation.Token);
+            try
+            {
+                await _pipe.WaitForConnectionAsync(combinedCancellation.Token);
+            }
+            catch (OperationCanceledException exception)
+                when (timeoutCancellation.IsCancellationRequested
+                    && !cancellationToken.IsCancellationRequested
+                )
+            {
+                throw new TimeoutException(
+                    $"FFmpeg audio pipe did not connect within {timeout}.",
+                    exception
+                );
+            }
+
             _capture.StartRecording();
         }
 
@@ -763,13 +905,18 @@ public sealed class FfmpegRecordingService(
 
         private void OnDataAvailable(object? sender, WaveInEventArgs eventArgs)
         {
-            if (eventArgs.BytesRecorded == 0 || !_pipe.IsConnected)
+            if (eventArgs.BytesRecorded == 0)
             {
                 return;
             }
 
             try
             {
+                if (!_pipe.IsConnected)
+                {
+                    return;
+                }
+
                 _pipe.Write(eventArgs.Buffer.AsSpan(0, eventArgs.BytesRecorded));
             }
             catch (IOException exception)
