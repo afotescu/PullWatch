@@ -7,6 +7,9 @@ public static class FfmpegToolPaths
 {
     private static readonly TimeSpan VersionProbeTimeout = TimeSpan.FromSeconds(5);
 
+    private const string BundledToolsDirectoryName = "ffmpeg";
+    private const string FfmpegExecutableFileName = "ffmpeg.exe";
+    private const string FfprobeExecutableFileName = "ffprobe.exe";
     private const string FfmpegExecutableName = "ffmpeg";
     private const string FfprobeExecutableName = "ffprobe";
     private const string PreferredFfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe";
@@ -14,12 +17,32 @@ public static class FfmpegToolPaths
 
     public static string ResolveFfmpegPath()
     {
-        return File.Exists(PreferredFfmpegPath) ? PreferredFfmpegPath : FfmpegExecutableName;
+        return ResolveFfmpegPath(AppContext.BaseDirectory);
     }
 
     public static string ResolveFfprobePath()
     {
-        return File.Exists(PreferredFfprobePath) ? PreferredFfprobePath : FfprobeExecutableName;
+        return ResolveFfprobePath(AppContext.BaseDirectory);
+    }
+
+    internal static string ResolveFfmpegPath(string baseDirectory)
+    {
+        return ResolveToolPath(
+            baseDirectory,
+            FfmpegExecutableFileName,
+            PreferredFfmpegPath,
+            FfmpegExecutableName
+        );
+    }
+
+    internal static string ResolveFfprobePath(string baseDirectory)
+    {
+        return ResolveToolPath(
+            baseDirectory,
+            FfprobeExecutableFileName,
+            PreferredFfprobePath,
+            FfprobeExecutableName
+        );
     }
 
     public static async Task<EncoderCalibrationEnvironment> ResolveEnvironmentAsync(
@@ -35,6 +58,27 @@ public static class FfmpegToolPaths
             ffprobePath,
             await TryGetToolVersionAsync(ffprobePath, cancellationToken)
         );
+    }
+
+    internal static string ResolveToolPath(
+        string baseDirectory,
+        string bundledExecutableFileName,
+        string preferredPath,
+        string pathExecutableName
+    )
+    {
+        var bundledPath = Path.Combine(
+            baseDirectory,
+            BundledToolsDirectoryName,
+            bundledExecutableFileName
+        );
+
+        if (File.Exists(bundledPath))
+        {
+            return bundledPath;
+        }
+
+        return File.Exists(preferredPath) ? preferredPath : pathExecutableName;
     }
 
     private static async Task<string?> TryGetToolVersionAsync(

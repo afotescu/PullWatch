@@ -538,7 +538,7 @@ public sealed class FfmpegRecordingService(
         if (exception is Win32Exception win32Exception && win32Exception.NativeErrorCode == 2)
         {
             return new InvalidOperationException(
-                "Screen recording cannot start because FFmpeg could not be found. Place ffmpeg.exe in C:\\ffmpeg\\bin, then restart PullWatch.",
+                "Screen recording cannot start because FFmpeg could not be found. Reinstall PullWatch or install FFmpeg and add ffmpeg.exe to PATH, then restart PullWatch.",
                 exception
             );
         }

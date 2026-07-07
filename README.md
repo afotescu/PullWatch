@@ -187,9 +187,14 @@ Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
 kept next to the executable because the native recorder library does not load
 reliably when embedded into the single-file bundle.
 
+Publish builds also include Gyan FFmpeg release essentials under the `ffmpeg`
+folder next to `PullWatch.exe`. PullWatch uses those bundled `ffmpeg.exe` and
+`ffprobe.exe` tools before falling back to a machine-level FFmpeg install.
+
 ## Key Dependencies
 
 - [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
+- [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)
 

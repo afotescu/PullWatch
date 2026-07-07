@@ -1,6 +1,8 @@
 param(
     [string]$OutputPath = "artifacts/publish/win-x64",
-    [string]$Version
+    [string]$Version,
+    [string]$FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    [switch]$SkipFfmpegBundle
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +20,93 @@ if (!$resolvedPublishPath.StartsWith(
         $artifactsRootWithSeparator,
         [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "OutputPath must resolve under the artifacts directory: $artifactsRoot"
+}
+
+function Add-FfmpegBundle {
+    param(
+        [string]$DownloadUrl,
+        [string]$ArtifactsRoot,
+        [string]$PublishPath
+    )
+
+    $downloadDirectory = Join-Path $ArtifactsRoot "downloads"
+    $archivePath = Join-Path $downloadDirectory "ffmpeg-release-essentials.zip"
+    $extractPath = Join-Path $ArtifactsRoot "ffmpeg-release-essentials"
+    $destinationPath = Join-Path $PublishPath "ffmpeg"
+
+    New-Item -ItemType Directory -Force -Path $downloadDirectory | Out-Null
+
+    Write-Host "Downloading FFmpeg essentials from $DownloadUrl"
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $archivePath
+
+    if (Test-Path -LiteralPath $extractPath) {
+        Remove-Item -LiteralPath $extractPath -Recurse -Force
+    }
+
+    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+
+    $ffmpegExe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter "ffmpeg.exe" -File |
+        Where-Object {
+            $parentDirectory = Split-Path -Parent $_.FullName
+            [System.StringComparer]::OrdinalIgnoreCase.Equals(
+                (Split-Path -Leaf $parentDirectory),
+                "bin")
+        } |
+        Select-Object -First 1
+
+    if (!$ffmpegExe) {
+        throw "FFmpeg essentials archive did not contain bin\ffmpeg.exe"
+    }
+
+    $sourceBinPath = Split-Path -Parent $ffmpegExe.FullName
+    $ffprobeExe = Join-Path $sourceBinPath "ffprobe.exe"
+
+    if (!(Test-Path -LiteralPath $ffprobeExe)) {
+        throw "FFmpeg essentials archive did not contain bin\ffprobe.exe"
+    }
+
+    if (Test-Path -LiteralPath $destinationPath) {
+        Remove-Item -LiteralPath $destinationPath -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
+
+    Copy-Item -LiteralPath (Join-Path $sourceBinPath "ffmpeg.exe") -Destination $destinationPath
+    Copy-Item -LiteralPath $ffprobeExe -Destination $destinationPath
+
+    Get-ChildItem -LiteralPath $sourceBinPath -Filter "*.dll" -File |
+        Copy-Item -Destination $destinationPath
+
+    $sourceRootPath = Split-Path -Parent $sourceBinPath
+    foreach ($noticeFileName in @("LICENSE", "LICENSE.txt", "README.txt", "README.md")) {
+        $noticeFilePath = Join-Path $sourceRootPath $noticeFileName
+        if (Test-Path -LiteralPath $noticeFilePath) {
+            $extension = [System.IO.Path]::GetExtension($noticeFileName)
+            $destinationFileName = if ([string]::IsNullOrEmpty($extension)) {
+                "FFmpeg-$noticeFileName.txt"
+            } else {
+                "FFmpeg-$noticeFileName"
+            }
+            Copy-Item -LiteralPath $noticeFilePath -Destination (Join-Path $destinationPath $destinationFileName)
+        }
+    }
+
+    $bundledFfmpegPath = Join-Path $destinationPath "ffmpeg.exe"
+    $ffmpegVersion = & $bundledFfmpegPath -version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bundled ffmpeg.exe could not run."
+    }
+
+    $ffmpegFilters = & $bundledFfmpegPath -hide_banner -filters 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bundled ffmpeg.exe could not list filters."
+    }
+
+    if (!($ffmpegFilters | Select-String -SimpleMatch "gfxcapture")) {
+        throw "Bundled ffmpeg.exe does not include the required gfxcapture filter."
+    }
+
+    Write-Host "Bundled $($ffmpegVersion | Select-Object -First 1)"
 }
 
 $lockingProcesses = Get-Process |
@@ -68,6 +157,15 @@ if (Test-Path -LiteralPath $oldExe) {
     throw "Stale executable found in publish output: $oldExe"
 }
 
+if ($SkipFfmpegBundle) {
+    Write-Host "Skipping FFmpeg bundle."
+} else {
+    Add-FfmpegBundle `
+        -DownloadUrl $FfmpegDownloadUrl `
+        -ArtifactsRoot $artifactsRoot `
+        -PublishPath $publishPath
+}
+
 $mediaFeaturePackUrl = "https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407"
 $vcRedistUrl = "https://aka.ms/vc14/vc_redist.x64.exe"
 
@@ -75,7 +173,7 @@ $readmePath = Join-Path $publishPath "README.txt"
 @"
 PullWatch portable release build
 
-Run PullWatch.exe. Keep ScreenRecorderLib.dll in the same folder as PullWatch.exe.
+Run PullWatch.exe. Keep ScreenRecorderLib.dll and the ffmpeg folder next to PullWatch.exe.
 
 Screen recording requires:
 - Windows x64 with Windows Media Foundation
