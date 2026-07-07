@@ -64,7 +64,7 @@ public sealed class FfmpegRecordingService(
                 ?? throw new InvalidOperationException(
                     "Video encoding must be calibrated before recording."
                 );
-            var outputPath = ScreenRecordingService.CreateOutputPath(context, settings);
+            var outputPath = RecordingOutputPath.Create(context, settings);
             Volatile.Write(ref _outputPath, outputPath);
 
             var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(cancellationToken);
@@ -543,7 +543,7 @@ public sealed class FfmpegRecordingService(
             );
         }
 
-        return RecordingFailureClassifier.Classify(exception);
+        return exception;
     }
 
     private async Task ConfirmStartupAsync(Process process)

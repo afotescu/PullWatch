@@ -55,26 +55,9 @@ Closing the PullWatch window keeps the app running in the system tray. Use
 ## Requirements
 
 - Windows x64
-- Windows Media Foundation
-- Microsoft Visual C++ Redistributable 2015-2022 x64
 
 Portable releases are self-contained and do not require a separately installed
 .NET runtime.
-
-If recording cannot start because Windows Media Foundation is unavailable,
-install Microsoft's Media Feature Pack for Windows N editions, then restart
-PullWatch:
-
-```text
-https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407
-```
-
-If recording cannot start because the Visual C++ Redistributable is missing,
-install the official Microsoft x64 redistributable:
-
-```text
-https://aka.ms/vc14/vc_redist.x64.exe
-```
 
 Automatic recording requires World of Warcraft combat logging to be enabled so
 the game writes `WoWCombatLog*.txt` files.
@@ -183,17 +166,12 @@ Create a local self-contained Windows x64 build:
 ./scripts/publish-win-x64.ps1
 ```
 
-Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
-kept next to the executable because the native recorder library does not load
-reliably when embedded into the single-file bundle.
-
 Publish builds also include Gyan FFmpeg release essentials under the `ffmpeg`
 folder next to `PullWatch.exe`. PullWatch uses those bundled `ffmpeg.exe` and
 `ffprobe.exe` tools before falling back to a machine-level FFmpeg install.
 
 ## Key Dependencies
 
-- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
 - [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)

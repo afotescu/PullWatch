@@ -11,7 +11,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.NvidiaNvenc
         );
         var captureSize = new VideoCaptureSize(2560, 1440);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var startInfo = FfmpegRecordingService.CreateStartInfo(
             "ffmpeg",
@@ -49,7 +49,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.NvidiaNvenc
         );
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             FfmpegRecordingService.CreateStartInfo(
@@ -78,7 +78,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.Software
         );
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var startInfo = FfmpegRecordingService.CreateStartInfo(
             "ffmpeg",
@@ -113,7 +113,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoScaling.Original
         );
         var captureSize = new VideoCaptureSize(2560, 1351);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var startInfo = FfmpegRecordingService.CreateStartInfo(
             "ffmpeg",
@@ -141,7 +141,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.AmdAmf
         );
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var startInfo = FfmpegRecordingService.CreateStartInfo(
             "ffmpeg",
@@ -169,7 +169,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.NvidiaNvenc
         );
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             FfmpegRecordingService.CreateStartInfo(
@@ -198,7 +198,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.AmdAmf
         );
         var captureSize = new VideoCaptureSize(2560, 1440);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var startInfo = FfmpegRecordingService.CreateStartInfo(
             "ffmpeg",
@@ -229,7 +229,7 @@ public sealed class FfmpegRecordingServiceTests
             VideoEncoderProvider.Software
         );
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             FfmpegRecordingService.CreateStartInfo(
@@ -267,7 +267,7 @@ public sealed class FfmpegRecordingServiceTests
             Audio = new AudioSettings { CaptureSystemAudio = true },
         };
         var captureSize = new VideoCaptureSize(1920, 1080);
-        var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+        var outputSize = OutputSize(settings, captureSize);
         var audioInput = new FfmpegAudioInputOptions(
             "f32le",
             44100,
@@ -520,6 +520,17 @@ public sealed class FfmpegRecordingServiceTests
     private static FfmpegEncoderCapabilities Capabilities(params string[] encoderNames)
     {
         return new FfmpegEncoderCapabilities(encoderNames);
+    }
+
+    private static VideoCaptureSize OutputSize(
+        PullWatchSettings settings,
+        VideoCaptureSize captureSize
+    )
+    {
+        return FfmpegVideoOutputSizeCalculator.CalculateOutputSize(
+            captureSize,
+            settings.Video.Scaling
+        );
     }
 
     private static void AssertArgumentValue(

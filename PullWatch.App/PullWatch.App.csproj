@@ -54,20 +54,4 @@
       />
     </ItemGroup>
   </Target>
-
-  <Target
-    Name="KeepScreenRecorderLibOutsideSingleFile"
-    BeforeTargets="_ComputeFilesToBundle"
-    Condition="'$(PublishSingleFile)' == 'true'"
-  >
-    <ItemGroup>
-      <ResolvedFileToPublish
-        Update="@(ResolvedFileToPublish)"
-        Condition="'%(Filename)%(Extension)' == 'ScreenRecorderLib.dll'"
-      >
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
 </Project>

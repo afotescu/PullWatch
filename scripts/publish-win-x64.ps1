@@ -166,27 +166,14 @@ if ($SkipFfmpegBundle) {
         -PublishPath $publishPath
 }
 
-$mediaFeaturePackUrl = "https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407"
-$vcRedistUrl = "https://aka.ms/vc14/vc_redist.x64.exe"
-
 $readmePath = Join-Path $publishPath "README.txt"
 @"
 PullWatch portable release build
 
-Run PullWatch.exe. Keep ScreenRecorderLib.dll and the ffmpeg folder next to PullWatch.exe.
+Run PullWatch.exe. Keep the ffmpeg folder next to PullWatch.exe.
 
 Screen recording requires:
-- Windows x64 with Windows Media Foundation
-- Microsoft Visual C++ Redistributable 2015-2022 x64
-
-If recording cannot start because Windows Media Foundation is unavailable,
-install Microsoft's Media Feature Pack for Windows N editions, then restart
-PullWatch:
-$mediaFeaturePackUrl
-
-If recording cannot start because the Visual C++ Redistributable is missing,
-download and install the official Microsoft installer, then restart PullWatch:
-$vcRedistUrl
+- Windows x64
 
 Automatic recording requires World of Warcraft combat logging to be enabled.
 Start PullWatch before the Mythic+ key or raid pull so it can see the combat-log
