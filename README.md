@@ -167,8 +167,8 @@ Create a local self-contained Windows x64 publish build:
 ```
 
 Publish builds also include Gyan FFmpeg release essentials under the `ffmpeg`
-folder next to `PullWatch.exe`. PullWatch uses those bundled `ffmpeg.exe` and
-`ffprobe.exe` tools before falling back to a machine-level FFmpeg install.
+folder next to `PullWatch.exe`. PullWatch uses the bundled `ffmpeg.exe` before
+falling back to a machine-level FFmpeg install.
 
 ## Key Dependencies
 

@@ -7,12 +7,7 @@ public enum EncoderCalibrationStatusKind
     Stale,
 }
 
-public sealed record EncoderCalibrationEnvironment(
-    string FfmpegPath,
-    string? FfmpegVersion,
-    string FfprobePath,
-    string? FfprobeVersion
-);
+public sealed record EncoderCalibrationEnvironment(string FfmpegPath, string? FfmpegVersion);
 
 public sealed record EncoderCalibrationStatus(EncoderCalibrationStatusKind Kind, string Message)
 {
@@ -55,18 +50,6 @@ public static class EncoderCalibrationStatusEvaluator
         if (!StringComparer.Ordinal.Equals(calibration.FfmpegVersion, environment.FfmpegVersion))
         {
             return Stale("Video encoding needs to be retested because the FFmpeg version changed.");
-        }
-
-        if (!PathsEqual(calibration.FfprobePath, environment.FfprobePath))
-        {
-            return Stale("Video encoding needs to be retested because the FFprobe path changed.");
-        }
-
-        if (!StringComparer.Ordinal.Equals(calibration.FfprobeVersion, environment.FfprobeVersion))
-        {
-            return Stale(
-                "Video encoding needs to be retested because the FFprobe version changed."
-            );
         }
 
         var selectedResult = calibration.Results.FirstOrDefault(result =>

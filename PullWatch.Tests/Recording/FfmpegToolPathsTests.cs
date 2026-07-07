@@ -23,26 +23,6 @@ public sealed class FfmpegToolPathsTests
     }
 
     [Fact]
-    public void ResolveFfprobePathPrefersBundledTool()
-    {
-        var baseDirectory = CreateTempDirectory();
-
-        try
-        {
-            var bundledDirectory = Path.Combine(baseDirectory, "ffmpeg");
-            var bundledPath = Path.Combine(bundledDirectory, "ffprobe.exe");
-            Directory.CreateDirectory(bundledDirectory);
-            File.WriteAllText(bundledPath, string.Empty);
-
-            Assert.Equal(bundledPath, FfmpegToolPaths.ResolveFfprobePath(baseDirectory));
-        }
-        finally
-        {
-            DeleteDirectory(baseDirectory);
-        }
-    }
-
-    [Fact]
     public void ResolveToolPathFallsBackToPreferredPath()
     {
         var baseDirectory = CreateTempDirectory();

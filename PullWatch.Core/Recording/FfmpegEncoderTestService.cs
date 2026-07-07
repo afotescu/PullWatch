@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Text;
 
 namespace PullWatch;
@@ -38,7 +37,6 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             settings.Video.Scaling
         );
         var ffmpegPath = FfmpegToolPaths.ResolveFfmpegPath();
-        var ffprobePath = FfmpegToolPaths.ResolveFfprobePath();
         var results = new List<VideoEncoderTestResult>();
         var profiles = GetTestProfiles();
 
@@ -56,7 +54,6 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             results.Add(
                 await TestProviderAsync(
                     ffmpegPath,
-                    ffprobePath,
                     windowHandle,
                     settings,
                     profile,
@@ -88,7 +85,6 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
 
     private static async Task<VideoEncoderTestResult> TestProviderAsync(
         string ffmpegPath,
-        string ffprobePath,
         nint windowHandle,
         PullWatchSettings settings,
         FfmpegVideoEncoderProfile profile,
@@ -166,7 +162,14 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
                 );
             }
 
-            var validation = await ValidateOutputAsync(ffprobePath, outputPath, cancellationToken);
+            var validation = await ValidateOutputAsync(
+                ffmpegPath,
+                outputPath,
+                profile.Codec,
+                outputSize,
+                TestDuration,
+                cancellationToken
+            );
             if (!validation.IsValid)
             {
                 return VideoEncoderTestResult.Unavailable(
@@ -224,8 +227,11 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
     }
 
     internal static async Task<FfmpegTestOutputValidation> ValidateOutputAsync(
-        string ffprobePath,
+        string ffmpegPath,
         string outputPath,
+        VideoCodec codec,
+        VideoCaptureSize outputSize,
+        TimeSpan expectedDuration,
         CancellationToken cancellationToken
     )
     {
@@ -234,7 +240,7 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             return FfmpegTestOutputValidation.Invalid("No output file was produced.");
         }
 
-        var startInfo = new ProcessStartInfo(ffprobePath)
+        var startInfo = new ProcessStartInfo(ffmpegPath)
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -244,15 +250,19 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         foreach (
             var argument in new[]
             {
+                "-hide_banner",
                 "-v",
                 "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=codec_name,width,height,duration,nb_frames",
-                "-of",
-                "default=noprint_wrappers=1:nokey=0",
+                "-xerror",
+                "-i",
                 outputPath,
+                "-map",
+                "0:v:0",
+                "-frames:v",
+                "1",
+                "-f",
+                "null",
+                "-",
             }
         )
         {
@@ -273,7 +283,7 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             )
         {
             throw new FfmpegEncoderTestValidationException(
-                $"ffprobe validation could not run: {SimplifyMessage(exception.Message)}",
+                $"ffmpeg validation could not run: {SimplifyMessage(exception.Message)}",
                 exception
             );
         }
@@ -281,28 +291,16 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         if (result.ExitCode != 0)
         {
             return FfmpegTestOutputValidation.Invalid(
-                CreateFailureMessage("ffprobe validation failed", result)
+                CreateFailureMessage("ffmpeg validation failed", result)
             );
         }
 
-        var values = ParseFfprobeOutput(result.StandardOutput);
-        var codecName = GetValue(values, "codec_name");
-        var width = ParseInt(GetValue(values, "width"));
-        var height = ParseInt(GetValue(values, "height"));
-        var duration = ParseDouble(GetValue(values, "duration"));
-        var frameCount = ParseInt(GetValue(values, "nb_frames"));
-
-        if (string.IsNullOrWhiteSpace(codecName) || width <= 0 || height <= 0)
-        {
-            return FfmpegTestOutputValidation.Invalid("No valid video stream was found.");
-        }
-
-        if (duration <= 0 && frameCount <= 0)
-        {
-            return FfmpegTestOutputValidation.Invalid("The video stream contains no frames.");
-        }
-
-        return FfmpegTestOutputValidation.Valid(codecName, width, height, duration);
+        return FfmpegTestOutputValidation.Valid(
+            FormatCodecName(codec),
+            outputSize.Width,
+            outputSize.Height,
+            expectedDuration.TotalSeconds
+        );
     }
 
     private static async Task<FfmpegProcessResult> RunProcessAsync(
@@ -350,54 +348,6 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         }
 
         return new FfmpegProcessResult(process.ExitCode, await standardOutput, await standardError);
-    }
-
-    private static Dictionary<string, string> ParseFfprobeOutput(string output)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        using var reader = new StringReader(output);
-        while (reader.ReadLine() is { } line)
-        {
-            var separatorIndex = line.IndexOf('=', StringComparison.Ordinal);
-            if (separatorIndex <= 0)
-            {
-                continue;
-            }
-
-            values[line[..separatorIndex]] = line[(separatorIndex + 1)..];
-        }
-
-        return values;
-    }
-
-    private static string? GetValue(IReadOnlyDictionary<string, string> values, string key)
-    {
-        return values.TryGetValue(key, out var value) ? value : null;
-    }
-
-    private static int ParseInt(string? value)
-    {
-        return int.TryParse(
-            value,
-            NumberStyles.Integer,
-            CultureInfo.InvariantCulture,
-            out var result
-        )
-            ? result
-            : 0;
-    }
-
-    private static double ParseDouble(string? value)
-    {
-        return double.TryParse(
-            value,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out var result
-        )
-            ? result
-            : 0;
     }
 
     private static string CreateFailureMessage(string prefix, FfmpegProcessResult result)
@@ -538,6 +488,16 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
     private static string FormatDuration(double duration)
     {
         return duration <= 0 ? "duration unknown" : $"{duration:0.0}s";
+    }
+
+    private static string FormatCodecName(VideoCodec codec)
+    {
+        return codec switch
+        {
+            VideoCodec.H264 => "h264",
+            VideoCodec.H265 => "hevc",
+            _ => VideoProfileFormatter.FormatCodecName(codec),
+        };
     }
 
     private static void TryDelete(string path)

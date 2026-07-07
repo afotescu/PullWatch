@@ -471,7 +471,7 @@ public sealed class FfmpegRecordingServiceTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var outputPath = Path.Combine(
             Path.GetTempPath(),
-            $"PullWatch-ffprobe-missing-{Guid.NewGuid():N}.mp4"
+            $"PullWatch-ffmpeg-missing-{Guid.NewGuid():N}.mp4"
         );
         await File.WriteAllTextAsync(outputPath, "not empty", cancellationToken);
 
@@ -479,13 +479,16 @@ public sealed class FfmpegRecordingServiceTests
         {
             var exception = await Assert.ThrowsAsync<FfmpegEncoderTestValidationException>(() =>
                 FfmpegEncoderTestService.ValidateOutputAsync(
-                    $"missing-ffprobe-{Guid.NewGuid():N}.exe",
+                    $"missing-ffmpeg-{Guid.NewGuid():N}.exe",
                     outputPath,
+                    VideoCodec.H264,
+                    new VideoCaptureSize(1920, 1080),
+                    TimeSpan.FromSeconds(2),
                     cancellationToken
                 )
             );
 
-            Assert.Contains("ffprobe validation could not run", exception.Message);
+            Assert.Contains("ffmpeg validation could not run", exception.Message);
         }
         finally
         {

@@ -4,9 +4,7 @@ public sealed class EncoderCalibrationStatusTests
 {
     private static readonly EncoderCalibrationEnvironment CurrentEnvironment = new(
         @"C:\ffmpeg\bin\ffmpeg.exe",
-        "ffmpeg version test",
-        @"C:\ffmpeg\bin\ffprobe.exe",
-        "ffprobe version test"
+        "ffmpeg version test"
     );
 
     [Fact]
@@ -77,36 +75,6 @@ public sealed class EncoderCalibrationStatusTests
     }
 
     [Fact]
-    public void StaleWhenFfprobePathChanges()
-    {
-        var status = EncoderCalibrationStatusEvaluator.Evaluate(
-            CreateSettings(),
-            CurrentEnvironment with
-            {
-                FfprobePath = @"D:\Tools\ffprobe.exe",
-            }
-        );
-
-        Assert.Equal(EncoderCalibrationStatusKind.Stale, status.Kind);
-        Assert.Contains("FFprobe path", status.Message);
-    }
-
-    [Fact]
-    public void StaleWhenFfprobeVersionChanges()
-    {
-        var status = EncoderCalibrationStatusEvaluator.Evaluate(
-            CreateSettings(),
-            CurrentEnvironment with
-            {
-                FfprobeVersion = "ffprobe version changed",
-            }
-        );
-
-        Assert.Equal(EncoderCalibrationStatusKind.Stale, status.Kind);
-        Assert.Contains("FFprobe version", status.Message);
-    }
-
-    [Fact]
     public void StaleWhenSelectedProfileHasNoResult()
     {
         var status = EncoderCalibrationStatusEvaluator.Evaluate(
@@ -173,8 +141,6 @@ public sealed class EncoderCalibrationStatusTests
                 TestedAt = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero),
                 FfmpegPath = CurrentEnvironment.FfmpegPath,
                 FfmpegVersion = CurrentEnvironment.FfmpegVersion,
-                FfprobePath = CurrentEnvironment.FfprobePath,
-                FfprobeVersion = CurrentEnvironment.FfprobeVersion,
                 Results = [result],
             },
         };

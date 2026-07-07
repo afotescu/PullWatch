@@ -77,11 +77,6 @@ function Add-FfmpegBundle {
     }
 
     $sourceBinPath = Split-Path -Parent $ffmpegExe.FullName
-    $ffprobeExe = Join-Path $sourceBinPath "ffprobe.exe"
-
-    if (!(Test-Path -LiteralPath $ffprobeExe)) {
-        throw "FFmpeg essentials archive did not contain bin\ffprobe.exe"
-    }
 
     if (Test-Path -LiteralPath $destinationPath) {
         Remove-Item -LiteralPath $destinationPath -Recurse -Force
@@ -90,7 +85,6 @@ function Add-FfmpegBundle {
     New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
 
     Copy-Item -LiteralPath (Join-Path $sourceBinPath "ffmpeg.exe") -Destination $destinationPath
-    Copy-Item -LiteralPath $ffprobeExe -Destination $destinationPath
 
     Get-ChildItem -LiteralPath $sourceBinPath -Filter "*.dll" -File |
         Copy-Item -Destination $destinationPath

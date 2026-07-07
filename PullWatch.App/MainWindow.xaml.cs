@@ -183,8 +183,6 @@ public partial class MainWindow : Window
                     TestedAt = DateTimeOffset.UtcNow,
                     FfmpegPath = environment.FfmpegPath,
                     FfmpegVersion = environment.FfmpegVersion,
-                    FfprobePath = environment.FfprobePath,
-                    FfprobeVersion = environment.FfprobeVersion,
                     Results = calibrationResults,
                 },
             },

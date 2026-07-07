@@ -9,20 +9,12 @@ public static class FfmpegToolPaths
 
     private const string BundledToolsDirectoryName = "ffmpeg";
     private const string FfmpegExecutableFileName = "ffmpeg.exe";
-    private const string FfprobeExecutableFileName = "ffprobe.exe";
     private const string FfmpegExecutableName = "ffmpeg";
-    private const string FfprobeExecutableName = "ffprobe";
     private const string PreferredFfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe";
-    private const string PreferredFfprobePath = @"C:\ffmpeg\bin\ffprobe.exe";
 
     public static string ResolveFfmpegPath()
     {
         return ResolveFfmpegPath(AppContext.BaseDirectory);
-    }
-
-    public static string ResolveFfprobePath()
-    {
-        return ResolveFfprobePath(AppContext.BaseDirectory);
     }
 
     internal static string ResolveFfmpegPath(string baseDirectory)
@@ -35,28 +27,15 @@ public static class FfmpegToolPaths
         );
     }
 
-    internal static string ResolveFfprobePath(string baseDirectory)
-    {
-        return ResolveToolPath(
-            baseDirectory,
-            FfprobeExecutableFileName,
-            PreferredFfprobePath,
-            FfprobeExecutableName
-        );
-    }
-
     public static async Task<EncoderCalibrationEnvironment> ResolveEnvironmentAsync(
         CancellationToken cancellationToken
     )
     {
         var ffmpegPath = ResolveFfmpegPath();
-        var ffprobePath = ResolveFfprobePath();
 
         return new EncoderCalibrationEnvironment(
             ffmpegPath,
-            await TryGetToolVersionAsync(ffmpegPath, cancellationToken),
-            ffprobePath,
-            await TryGetToolVersionAsync(ffprobePath, cancellationToken)
+            await TryGetToolVersionAsync(ffmpegPath, cancellationToken)
         );
     }
 
