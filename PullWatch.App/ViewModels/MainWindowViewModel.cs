@@ -72,6 +72,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             controller.Status,
             controller.StartManualRecordingAsync,
             controller.StopManualRecordingAsync,
+            testVideoEncoding,
             controller.ListRecordingsAsync,
             controller.DeleteRecordingAsync,
             recordingDialogs.ConfirmPermanentDelete,

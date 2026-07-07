@@ -78,8 +78,10 @@ public partial class MainWindow : Window
         var promptResult = WpfConfirmationDialog.Show(
             this,
             new ConfirmationDialogRequest(
-                "Video Encoding Setup",
-                ["PullWatch needs to test video encoding on this PC before recording."],
+                "PullWatch",
+                [
+                    "Recording stays disabled until this test passes. It only takes a few seconds and lets PullWatch choose the best working encoder.",
+                ],
                 [
                     new ConfirmationDialogButton(
                         "Test video encoding",
@@ -92,7 +94,8 @@ public partial class MainWindow : Window
                         ConfirmationDialogResult.Cancel,
                         IsCancel: true
                     ),
-                ]
+                ],
+                Heading: "Test video encoding before recording?"
             )
         );
 
@@ -201,9 +204,9 @@ public partial class MainWindow : Window
         WpfConfirmationDialog.Show(
             this,
             new ConfirmationDialogRequest(
-                "Video Encoding Ready",
+                "PullWatch",
                 [
-                    $"Video encoding is ready: {VideoProfileFormatter.FormatDisplayName(selectedProfile)}.",
+                    $"Using {VideoProfileFormatter.FormatDisplayName(selectedProfile)} for future recordings.",
                 ],
                 [
                     new ConfirmationDialogButton(
@@ -212,7 +215,8 @@ public partial class MainWindow : Window
                         ConfirmationDialogButtonKind.Accent,
                         IsDefault: true
                     ),
-                ]
+                ],
+                Heading: "Video encoding is ready"
             )
         );
     }
@@ -222,7 +226,7 @@ public partial class MainWindow : Window
         WpfConfirmationDialog.Show(
             this,
             new ConfirmationDialogRequest(
-                "Video Encoding Setup Failed",
+                "PullWatch",
                 [message],
                 [
                     new ConfirmationDialogButton(
@@ -230,7 +234,8 @@ public partial class MainWindow : Window
                         ConfirmationDialogResult.Primary,
                         IsDefault: true
                     ),
-                ]
+                ],
+                Heading: "Video encoding test failed"
             )
         );
     }

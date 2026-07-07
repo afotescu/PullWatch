@@ -8,6 +8,10 @@ public sealed partial class RecordingsViewModel : ObservableObject
 {
     private const string FailureNotificationId = "recorder-failure";
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
+    private const string VideoEncodingSetupFallbackMessage =
+        "Video encoding needs to be tested before recording.";
+    private const string VideoEncodingSetupRequiredSuffix =
+        "Manual and automatic recording stay disabled until setup is complete.";
     private const string NoRecordingsDirectoryMessage =
         "Choose a recordings directory in settings to review videos here.";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
@@ -19,6 +23,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
+    private readonly Func<Task> _testVideoEncoding;
     private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
     private readonly Func<Guid, Task> _deleteRecording;
     private readonly Func<RecordingListItem, bool> _confirmPermanentDelete;
@@ -29,6 +34,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
     private WowProcessStatus _wowProcess;
+    private PullWatchSettings? _settings;
     private string? _recordingsDirectory;
     private Exception? _dismissedFailure;
     private string _duration = "00:00:00";
@@ -37,11 +43,13 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private RecordingListItem? _selectedRecording;
     private RecordingCategoryTab _selectedRecordingCategory = null!;
     private int _knownSavedCount;
+    private bool _isTestingVideoEncoding;
 
     public RecordingsViewModel(
         ApplicationStatus initialStatus,
         Func<Task<RecordingCommandResult>> startManual,
         Func<Task<RecordingCommandResult>> stopManual,
+        Func<Task> testVideoEncoding,
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
         Func<Guid, Task> deleteRecording,
         Func<RecordingListItem, bool> confirmPermanentDelete,
@@ -53,10 +61,12 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _recording = initialStatus.Recording;
         _combatLog = initialStatus.CombatLog;
         _wowProcess = initialStatus.WowProcess;
+        _settings = initialStatus.EffectiveSettings;
         _recordingsDirectory = initialStatus.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = initialStatus.Recording.Statistics.SavedCount;
         _startManual = startManual;
         _stopManual = stopManual;
+        _testVideoEncoding = testVideoEncoding;
         _loadRecordings = loadRecordings;
         _deleteRecording = deleteRecording;
         _confirmPermanentDelete = confirmPermanentDelete;
@@ -132,12 +142,25 @@ public sealed partial class RecordingsViewModel : ObservableObject
         }
     }
 
-    public string StateTitle => GetStateTitle(_recording, _wowProcess);
+    public string StateTitle =>
+        IsVideoEncodingSetupRequired ? "Setup needed" : GetStateTitle(_recording, _wowProcess);
 
-    public string ReadinessDetail => GetReadinessDetail(_recording, _combatLog, _wowProcess);
+    public string ReadinessDetail =>
+        IsVideoEncodingSetupRequired
+            ? GetVideoEncodingSetupRequiredDetail(_settings, _recording.LastFailure)
+            : GetReadinessDetail(_recording, _combatLog, _wowProcess);
 
     public RecordingStatusHealth StatusHealth =>
-        GetStatusHealth(_recording, _combatLog, _wowProcess);
+        IsVideoEncodingSetupRequired
+            ? RecordingStatusHealth.AttentionNeeded
+            : GetStatusHealth(_recording, _combatLog, _wowProcess);
+
+    public bool IsVideoEncodingSetupRequired =>
+        _recording.State == RecordingCoordinatorState.Idle
+        && (
+            IsVideoEncodingSetupIncomplete(_settings)
+            || IsVideoEncodingSetupFailure(_recording.LastFailure)
+        );
 
     public bool IsRecordingActive => _recording.State == RecordingCoordinatorState.Recording;
 
@@ -172,13 +195,18 @@ public sealed partial class RecordingsViewModel : ObservableObject
     public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
 
     public RecordingStatusHealth RecorderHealth =>
-        _recording.LastFailure is not null && !IsTargetUnavailableFailure(_recording.LastFailure)
+        _recording.LastFailure is not null
+        && !IsTargetUnavailableFailure(_recording.LastFailure)
+        && !IsVideoEncodingSetupFailure(_recording.LastFailure)
             ? RecordingStatusHealth.AttentionNeeded
         : _recording.State == RecordingCoordinatorState.Idle ? RecordingStatusHealth.Idle
         : RecordingStatusHealth.Active;
 
     public string? FailureMessage =>
-        IsTargetUnavailableFailure(_recording.LastFailure) ? null : _recording.LastFailure?.Message;
+        IsTargetUnavailableFailure(_recording.LastFailure)
+        || IsVideoEncodingSetupFailure(_recording.LastFailure)
+            ? null
+            : _recording.LastFailure?.Message;
 
     public string? CommandMessage
     {
@@ -197,20 +225,45 @@ public sealed partial class RecordingsViewModel : ObservableObject
     public bool IsFailureVisible =>
         _recording.LastFailure is not null
         && !IsTargetUnavailableFailure(_recording.LastFailure)
+        && !IsVideoEncodingSetupFailure(_recording.LastFailure)
         && !ReferenceEquals(_recording.LastFailure, _dismissedFailure);
 
     public bool IsManualStopMode => _recording.State == RecordingCoordinatorState.Recording;
 
     public string ManualRecordingButtonText => IsManualStopMode ? "Manual stop" : "Manual start";
 
-    public string CollapsedStatusToolTip =>
-        _recording.State switch
+    public bool IsStatusCardStopMode => !IsVideoEncodingSetupRequired && IsManualStopMode;
+
+    public string StatusCardButtonText =>
+        IsVideoEncodingSetupRequired
+            ? IsTestingVideoEncoding
+                ? "Testing video encoding..."
+                : "Test video encoding"
+            : ManualRecordingButtonText;
+
+    public bool IsTestingVideoEncoding
+    {
+        get => _isTestingVideoEncoding;
+        private set
         {
-            RecordingCoordinatorState.Recording => "Recording. Click to stop.",
-            RecordingCoordinatorState.Idle when _wowProcess.IsWindowAvailable =>
-                "Idle. Click to start manual recording.",
-            _ => ReadinessDetail,
-        };
+            if (SetProperty(ref _isTestingVideoEncoding, value))
+            {
+                OnPropertyChanged(nameof(StatusCardButtonText));
+                StatusCardCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string CollapsedStatusToolTip =>
+        IsVideoEncodingSetupRequired
+            ? "Test video encoding before recording."
+            : _recording.State switch
+            {
+                RecordingCoordinatorState.Recording => "Recording. Click to stop.",
+                RecordingCoordinatorState.Idle when _wowProcess.IsWindowAvailable =>
+                    "Idle. Click to start manual recording.",
+                _ => ReadinessDetail,
+            };
 
     public void ApplyStatus(ApplicationStatus status)
     {
@@ -220,6 +273,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _recording = status.Recording;
         _combatLog = status.CombatLog;
         _wowProcess = status.WowProcess;
+        _settings = status.EffectiveSettings;
         _recordingsDirectory = status.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = status.Recording.Statistics.SavedCount;
 
@@ -244,6 +298,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         OnPropertyChanged(string.Empty);
         UpdateFailureNotification();
         ManualRecordingCommand.NotifyCanExecuteChanged();
+        StatusCardCommand.NotifyCanExecuteChanged();
         DeleteSelectedRecordingCommand.NotifyCanExecuteChanged();
         DismissFailureCommand.NotifyCanExecuteChanged();
     }
@@ -260,7 +315,16 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     private bool CanRunManualCommand =>
         _recording.State == RecordingCoordinatorState.Recording
-        || (_recording.State == RecordingCoordinatorState.Idle && _wowProcess.IsWindowAvailable);
+        || (
+            _recording.State == RecordingCoordinatorState.Idle
+            && _wowProcess.IsWindowAvailable
+            && !IsVideoEncodingSetupRequired
+        );
+
+    private bool CanRunStatusCardCommand =>
+        IsVideoEncodingSetupRequired
+            ? _recording.State == RecordingCoordinatorState.Idle && !IsTestingVideoEncoding
+            : CanRunManualCommand;
 
     private bool CanDeleteSelectedRecording => SelectedRecording is not null;
 
@@ -757,6 +821,14 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return ExecuteCommandAsync(ToggleManualRecordingAsync);
     }
 
+    [RelayCommand(CanExecute = nameof(CanRunStatusCardCommand))]
+    private Task StatusCardAsync()
+    {
+        return IsVideoEncodingSetupRequired
+            ? TestVideoEncodingAsync()
+            : ExecuteCommandAsync(ToggleManualRecordingAsync);
+    }
+
     private async Task ExecuteCommandAsync(Func<Task> command)
     {
         try
@@ -785,6 +857,24 @@ public sealed partial class RecordingsViewModel : ObservableObject
             "Recording stopped.",
             _recording.LastFailure
         );
+    }
+
+    private async Task TestVideoEncodingAsync()
+    {
+        IsTestingVideoEncoding = true;
+        try
+        {
+            await _testVideoEncoding();
+            CommandMessage = null;
+        }
+        catch (Exception exception)
+        {
+            CommandMessage = $"Video encoding test failed: {exception.Message}";
+        }
+        finally
+        {
+            IsTestingVideoEncoding = false;
+        }
     }
 
     [RelayCommand]
@@ -1009,6 +1099,109 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private static bool IsTargetUnavailableFailure(Exception? exception)
     {
         return RecordingFailureClassifier.IsTargetUnavailable(exception);
+    }
+
+    private static bool IsVideoEncodingSetupIncomplete(PullWatchSettings? settings)
+    {
+        if (settings is null)
+        {
+            return false;
+        }
+
+        if (settings.EncoderCalibration.Results.Count == 0)
+        {
+            return true;
+        }
+
+        var selectedProfile = settings.Video.SelectedProfile;
+        if (selectedProfile is null)
+        {
+            return true;
+        }
+
+        var selectedResult = settings.EncoderCalibration.Results.FirstOrDefault(result =>
+            result.Codec == selectedProfile.Codec && result.Provider == selectedProfile.Provider
+        );
+
+        return selectedResult is null || !selectedResult.Passed;
+    }
+
+    private static string GetVideoEncodingSetupRequiredDetail(
+        PullWatchSettings? settings,
+        Exception? failure
+    )
+    {
+        var message =
+            TryGetVideoEncodingSetupFailureMessage(failure)
+            ?? GetVideoEncodingSetupSettingsMessage(settings)
+            ?? VideoEncodingSetupFallbackMessage;
+
+        return JoinSentences(message, VideoEncodingSetupRequiredSuffix);
+    }
+
+    private static string? GetVideoEncodingSetupSettingsMessage(PullWatchSettings? settings)
+    {
+        if (settings is null)
+        {
+            return null;
+        }
+
+        if (settings.EncoderCalibration.Results.Count == 0)
+        {
+            return VideoEncodingSetupFallbackMessage;
+        }
+
+        if (settings.Video.SelectedProfile is null)
+        {
+            return "No tested video encoder profile has been selected.";
+        }
+
+        var selectedResult = settings.EncoderCalibration.Results.FirstOrDefault(result =>
+            result.Codec == settings.Video.SelectedProfile.Codec
+            && result.Provider == settings.Video.SelectedProfile.Provider
+        );
+
+        if (selectedResult is null)
+        {
+            return "The selected video encoder profile has not been tested.";
+        }
+
+        return selectedResult.Passed
+            ? null
+            : "The selected video encoder profile did not pass testing.";
+    }
+
+    private static bool IsVideoEncodingSetupFailure(Exception? exception)
+    {
+        return TryGetVideoEncodingSetupFailureMessage(exception) is not null;
+    }
+
+    private static string? TryGetVideoEncodingSetupFailureMessage(Exception? exception)
+    {
+        var message = exception?.Message?.Trim();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        return
+            message.StartsWith("Video encoding needs to be tested", StringComparison.Ordinal)
+            || message.StartsWith("Video encoding needs to be retested", StringComparison.Ordinal)
+            || message.StartsWith("Video encoding must be calibrated", StringComparison.Ordinal)
+            || message.StartsWith(
+                "No tested video encoder profile has been selected",
+                StringComparison.Ordinal
+            )
+            || message.StartsWith(
+                "The selected video encoder profile has not been tested",
+                StringComparison.Ordinal
+            )
+            || message.StartsWith(
+                "The selected video encoder profile did not pass testing",
+                StringComparison.Ordinal
+            )
+            ? message
+            : null;
     }
 
     private static bool PathsEqual(string? left, string? right)

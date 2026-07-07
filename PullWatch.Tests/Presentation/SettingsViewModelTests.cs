@@ -88,6 +88,7 @@ public sealed class SettingsViewModelTests
 
         Assert.Equal(selectedProfile, viewModel.SelectedVideoProfile);
         Assert.Equal("H.265 / NVIDIA NVENC", viewModel.VideoEncodingSummary);
+        Assert.Equal("Ready for recording", viewModel.VideoEncodingStatus);
         Assert.True(viewModel.HasVideoProfileOptions);
         Assert.True(viewModel.CanChooseVideoProfile);
         Assert.Equal(

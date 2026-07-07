@@ -48,12 +48,112 @@ public sealed class RecordingsViewModelTests
 
         Assert.Equal(expectedTitle, viewModel.StateTitle);
         Assert.Equal(canRunManualCommand, viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.Equal(canRunManualCommand, viewModel.StatusCardCommand.CanExecute(null));
         Assert.Equal(isManualStopMode, viewModel.IsManualStopMode);
         Assert.Equal(expectedManualButtonText, viewModel.ManualRecordingButtonText);
+        Assert.Equal(expectedManualButtonText, viewModel.StatusCardButtonText);
         Assert.Equal(
             expectedCollapsedStatusToolTip.Replace("\r\n", Environment.NewLine),
             viewModel.CollapsedStatusToolTip
         );
+    }
+
+    [Fact]
+    public async Task MissingVideoEncodingSetupReplacesManualActionWithSetupAction()
+    {
+        var testCalls = 0;
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, includeSelectedVideoProfile: false),
+            testVideoEncoding: () =>
+            {
+                testCalls++;
+                return Task.CompletedTask;
+            }
+        );
+
+        Assert.Equal("Setup needed", viewModel.StateTitle);
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                "Video encoding needs to be tested before recording.",
+                "Manual and automatic recording stay disabled until setup is complete."
+            ),
+            viewModel.ReadinessDetail
+        );
+        Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
+        Assert.True(viewModel.IsVideoEncodingSetupRequired);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.True(viewModel.StatusCardCommand.CanExecute(null));
+        Assert.Equal("Test video encoding", viewModel.StatusCardButtonText);
+        Assert.Equal("Test video encoding before recording.", viewModel.CollapsedStatusToolTip);
+
+        await viewModel.StatusCardCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, testCalls);
+        Assert.Null(viewModel.CommandMessage);
+    }
+
+    [Fact]
+    public void MissingCalibrationResultsReplaceManualActionWithSetupAction()
+    {
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                includeSelectedVideoProfile: true,
+                includeEncoderCalibrationResults: false
+            )
+        );
+
+        Assert.Equal("Setup needed", viewModel.StateTitle);
+        Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
+        Assert.True(viewModel.IsVideoEncodingSetupRequired);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.True(viewModel.StatusCardCommand.CanExecute(null));
+        Assert.Equal("Test video encoding", viewModel.StatusCardButtonText);
+    }
+
+    [Fact]
+    public void CalibrationFailureReplacesManualActionWithSetupActionWithoutFailureNotification()
+    {
+        var notifications = new NotificationCenterViewModel();
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException(
+                    "Video encoding needs to be retested because the FFmpeg path changed."
+                )
+            ),
+            notifications: notifications
+        );
+
+        Assert.Equal("Setup needed", viewModel.StateTitle);
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                "Video encoding needs to be retested because the FFmpeg path changed.",
+                "Manual and automatic recording stay disabled until setup is complete."
+            ),
+            viewModel.ReadinessDetail
+        );
+        Assert.True(viewModel.IsVideoEncodingSetupRequired);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.True(viewModel.StatusCardCommand.CanExecute(null));
+        Assert.False(viewModel.IsFailureVisible);
+        Assert.Null(viewModel.FailureMessage);
+        Assert.Empty(notifications.Items);
+    }
+
+    [Fact]
+    public async Task VideoEncodingSetupActionReportsFailure()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, includeSelectedVideoProfile: false),
+            testVideoEncoding: () => throw new InvalidOperationException("FFmpeg is missing.")
+        );
+
+        await viewModel.StatusCardCommand.ExecuteAsync(null);
+
+        Assert.Equal("Video encoding test failed: FFmpeg is missing.", viewModel.CommandMessage);
     }
 
     [Fact]
@@ -1035,6 +1135,7 @@ public sealed class RecordingsViewModelTests
         Func<Guid, Task>? deleteRecording = null,
         Func<RecordingListItem, bool>? confirmPermanentDelete = null,
         Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null,
+        Func<Task>? testVideoEncoding = null,
         NotificationCenterViewModel? notifications = null
     )
     {
@@ -1042,6 +1143,7 @@ public sealed class RecordingsViewModelTests
             status,
             startManual ?? (() => Task.FromResult(RecordingCommandResult.Started)),
             stopManual ?? (() => Task.FromResult(RecordingCommandResult.Stopped)),
+            testVideoEncoding ?? (() => Task.CompletedTask),
             loadRecordings ?? (_ => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([])),
             deleteRecording ?? (_ => Task.CompletedTask),
             confirmPermanentDelete ?? (_ => true),
@@ -1064,9 +1166,18 @@ public sealed class RecordingsViewModelTests
         int? wowProcessId = 10,
         string? wowWindowTitle = "World of Warcraft",
         string? activeOutputPath = null,
-        RecordingListCategory selectedRecordingCategory = RecordingListCategory.ChallengeMode
+        RecordingListCategory selectedRecordingCategory = RecordingListCategory.ChallengeMode,
+        bool includeSelectedVideoProfile = true,
+        bool includeEncoderCalibrationResults = true
     )
     {
+        var selectedProfile = includeSelectedVideoProfile
+            ? new VideoProfileSelection
+            {
+                Codec = VideoCodec.H265,
+                Provider = VideoEncoderProvider.NvidiaNvenc,
+            }
+            : null;
         RecordingOwner? owner = context switch
         {
             ManualRecordingContext => RecordingOwner.Manual,
@@ -1079,6 +1190,14 @@ public sealed class RecordingsViewModelTests
             new PullWatchSettings
             {
                 RecordingsDirectory = recordingsDirectory,
+                Video = new VideoSettings { SelectedProfile = selectedProfile },
+                EncoderCalibration = new EncoderCalibrationSettings
+                {
+                    Results =
+                        includeEncoderCalibrationResults && selectedProfile is not null
+                            ? [CalibrationResult(selectedProfile)]
+                            : [],
+                },
                 Ui = new UiSettings { SelectedRecordingCategory = selectedRecordingCategory },
             },
             new RecordingCoordinatorStatus(
@@ -1148,5 +1267,20 @@ public sealed class RecordingsViewModelTests
         File.WriteAllText(path, content);
         File.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
         return path;
+    }
+
+    private static EncoderCalibrationResult CalibrationResult(VideoProfileSelection profile)
+    {
+        return new EncoderCalibrationResult
+        {
+            Codec = profile.Codec,
+            Provider = profile.Provider,
+            EncoderName = profile.Codec == VideoCodec.H265 ? "hevc_nvenc" : "h264_nvenc",
+            Passed = true,
+            Message = "Available",
+            Width = 1920,
+            Height = 1080,
+            DurationSeconds = 2.0,
+        };
     }
 }

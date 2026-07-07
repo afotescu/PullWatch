@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Input;
 
 namespace PullWatch;
 
@@ -90,13 +89,5 @@ public partial class EncoderCalibrationProgressWindow : Window
         }
 
         base.OnClosing(eventArgs);
-    }
-
-    private void OnTitleBarMouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
-    {
-        if (eventArgs.ClickCount == 1 && eventArgs.ButtonState == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
     }
 }

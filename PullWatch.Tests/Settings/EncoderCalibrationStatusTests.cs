@@ -19,6 +19,7 @@ public sealed class EncoderCalibrationStatusTests
 
         Assert.Equal(EncoderCalibrationStatusKind.Missing, status.Kind);
         Assert.False(status.IsValid);
+        Assert.Equal("Video encoding needs to be tested before recording.", status.Message);
     }
 
     [Fact]
@@ -144,6 +145,7 @@ public sealed class EncoderCalibrationStatusTests
 
         Assert.True(status.IsValid);
         Assert.Equal(EncoderCalibrationStatusKind.Valid, status.Kind);
+        Assert.Equal("Video encoding is ready.", status.Message);
     }
 
     private static PullWatchSettings CreateSettings(

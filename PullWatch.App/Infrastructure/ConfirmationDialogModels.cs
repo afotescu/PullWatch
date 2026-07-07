@@ -18,7 +18,8 @@ public sealed record ConfirmationDialogRequest(
     string Title,
     IReadOnlyList<string> MessageLines,
     IReadOnlyList<ConfirmationDialogButton> Buttons,
-    ConfirmationDialogResult DefaultResult = ConfirmationDialogResult.Cancel
+    ConfirmationDialogResult DefaultResult = ConfirmationDialogResult.Cancel,
+    string? Heading = null
 );
 
 public sealed record ConfirmationDialogButton(

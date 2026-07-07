@@ -426,7 +426,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string VideoEncodingStatus =>
         SelectedVideoProfile is null
             ? "PullWatch needs to test video encoding before recording."
-            : "Tested on this PC";
+            : "Ready for recording";
 
     public bool IsTestingVideoEncoding
     {

@@ -34,7 +34,7 @@ public static class EncoderCalibrationStatusEvaluator
 
         if (calibration.Results.Count == 0)
         {
-            return Missing("Video encoding has not been tested on this PC.");
+            return Missing("Video encoding needs to be tested before recording.");
         }
 
         if (selectedProfile is null)
@@ -85,7 +85,7 @@ public static class EncoderCalibrationStatusEvaluator
 
         return new EncoderCalibrationStatus(
             EncoderCalibrationStatusKind.Valid,
-            "Video encoding has been tested on this PC."
+            "Video encoding is ready."
         );
     }
 

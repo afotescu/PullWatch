@@ -1,5 +1,4 @@
 ﻿using System.Windows;
-using System.Windows.Input;
 using WpfButton = System.Windows.Controls.Button;
 
 namespace PullWatch;
@@ -12,8 +11,7 @@ public partial class ConfirmationDialogWindow : Window
 
         Result = request.DefaultResult;
         Title = request.Title;
-        WindowTitleTextBlock.Text = request.Title;
-        TitleTextBlock.Text = request.Title;
+        TitleTextBlock.Text = request.Heading ?? request.Title;
         MessageItemsControl.ItemsSource = request.MessageLines;
 
         foreach (var button in request.Buttons)
@@ -42,14 +40,6 @@ public partial class ConfirmationDialogWindow : Window
         };
 
         return button;
-    }
-
-    private void OnTitleBarMouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
-    {
-        if (eventArgs.ClickCount == 1 && eventArgs.ButtonState == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs eventArgs)
