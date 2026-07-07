@@ -26,6 +26,8 @@ env:
   PUBLISH_DIR: artifacts/publish/win-x64
   VELOPACK_VERSION: 1.2.0
   VELOPACK_RELEASE_DIR: artifacts/velopack/releases
+  FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip
+  FFMPEG_SHA256: db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec
 
 jobs:
   release:
@@ -36,12 +38,17 @@ jobs:
       - name: Resolve release tag
         id: release-tag
         shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:REF_NAME
           $prerelease = "false"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $tag = "${{ inputs.tag }}"
-            $prerelease = "${{ inputs.prerelease }}"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $tag = $env:INPUT_TAG
+            $prerelease = $env:INPUT_PRERELEASE
           }
 
           if (-not $tag.StartsWith("v")) {
@@ -86,7 +93,9 @@ jobs:
 
       - name: Publish
         shell: pwsh
-        run: ./scripts/publish-win-x64.ps1 -OutputPath ${{ env.PUBLISH_DIR }} -Version ${{ steps.release-tag.outputs.version }}
+        env:
+          RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
+        run: ./scripts/publish-win-x64.ps1 -OutputPath $env:PUBLISH_DIR -Version $env:RELEASE_VERSION -FfmpegDownloadUrl $env:FFMPEG_DOWNLOAD_URL -FfmpegSha256 $env:FFMPEG_SHA256
 
       - name: Install Velopack CLI
         run: dotnet tool install --tool-path .tools vpk --version ${{ env.VELOPACK_VERSION }}
@@ -94,8 +103,11 @@ jobs:
       - name: Package Velopack release
         id: package
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          $releaseDir = "${{ env.VELOPACK_RELEASE_DIR }}"
+          $releaseDir = $env:VELOPACK_RELEASE_DIR
 
           if (Test-Path -LiteralPath $releaseDir) {
             Remove-Item -LiteralPath $releaseDir -Recurse -Force
@@ -106,8 +118,8 @@ jobs:
           .\.tools\vpk.exe pack `
             --packId PullWatch.Desktop `
             --packTitle PullWatch `
-            --packVersion ${{ steps.release-tag.outputs.version }} `
-            --packDir ${{ env.PUBLISH_DIR }} `
+            --packVersion $env:RELEASE_VERSION `
+            --packDir $env:PUBLISH_DIR `
             --mainExe PullWatch.exe `
             --outputDir $releaseDir `
             --icon .\PullWatch.App\Assets\favicon.ico `
@@ -122,7 +134,7 @@ jobs:
             throw "Velopack did not produce any release files in $releaseDir"
           }
 
-          $checksumPath = Join-Path $releaseDir "PullWatch-${{ steps.release-tag.outputs.tag }}-win-x64.sha256"
+          $checksumPath = Join-Path $releaseDir "PullWatch-$env:RELEASE_TAG-win-x64.sha256"
           $checksumLines = $releaseFiles | ForEach-Object {
             $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
             "{0}  {1}" -f $hash.Hash.ToLowerInvariant(), $_.Name
@@ -138,12 +150,14 @@ jobs:
           path: ${{ steps.package.outputs.release_dir }}/*
           if-no-files-found: error
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release-tag.outputs.prerelease }}
         run: |
-          $tag = "${{ steps.release-tag.outputs.tag }}"
+          $tag = $env:RELEASE_TAG
           $releaseDir = "${{ steps.package.outputs.release_dir }}"
           $releaseFiles = @(
             Get-ChildItem -LiteralPath $releaseDir -File |
@@ -152,54 +166,38 @@ jobs:
           )
           $title = "PullWatch $tag"
           $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
-            "${{ steps.release-tag.outputs.prerelease }}",
+            $env:RELEASE_PRERELEASE,
             "true"
           )
-          $prereleaseArgument = "--prerelease=$($prerelease.ToString().ToLowerInvariant())"
 
           if ($releaseFiles.Count -eq 0) {
             throw "No Velopack release files found in $releaseDir"
           }
 
-          $releaseJson = gh release view $tag --json isImmutable 2>$null
+          gh release view $tag --json isImmutable 2>$null
           $releaseExists = $LASTEXITCODE -eq 0
-          if (-not $releaseExists) {
-            $createArguments = @(
-              "release",
-              "create",
-              $tag
-            )
-            $createArguments += $releaseFiles
-            $createArguments += @(
-              "--title",
-              $title,
-              "--generate-notes",
-              "--verify-tag"
-            )
+          if ($releaseExists) {
+            throw "GitHub Release $tag already exists. Create a new tag instead of replacing release assets."
+          }
 
-            if ($prerelease) {
-              $createArguments += "--prerelease"
-            }
+          $createArguments = @(
+            "release",
+            "create",
+            $tag
+          )
+          $createArguments += $releaseFiles
+          $createArguments += @(
+            "--title",
+            $title,
+            "--generate-notes",
+            "--verify-tag"
+          )
 
-            gh @createArguments
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to create GitHub Release $tag"
-            }
-          } else {
-            $existingRelease = $releaseJson | ConvertFrom-Json
-            if ($existingRelease.isImmutable) {
-              throw "GitHub Release $tag already exists and is immutable. Create a new tag instead of replacing release assets."
-            }
+          if ($prerelease) {
+            $createArguments += "--prerelease"
+          }
 
-            gh release edit $tag $prereleaseArgument
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to update GitHub Release prerelease metadata for $tag"
-            }
-
-            foreach ($releaseFile in $releaseFiles) {
-              gh release upload $tag $releaseFile --clobber
-              if ($LASTEXITCODE -ne 0) {
-                throw "Failed to upload $releaseFile to GitHub Release $tag. If release immutability is enabled, create a new tag instead of replacing assets on an existing release."
-              }
-            }
+          gh @createArguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create GitHub Release $tag"
           }

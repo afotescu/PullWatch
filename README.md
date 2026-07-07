@@ -25,7 +25,7 @@ target yet.
 
 ## Download
 
-Download the latest portable Windows x64 build from the
+Download the latest Windows x64 installer from the
 [GitHub Releases page](https://github.com/afotescu/PullWatch/releases/latest).
 
 Release builds are currently unsigned, so Windows SmartScreen may show a warning
@@ -56,7 +56,7 @@ Closing the PullWatch window keeps the app running in the system tray. Use
 
 - Windows x64
 
-Portable releases are self-contained and do not require a separately installed
+Release installers are self-contained and do not require a separately installed
 .NET runtime.
 
 Automatic recording requires World of Warcraft combat logging to be enabled so
@@ -160,7 +160,7 @@ Run the test suite:
 dotnet test PullWatch.sln -c Release -p:Platform=x64
 ```
 
-Create a local self-contained Windows x64 build:
+Create a local self-contained Windows x64 publish build:
 
 ```powershell
 ./scripts/publish-win-x64.ps1

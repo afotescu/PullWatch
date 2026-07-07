@@ -1,7 +1,8 @@
 param(
     [string]$OutputPath = "artifacts/publish/win-x64",
     [string]$Version,
-    [string]$FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    [string]$FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+    [string]$FfmpegSha256 = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
     [switch]$SkipFfmpegBundle
 )
 
@@ -25,19 +26,36 @@ if (!$resolvedPublishPath.StartsWith(
 function Add-FfmpegBundle {
     param(
         [string]$DownloadUrl,
+        [string]$ExpectedSha256,
         [string]$ArtifactsRoot,
         [string]$PublishPath
     )
 
     $downloadDirectory = Join-Path $ArtifactsRoot "downloads"
-    $archivePath = Join-Path $downloadDirectory "ffmpeg-release-essentials.zip"
+    $archiveFileName = [System.IO.Path]::GetFileName(([System.Uri]$DownloadUrl).AbsolutePath)
+    if ([string]::IsNullOrWhiteSpace($archiveFileName) -or
+        !$archiveFileName.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "FFmpeg download URL must point to a zip archive."
+    }
+
+    $archivePath = Join-Path $downloadDirectory $archiveFileName
     $extractPath = Join-Path $ArtifactsRoot "ffmpeg-release-essentials"
     $destinationPath = Join-Path $PublishPath "ffmpeg"
 
     New-Item -ItemType Directory -Force -Path $downloadDirectory | Out-Null
 
+    if ($ExpectedSha256 -notmatch "^[0-9A-Fa-f]{64}$") {
+        throw "Expected FFmpeg SHA256 must be a 64-character hex string."
+    }
+
     Write-Host "Downloading FFmpeg essentials from $DownloadUrl"
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $archivePath
+
+    $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.ToLowerInvariant()
+    $normalizedExpectedSha256 = $ExpectedSha256.Trim().ToLowerInvariant()
+    if ($actualSha256 -ne $normalizedExpectedSha256) {
+        throw "FFmpeg archive SHA256 mismatch. Expected $normalizedExpectedSha256 but downloaded $actualSha256."
+    }
 
     if (Test-Path -LiteralPath $extractPath) {
         Remove-Item -LiteralPath $extractPath -Recurse -Force
@@ -162,13 +180,14 @@ if ($SkipFfmpegBundle) {
 } else {
     Add-FfmpegBundle `
         -DownloadUrl $FfmpegDownloadUrl `
+        -ExpectedSha256 $FfmpegSha256 `
         -ArtifactsRoot $artifactsRoot `
         -PublishPath $publishPath
 }
 
 $readmePath = Join-Path $publishPath "README.txt"
 @"
-PullWatch portable release build
+PullWatch release build
 
 Run PullWatch.exe. Keep the ffmpeg folder next to PullWatch.exe.
 
