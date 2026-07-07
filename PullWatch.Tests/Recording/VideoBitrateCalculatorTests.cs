@@ -45,7 +45,7 @@ public sealed class VideoBitrateCalculatorTests
     }
 
     [Fact]
-    public void EstimatesFiveMinuteFileSizeWithAudio()
+    public void EstimatesFiveMinuteFileSizeWithRecorderAudioDefaults()
     {
         var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(
             24_000_000,
@@ -53,7 +53,7 @@ public sealed class VideoBitrateCalculatorTests
             TimeSpan.FromMinutes(5)
         );
 
-        Assert.Equal(907, megabytes);
+        Assert.Equal(904, megabytes);
     }
 
     [Fact]

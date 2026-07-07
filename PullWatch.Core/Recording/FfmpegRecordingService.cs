@@ -13,8 +13,6 @@ public sealed class FfmpegRecordingService(
     ILogger<FfmpegRecordingService> logger
 ) : IRecordingService
 {
-    private const string FfmpegExecutableName = "ffmpeg";
-    private const string PreferredFfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe";
     private const int StderrTailLimit = 40;
     private static readonly TimeSpan StartupConfirmationDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan AudioPipeConnectionTimeout = TimeSpan.FromSeconds(5);
@@ -25,6 +23,7 @@ public sealed class FfmpegRecordingService(
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly object _stderrLock = new();
     private readonly Queue<string> _stderrTail = new();
+    private readonly Dictionary<VideoCodec, FfmpegEncoderCapabilities> _encoderCapabilities = [];
     private Process? _process;
     private Process? _wowProcess;
     private FfmpegAudioPipe? _audioPipe;
@@ -62,10 +61,26 @@ public sealed class FfmpegRecordingService(
             var settings = settingsProvider.Current;
             var (wowProcess, windowHandle) = FindWowProcess();
             var captureSize = WowWindowCaptureSizeDetector.GetCaptureSize(windowHandle);
-            var outputSize = ScreenRecordingService.CalculateOutputSize(settings, captureSize);
+            var outputSize = FfmpegVideoOutputSizeCalculator.CalculateOutputSize(
+                captureSize,
+                settings.Video.Scaling
+            );
             var outputPath = ScreenRecordingService.CreateOutputPath(context, settings);
-            var ffmpegPath = ResolveFfmpegPath();
+            var ffmpegPath = FfmpegToolPaths.ResolveFfmpegPath();
+            var encoderCapabilities = await DetectEncoderCapabilitiesAsync(
+                ffmpegPath,
+                settings.Video.Codec,
+                cancellationToken
+            );
+            var videoEncoderOptions = FfmpegEncoderOptionsFactory.CreateVideoEncoderOptions(
+                settings,
+                outputSize,
+                encoderCapabilities
+            );
             var audioPipe = CreateAudioPipe(settings);
+            var audioEncoderOptions = audioPipe is null
+                ? null
+                : FfmpegEncoderOptionsFactory.CreateAudioEncoderOptions();
             var startInfo = CreateStartInfo(
                 ffmpegPath,
                 windowHandle,
@@ -73,7 +88,9 @@ public sealed class FfmpegRecordingService(
                 captureSize,
                 outputSize,
                 outputPath,
-                audioPipe
+                audioPipe?.InputOptions,
+                videoEncoderOptions,
+                audioEncoderOptions
             );
 
             ClearStderrTail();
@@ -110,6 +127,7 @@ public sealed class FfmpegRecordingService(
                 outputPath
             );
 
+            LogVideoEncoderOptions(settings, videoEncoderOptions);
             LogAudioOptions(settings, audioPipe);
 
             if (!process.Start())
@@ -219,16 +237,59 @@ public sealed class FfmpegRecordingService(
         }
     }
 
-    private static ProcessStartInfo CreateStartInfo(
+    internal static ProcessStartInfo CreateStartInfo(
         string ffmpegPath,
         nint windowHandle,
         PullWatchSettings settings,
         VideoCaptureSize captureSize,
         VideoCaptureSize outputSize,
         string outputPath,
-        FfmpegAudioPipe? audioPipe
+        FfmpegAudioInputOptions? audioInput,
+        FfmpegEncoderCapabilities encoderCapabilities
     )
     {
+        outputSize = FfmpegVideoOutputSizeCalculator.EnsureEven(outputSize);
+
+        var videoEncoderOptions = FfmpegEncoderOptionsFactory.CreateVideoEncoderOptions(
+            settings,
+            outputSize,
+            encoderCapabilities
+        );
+        var audioEncoderOptions = audioInput is null
+            ? null
+            : FfmpegEncoderOptionsFactory.CreateAudioEncoderOptions();
+
+        return CreateStartInfo(
+            ffmpegPath,
+            windowHandle,
+            settings,
+            captureSize,
+            outputSize,
+            outputPath,
+            audioInput,
+            videoEncoderOptions,
+            audioEncoderOptions,
+            outputDuration: null
+        );
+    }
+
+    internal static ProcessStartInfo CreateStartInfo(
+        string ffmpegPath,
+        nint windowHandle,
+        PullWatchSettings settings,
+        VideoCaptureSize captureSize,
+        VideoCaptureSize outputSize,
+        string outputPath,
+        FfmpegAudioInputOptions? audioInput,
+        FfmpegVideoEncoderOptions videoEncoderOptions,
+        FfmpegAudioEncoderOptions? audioEncoderOptions,
+        TimeSpan? outputDuration = null
+    )
+    {
+        ArgumentNullException.ThrowIfNull(videoEncoderOptions);
+
+        outputSize = FfmpegVideoOutputSizeCalculator.EnsureEven(outputSize);
+
         var startInfo = new ProcessStartInfo(ffmpegPath)
         {
             UseShellExecute = false,
@@ -243,27 +304,29 @@ public sealed class FfmpegRecordingService(
         startInfo.ArgumentList.Add("info");
         startInfo.ArgumentList.Add("-y");
 
-        if (audioPipe is not null)
+        if (audioInput is not null)
         {
             startInfo.ArgumentList.Add("-thread_queue_size");
             startInfo.ArgumentList.Add("512");
             startInfo.ArgumentList.Add("-f");
-            startInfo.ArgumentList.Add(audioPipe.FfmpegFormat);
+            startInfo.ArgumentList.Add(audioInput.FfmpegFormat);
             startInfo.ArgumentList.Add("-ar");
-            startInfo.ArgumentList.Add(audioPipe.SampleRate.ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add(
+                audioInput.SampleRate.ToString(CultureInfo.InvariantCulture)
+            );
             startInfo.ArgumentList.Add("-ac");
-            startInfo.ArgumentList.Add(audioPipe.Channels.ToString(CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add(audioInput.Channels.ToString(CultureInfo.InvariantCulture));
             startInfo.ArgumentList.Add("-i");
-            startInfo.ArgumentList.Add(audioPipe.PipePath);
+            startInfo.ArgumentList.Add(audioInput.PipePath);
         }
 
         startInfo.ArgumentList.Add("-filter_complex");
         startInfo.ArgumentList.Add(
-            $"{CreateFilter(windowHandle, settings, captureSize, outputSize)}[v]"
+            $"{CreateFilter(windowHandle, settings, captureSize, outputSize, videoEncoderOptions)}[v]"
         );
         startInfo.ArgumentList.Add("-map");
         startInfo.ArgumentList.Add("[v]");
-        if (audioPipe is not null)
+        if (audioInput is not null)
         {
             startInfo.ArgumentList.Add("-map");
             startInfo.ArgumentList.Add("0:a:0");
@@ -273,28 +336,19 @@ public sealed class FfmpegRecordingService(
             startInfo.ArgumentList.Add("-an");
         }
 
-        startInfo.ArgumentList.Add("-c:v");
-        startInfo.ArgumentList.Add("h264_nvenc");
-        startInfo.ArgumentList.Add("-preset");
-        startInfo.ArgumentList.Add("p4");
-        startInfo.ArgumentList.Add("-cq");
-        startInfo.ArgumentList.Add(
-            GetNvencCq(settings.Video.Quality).ToString(CultureInfo.InvariantCulture)
-        );
-        startInfo.ArgumentList.Add("-bf");
-        startInfo.ArgumentList.Add("0");
-        startInfo.ArgumentList.Add("-surfaces");
-        startInfo.ArgumentList.Add("8");
-        if (audioPipe is not null)
+        AddArguments(startInfo.ArgumentList, videoEncoderOptions.CreateArguments());
+
+        if (audioEncoderOptions is not null)
         {
-            startInfo.ArgumentList.Add("-c:a");
-            startInfo.ArgumentList.Add("aac");
-            startInfo.ArgumentList.Add("-b:a");
-            startInfo.ArgumentList.Add("192k");
-            startInfo.ArgumentList.Add("-ar");
-            startInfo.ArgumentList.Add("48000");
-            startInfo.ArgumentList.Add("-ac");
-            startInfo.ArgumentList.Add("2");
+            AddArguments(startInfo.ArgumentList, audioEncoderOptions.CreateArguments());
+        }
+
+        if (outputDuration is not null)
+        {
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add(
+                outputDuration.Value.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)
+            );
         }
 
         startInfo.ArgumentList.Add(outputPath);
@@ -305,7 +359,8 @@ public sealed class FfmpegRecordingService(
         nint windowHandle,
         PullWatchSettings settings,
         VideoCaptureSize captureSize,
-        VideoCaptureSize outputSize
+        VideoCaptureSize outputSize,
+        FfmpegVideoEncoderOptions videoEncoderOptions
     )
     {
         var filter = new StringBuilder();
@@ -331,28 +386,29 @@ public sealed class FfmpegRecordingService(
 
         filter.Append(",fps=");
         filter.Append(settings.Video.FrameRate.ToString(CultureInfo.InvariantCulture));
+
+        if (videoEncoderOptions.Provider == VideoEncoderProvider.Software)
+        {
+            filter.Append(",hwdownload,format=bgra,format=yuv420p");
+        }
+
         return filter.ToString();
     }
 
-    private static int GetNvencCq(VideoQuality quality)
+    private static void AddArguments(
+        ICollection<string> argumentList,
+        IEnumerable<string> arguments
+    )
     {
-        return quality switch
+        foreach (var argument in arguments)
         {
-            VideoQuality.Compact => 23,
-            VideoQuality.Balanced => 20,
-            VideoQuality.High => 17,
-            _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
-        };
+            argumentList.Add(argument);
+        }
     }
 
     private static string ToFfmpegBoolean(bool value)
     {
         return value ? "1" : "0";
-    }
-
-    private static string ResolveFfmpegPath()
-    {
-        return File.Exists(PreferredFfmpegPath) ? PreferredFfmpegPath : FfmpegExecutableName;
     }
 
     private FfmpegAudioPipe? CreateAudioPipe(PullWatchSettings settings)
@@ -398,6 +454,54 @@ public sealed class FfmpegRecordingService(
             audioPipe.SampleRate,
             audioPipe.Channels
         );
+    }
+
+    private void LogVideoEncoderOptions(
+        PullWatchSettings settings,
+        FfmpegVideoEncoderOptions options
+    )
+    {
+        logger.LogInformation(
+            "FFmpeg video encoder settings: {VideoEncoder} ({VideoEncoderName}), provider {VideoEncoderProvider}, {VideoQuality}, {VideoCodec}, {BitrateMegabits} Mbps target, {MaxRateMegabits} Mbps max, {BufferSizeMegabits} Mbps buffer",
+            options.DisplayName,
+            options.EncoderName,
+            options.Provider,
+            settings.Video.Quality,
+            settings.Video.Codec,
+            VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
+            VideoBitrateCalculator.ToMegabitsPerSecond(options.MaxRate),
+            VideoBitrateCalculator.ToMegabitsPerSecond(options.BufferSize)
+        );
+    }
+
+    private async Task<FfmpegEncoderCapabilities> DetectEncoderCapabilitiesAsync(
+        string ffmpegPath,
+        VideoCodec codec,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_encoderCapabilities.TryGetValue(codec, out var cachedCapabilities))
+        {
+            return cachedCapabilities;
+        }
+
+        var candidateEncoderNames = FfmpegEncoderOptionsFactory.GetCandidateEncoderNames(codec);
+        var detectionTimestamp = Stopwatch.GetTimestamp();
+        var capabilities = await FfmpegEncoderCapabilityDetector.DetectUsableAsync(
+            ffmpegPath,
+            candidateEncoderNames,
+            cancellationToken
+        );
+        _encoderCapabilities[codec] = capabilities;
+
+        logger.LogInformation(
+            "Detected usable FFmpeg encoders for {VideoCodec} in {ElapsedMilliseconds:F1} ms: {VideoEncoders}",
+            codec,
+            Stopwatch.GetElapsedTime(detectionTimestamp).TotalMilliseconds,
+            capabilities.Count == 0 ? "none" : string.Join(", ", capabilities.EncoderNames)
+        );
+
+        return capabilities;
     }
 
     private static (Process Process, nint WindowHandle) FindWowProcess()
@@ -801,6 +905,9 @@ public sealed class FfmpegRecordingService(
         public int SampleRate { get; }
 
         public int Channels { get; }
+
+        public FfmpegAudioInputOptions InputOptions =>
+            new(FfmpegFormat, SampleRate, Channels, PipePath);
 
         public static FfmpegAudioPipe CreateSystemAudio(ILogger logger)
         {

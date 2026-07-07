@@ -57,6 +57,21 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void RejectsEntireSettingsObjectWhenVideoEncoderIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Video = new VideoSettings { Encoder = (VideoEncoderProvider)999 },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Video encoder must be NVIDIA NVENC, AMD AMF, or Software.", result.Errors);
+    }
+
+    [Fact]
     public void RejectsEntireSettingsObjectWhenVideoScalingIsInvalid()
     {
         var result = SettingsValidator.Validate(

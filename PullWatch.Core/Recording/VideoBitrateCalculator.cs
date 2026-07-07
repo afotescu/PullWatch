@@ -8,7 +8,6 @@ public static class VideoBitrateCalculator
     public const int MaximumBitrate = 100_000_000;
 
     private const int BitsPerMegabit = 1_000_000;
-    private const int EstimatedAudioBitrate = 192_000;
 
     public static int CalculateBitrate(
         VideoCaptureSize captureSize,
@@ -54,7 +53,9 @@ public static class VideoBitrateCalculator
         ArgumentOutOfRangeException.ThrowIfLessThan(duration, TimeSpan.Zero);
 
         var audioBitrate =
-            audio.CaptureSystemAudio || audio.CaptureMicrophone ? EstimatedAudioBitrate : 0;
+            audio.CaptureSystemAudio || audio.CaptureMicrophone
+                ? RecordingAudioDefaults.BitrateBitsPerSecond
+                : 0;
         var bytes = (videoBitrate + audioBitrate) * duration.TotalSeconds / 8;
 
         return (int)Math.Round(bytes / 1_000_000d, MidpointRounding.AwayFromZero);

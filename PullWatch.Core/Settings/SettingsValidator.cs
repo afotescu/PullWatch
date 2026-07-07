@@ -35,6 +35,11 @@ public static class SettingsValidator
             errors.Add("Video codec must be H.264 or H.265.");
         }
 
+        if (!Enum.IsDefined(settings.Video.Encoder))
+        {
+            errors.Add("Video encoder must be NVIDIA NVENC, AMD AMF, or Software.");
+        }
+
         if (!Enum.IsDefined(settings.Video.Quality))
         {
             errors.Add("Video quality must be Compact, Balanced, or High.");

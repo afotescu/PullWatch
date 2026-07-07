@@ -56,6 +56,7 @@ public sealed record RaidEncounterRecordingFilterSettings
 public sealed record VideoSettings
 {
     public VideoCodec Codec { get; init; } = VideoCodec.H264;
+    public VideoEncoderProvider Encoder { get; init; } = VideoEncoderProvider.Software;
     public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
     public int FrameRate { get; init; } = VideoFrameRates.High;
     public VideoScaling Scaling { get; init; } = VideoScaling.Optimized;
@@ -63,10 +64,23 @@ public sealed record VideoSettings
     public bool ShowCaptureBorder { get; init; }
 }
 
+public sealed record VideoProfileSelection
+{
+    public VideoCodec Codec { get; init; }
+    public VideoEncoderProvider Provider { get; init; }
+}
+
 public enum VideoCodec
 {
     H264,
     H265,
+}
+
+public enum VideoEncoderProvider
+{
+    NvidiaNvenc = 1,
+    AmdAmf = 2,
+    Software = 4,
 }
 
 public enum VideoQuality
