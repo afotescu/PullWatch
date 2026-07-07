@@ -370,7 +370,17 @@ public sealed class ApplicationController : IAsyncDisposable
             }
 
             var savedSettings = result.Settings!;
-            UpdateStatus(status => status with { EffectiveSettings = savedSettings });
+            UpdateStatus(status =>
+                status with
+                {
+                    EffectiveSettings = savedSettings,
+                    Recording = ClearVideoEncodingSetupFailureAfterSave(
+                        status.Recording,
+                        previousSettings,
+                        savedSettings
+                    ),
+                }
+            );
 
             if (StorageSettingsChanged(previousSettings, savedSettings))
             {
@@ -643,6 +653,52 @@ public sealed class ApplicationController : IAsyncDisposable
                 currentSettings.RecordingsDirectory
             )
             || previousSettings.Storage != currentSettings.Storage;
+    }
+
+    private static RecordingCoordinatorStatus ClearVideoEncodingSetupFailureAfterSave(
+        RecordingCoordinatorStatus recording,
+        PullWatchSettings previousSettings,
+        PullWatchSettings savedSettings
+    )
+    {
+        if (
+            recording.LastFailure is null
+            || !VideoEncodingSetupFailureClassifier.IsSetupFailure(recording.LastFailure)
+            || !VideoEncodingSetupSettingsChanged(previousSettings, savedSettings)
+            || !HasPassingSelectedVideoProfile(savedSettings)
+        )
+        {
+            return recording;
+        }
+
+        return recording with
+        {
+            LastFailure = null,
+        };
+    }
+
+    private static bool VideoEncodingSetupSettingsChanged(
+        PullWatchSettings previousSettings,
+        PullWatchSettings currentSettings
+    )
+    {
+        return previousSettings.Video.SelectedProfile != currentSettings.Video.SelectedProfile
+            || previousSettings.EncoderCalibration != currentSettings.EncoderCalibration;
+    }
+
+    private static bool HasPassingSelectedVideoProfile(PullWatchSettings settings)
+    {
+        var selectedProfile = settings.Video.SelectedProfile;
+        if (selectedProfile is null)
+        {
+            return false;
+        }
+
+        return settings.EncoderCalibration.Results.Any(result =>
+            result.Codec == selectedProfile.Codec
+            && result.Provider == selectedProfile.Provider
+            && result.Passed
+        );
     }
 
     private void QueueRecordingStorageRefreshOrRetention(PullWatchSettings settings)

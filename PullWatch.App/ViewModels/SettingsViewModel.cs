@@ -19,6 +19,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         RecordingStorageSettings.DefaultMaxUsageBytes / BytesPerGigabyte
     );
     private const int MaximumRecordingStorageLimitGigabytes = 10_000;
+    private const bool IsMicrophoneCaptureAvailable = false;
 
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
@@ -476,8 +477,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool CaptureMicrophone
     {
         get;
-        set => SetEditableProperty(ref field, value);
+        set => SetEditableProperty(ref field, value && IsMicrophoneCaptureAvailable);
     }
+
+    public bool CanCaptureMicrophone => IsEditingEnabled && IsMicrophoneCaptureAvailable;
 
     public bool CaptureCursor
     {
@@ -505,6 +508,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 OnPropertyChanged(nameof(CanConfigureMythicPlus));
                 OnPropertyChanged(nameof(CanConfigureRaidEncounters));
                 OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+                OnPropertyChanged(nameof(CanCaptureMicrophone));
                 NotifyRecordingStorageLimitApplyStateChanged();
                 TestVideoEncodingCommand.NotifyCanExecuteChanged();
             }
@@ -845,7 +849,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             Audio = _savedSettings.Audio with
             {
                 CaptureSystemAudio = CaptureSystemAudio,
-                CaptureMicrophone = CaptureMicrophone,
+                CaptureMicrophone = false,
             },
             Startup = _savedSettings.Startup with
             {
@@ -1243,7 +1247,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             SelectedFrameRate = settings.Video.FrameRate;
             SelectedVideoScaling = settings.Video.Scaling;
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
-            CaptureMicrophone = settings.Audio.CaptureMicrophone;
+            CaptureMicrophone = false;
             CaptureCursor = settings.Video.CaptureCursor;
             ShowCaptureBorder = settings.Video.ShowCaptureBorder;
         });

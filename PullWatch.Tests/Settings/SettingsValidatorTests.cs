@@ -191,6 +191,21 @@ public sealed class SettingsValidatorTests
     }
 
     [Fact]
+    public void DisablesMicrophoneCapture()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
+            }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.False(result.Settings!.Audio.CaptureSystemAudio);
+        Assert.False(result.Settings.Audio.CaptureMicrophone);
+    }
+
+    [Fact]
     public void AllowsConfiguredLogsDirectoryToBeTemporarilyUnavailable()
     {
         var unavailablePath = Path.Combine(

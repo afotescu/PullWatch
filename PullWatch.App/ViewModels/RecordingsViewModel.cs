@@ -1173,35 +1173,12 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     private static bool IsVideoEncodingSetupFailure(Exception? exception)
     {
-        return TryGetVideoEncodingSetupFailureMessage(exception) is not null;
+        return VideoEncodingSetupFailureClassifier.IsSetupFailure(exception);
     }
 
     private static string? TryGetVideoEncodingSetupFailureMessage(Exception? exception)
     {
-        var message = exception?.Message?.Trim();
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        return
-            message.StartsWith("Video encoding needs to be tested", StringComparison.Ordinal)
-            || message.StartsWith("Video encoding needs to be retested", StringComparison.Ordinal)
-            || message.StartsWith("Video encoding must be calibrated", StringComparison.Ordinal)
-            || message.StartsWith(
-                "No tested video encoder profile has been selected",
-                StringComparison.Ordinal
-            )
-            || message.StartsWith(
-                "The selected video encoder profile has not been tested",
-                StringComparison.Ordinal
-            )
-            || message.StartsWith(
-                "The selected video encoder profile did not pass testing",
-                StringComparison.Ordinal
-            )
-            ? message
-            : null;
+        return VideoEncodingSetupFailureClassifier.TryGetMessage(exception);
     }
 
     private static bool PathsEqual(string? left, string? right)

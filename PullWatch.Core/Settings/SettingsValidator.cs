@@ -83,6 +83,7 @@ public static class SettingsValidator
                 {
                     WowLogsDirectory = wowLogsDirectory,
                     RecordingsDirectory = recordingsDirectory,
+                    Audio = settings.Audio with { CaptureMicrophone = false },
                     Startup = settings.Startup with
                     {
                         StartMinimizedToTray =

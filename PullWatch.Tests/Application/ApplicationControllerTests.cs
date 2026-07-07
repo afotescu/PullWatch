@@ -565,6 +565,65 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task CalibrationSaveClearsPreviousVideoEncodingSetupFailure()
+    {
+        using var directory = new TemporaryDirectory();
+        var setupFailure = new InvalidOperationException(
+            "Video encoding needs to be retested because the FFmpeg path changed."
+        );
+        var recorder = new FakeRecordingService { StartException = setupFailure };
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            recorder,
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
+        );
+
+        var startResult = await controller.StartManualRecordingAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(RecordingCommandResult.Failed, startResult);
+        await WaitForAsync(() =>
+            ReferenceEquals(controller.Status.Recording.LastFailure, setupFailure)
+        );
+
+        var selectedProfile = new VideoProfileSelection
+        {
+            Codec = VideoCodec.H265,
+            Provider = VideoEncoderProvider.NvidiaNvenc,
+        };
+        var saveResult = await controller.SaveSettingsAsync(
+            controller.Status.EffectiveSettings! with
+            {
+                Video = controller.Status.EffectiveSettings!.Video with
+                {
+                    SelectedProfile = selectedProfile,
+                },
+                EncoderCalibration = new EncoderCalibrationSettings
+                {
+                    Version = EncoderCalibrationSettings.CurrentVersion,
+                    Results =
+                    [
+                        new EncoderCalibrationResult
+                        {
+                            Codec = selectedProfile.Codec,
+                            Provider = selectedProfile.Provider,
+                            EncoderName = "hevc_nvenc",
+                            Passed = true,
+                        },
+                    ],
+                },
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(SettingsSaveStatus.Saved, saveResult.Status);
+        Assert.Null(controller.Status.Recording.LastFailure);
+    }
+
+    [Fact]
     public async Task ClearingLogsDirectoryStopsMonitoring()
     {
         using var directory = new TemporaryDirectory();

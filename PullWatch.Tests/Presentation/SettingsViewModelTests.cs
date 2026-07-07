@@ -440,6 +440,45 @@ public sealed class SettingsViewModelTests
         Assert.False(saved.RecordingFilters.RaidEncounters.RecordMythic);
     }
 
+    [Fact]
+    public async Task MicrophoneCaptureOptionIsDisabledAndNeverSaved()
+    {
+        var saves = new List<PullWatchSettings>();
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                new PullWatchSettings
+                {
+                    Audio = new AudioSettings
+                    {
+                        CaptureSystemAudio = true,
+                        CaptureMicrophone = true,
+                    },
+                }
+            ),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            }
+        );
+
+        Assert.False(viewModel.CanCaptureMicrophone);
+        Assert.False(viewModel.CaptureMicrophone);
+
+        viewModel.CaptureMicrophone = true;
+
+        Assert.False(viewModel.CaptureMicrophone);
+        Assert.Empty(saves);
+
+        viewModel.CaptureSystemAudio = false;
+
+        await WaitForAsync(() => saves.Count == 1);
+
+        Assert.False(saves[0].Audio.CaptureSystemAudio);
+        Assert.False(saves[0].Audio.CaptureMicrophone);
+    }
+
     [Theory]
     [InlineData(RecordingCoordinatorState.Starting)]
     [InlineData(RecordingCoordinatorState.Recording)]
