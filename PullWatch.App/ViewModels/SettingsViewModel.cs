@@ -19,12 +19,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         RecordingStorageSettings.DefaultMaxUsageBytes / BytesPerGigabyte
     );
     private const int MaximumRecordingStorageLimitGigabytes = 10_000;
+    private const bool IsMicrophoneCaptureAvailable = false;
 
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan SettingsSuccessNotificationDuration = TimeSpan.FromSeconds(5);
 
     private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
+    private readonly Func<Task> _testVideoEncoding;
     private readonly ISettingsDialogs _dialogs;
     private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
     private readonly IWindowsStartupShortcut _windowsStartupShortcut;
@@ -46,6 +48,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings,
         ISettingsDialogs dialogs,
         Func<VideoCaptureSize>? getEstimateCaptureSize = null,
+        Func<Task>? testVideoEncoding = null,
         IWindowsStartupShortcut? windowsStartupShortcut = null,
         RecordingStorageStatus? initialRecordingStorageStatus = null,
         NotificationCenterViewModel? notifications = null,
@@ -54,6 +57,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     )
     {
         _saveSettings = saveSettings;
+        _testVideoEncoding = testVideoEncoding ?? TestVideoEncodingUnavailableAsync;
         _dialogs = dialogs;
         _getEstimateCaptureSize = getEstimateCaptureSize ?? GetEstimatedCaptureSize;
         _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
@@ -71,6 +75,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             () => ExecuteCommandAsync(CommitRecordingsDirectoryAsync),
             () => IsEditingEnabled
         );
+        TestVideoEncodingCommand = new AsyncRelayCommand(
+            TestVideoEncodingAsync,
+            () => CanTestVideoEncoding
+        );
         LoadSettings(_savedSettings);
         ApplyStatus(initialStatus);
     }
@@ -79,8 +87,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IAsyncRelayCommand CommitRecordingsDirectoryCommand { get; }
 
-    public IReadOnlyList<VideoCodecOption> VideoCodecOptions { get; } =
-    [new(VideoCodec.H264, "H.264 / AVC"), new(VideoCodec.H265, "H.265 / HEVC")];
+    public IAsyncRelayCommand TestVideoEncodingCommand { get; }
 
     public IReadOnlyList<VideoQualityOption> VideoQualityOptions { get; } =
     [
@@ -382,11 +389,66 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool CanStartMinimizedToTray => IsEditingEnabled && StartWithWindows;
 
-    public VideoCodec SelectedVideoCodec
+    public IReadOnlyList<VideoProfileOption> VideoProfileOptions =>
+        VideoProfileSelectionPolicy
+            .GetPassingProfilesInPriorityOrder(_savedSettings.EncoderCalibration.Results)
+            .Select(profile => new VideoProfileOption(
+                profile,
+                VideoProfileFormatter.FormatDisplayName(profile)
+            ))
+            .ToArray();
+
+    public bool HasVideoProfileOptions => VideoProfileOptions.Count > 0;
+
+    public bool CanChooseVideoProfile => IsEditingEnabled && VideoProfileOptions.Count > 1;
+
+    public VideoProfileSelection? SelectedVideoProfile
     {
         get;
-        set => SetEditableProperty(ref field, value);
+        set
+        {
+            if (value is not null && !IsSelectableVideoProfile(value))
+            {
+                return;
+            }
+
+            if (SetEditableProperty(ref field, value))
+            {
+                NotifyVideoProfileSelectionChanged();
+            }
+        }
     }
+
+    public string VideoEncodingSummary =>
+        SelectedVideoProfile is null
+            ? "Not tested"
+            : VideoProfileFormatter.FormatDisplayName(SelectedVideoProfile);
+
+    public string VideoEncodingStatus =>
+        SelectedVideoProfile is null
+            ? "PullWatch needs to test video encoding before recording."
+            : "Ready for recording";
+
+    public bool IsTestingVideoEncoding
+    {
+        get;
+        private set
+        {
+            if (SetProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(CanTestVideoEncoding));
+                OnPropertyChanged(nameof(TestVideoEncodingButtonText));
+                TestVideoEncodingCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool CanTestVideoEncoding => IsEditingEnabled && !IsTestingVideoEncoding;
+
+    public string TestVideoEncodingButtonText =>
+        IsTestingVideoEncoding ? "Testing video encoding..."
+        : SelectedVideoProfile is null ? "Test video encoding"
+        : "Retest";
 
     public VideoQuality SelectedVideoQuality
     {
@@ -415,8 +477,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool CaptureMicrophone
     {
         get;
-        set => SetEditableProperty(ref field, value);
+        set => SetEditableProperty(ref field, value && IsMicrophoneCaptureAvailable);
     }
+
+    public bool CanCaptureMicrophone => IsEditingEnabled && IsMicrophoneCaptureAvailable;
 
     public bool CaptureCursor
     {
@@ -439,10 +503,14 @@ public sealed partial class SettingsViewModel : ObservableObject
             {
                 NotifyCommandStatesChanged();
                 OnPropertyChanged(nameof(CanStartMinimizedToTray));
+                OnPropertyChanged(nameof(CanTestVideoEncoding));
+                OnPropertyChanged(nameof(CanChooseVideoProfile));
                 OnPropertyChanged(nameof(CanConfigureMythicPlus));
                 OnPropertyChanged(nameof(CanConfigureRaidEncounters));
                 OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+                OnPropertyChanged(nameof(CanCaptureMicrophone));
                 NotifyRecordingStorageLimitApplyStateChanged();
+                TestVideoEncodingCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -513,7 +581,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 outputSize,
                 SelectedFrameRate,
                 SelectedVideoQuality,
-                SelectedVideoCodec
+                GetEstimatedCodec()
             );
             var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(
                 bitrate,
@@ -529,7 +597,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 " ",
                 $"About {FormatFileSize(megabytes)} per minute",
                 FormatEstimateSizeText(captureSize, outputSize),
-                FormatCodecName(SelectedVideoCodec),
+                VideoProfileFormatter.FormatCodecName(GetEstimatedCodec()),
                 $"{SelectedFrameRate} FPS",
                 FormatBitrateText(bitrate),
                 "Actual recording uses the WoW window size."
@@ -573,6 +641,31 @@ public sealed partial class SettingsViewModel : ObservableObject
     public Task<bool> CommitRecordingsDirectoryAsync()
     {
         return CommitPathAsync(includeWowLogsDirectory: false, includeRecordingsDirectory: true);
+    }
+
+    public async Task TestVideoEncodingAsync()
+    {
+        if (!CanTestVideoEncoding)
+        {
+            ApplyLockedStatus();
+            return;
+        }
+
+        IsTestingVideoEncoding = true;
+
+        try
+        {
+            await _testVideoEncoding();
+        }
+        catch (Exception exception)
+        {
+            IsSaveError = true;
+            SaveMessage = $"Video encoding test failed: {exception.Message}";
+        }
+        finally
+        {
+            IsTestingVideoEncoding = false;
+        }
     }
 
     public bool ConfirmPendingRecordingStorageLimitChangeForNavigation()
@@ -746,7 +839,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             },
             Video = _savedSettings.Video with
             {
-                Codec = SelectedVideoCodec,
+                SelectedProfile = SelectedVideoProfile,
                 Quality = SelectedVideoQuality,
                 FrameRate = SelectedFrameRate,
                 Scaling = SelectedVideoScaling,
@@ -756,7 +849,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             Audio = _savedSettings.Audio with
             {
                 CaptureSystemAudio = CaptureSystemAudio,
-                CaptureMicrophone = CaptureMicrophone,
+                CaptureMicrophone = false,
             },
             Startup = _savedSettings.Startup with
             {
@@ -1142,12 +1235,19 @@ public sealed partial class SettingsViewModel : ObservableObject
             StartWithWindows = settings.Startup.StartWithWindows;
             StartMinimizedToTray =
                 settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;
-            SelectedVideoCodec = settings.Video.Codec;
+            SelectedVideoProfile =
+                settings.Video.SelectedProfile is { } selectedProfile
+                && IsSelectableVideoProfile(selectedProfile)
+                    ? selectedProfile
+                    : null;
+            OnPropertyChanged(nameof(VideoProfileOptions));
+            OnPropertyChanged(nameof(HasVideoProfileOptions));
+            OnPropertyChanged(nameof(CanChooseVideoProfile));
             SelectedVideoQuality = settings.Video.Quality;
             SelectedFrameRate = settings.Video.FrameRate;
             SelectedVideoScaling = settings.Video.Scaling;
             CaptureSystemAudio = settings.Audio.CaptureSystemAudio;
-            CaptureMicrophone = settings.Audio.CaptureMicrophone;
+            CaptureMicrophone = false;
             CaptureCursor = settings.Video.CaptureCursor;
             ShowCaptureBorder = settings.Video.ShowCaptureBorder;
         });
@@ -1228,6 +1328,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         return false;
     }
 
+    private bool IsSelectableVideoProfile(VideoProfileSelection profile)
+    {
+        return VideoProfileOptions.Any(option => option.Value == profile);
+    }
+
+    private void NotifyVideoProfileSelectionChanged()
+    {
+        OnPropertyChanged(nameof(VideoEncodingSummary));
+        OnPropertyChanged(nameof(VideoEncodingStatus));
+        OnPropertyChanged(nameof(TestVideoEncodingButtonText));
+        OnPropertyChanged(nameof(EstimatedRecordingSize));
+    }
+
     private void SetLoadedValue(Action update)
     {
         _isLoading = true;
@@ -1288,6 +1401,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         PickWowLogsDirectoryCommand.NotifyCanExecuteChanged();
         PickRecordingsDirectoryCommand.NotifyCanExecuteChanged();
         ApplyRecordingStorageLimitCommand.NotifyCanExecuteChanged();
+        TestVideoEncodingCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyRecordingStorageLimitApplyStateChanged()
@@ -1406,7 +1520,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static bool ShouldRefreshEstimate(string? propertyName)
     {
         return propertyName
-            is nameof(SelectedVideoCodec)
+            is nameof(SelectedVideoProfile)
                 or nameof(SelectedVideoQuality)
                 or nameof(SelectedFrameRate)
                 or nameof(SelectedVideoScaling)
@@ -1519,14 +1633,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         return $"{size.Width}x{size.Height}";
     }
 
-    private static string FormatCodecName(VideoCodec codec)
+    private VideoCodec GetEstimatedCodec()
     {
-        return codec switch
-        {
-            VideoCodec.H264 => "H.264",
-            VideoCodec.H265 => "H.265",
-            _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
-        };
+        return SelectedVideoProfile?.Codec ?? VideoCodec.H264;
     }
 
     private static string FormatBitrateText(int bitrate)
@@ -1548,6 +1657,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         return bounds is { Width: > 0, Height: > 0 }
             ? new VideoCaptureSize(bounds.Value.Width, bounds.Value.Height)
             : FallbackEstimateCaptureSize;
+    }
+
+    private static Task TestVideoEncodingUnavailableAsync()
+    {
+        return Task.FromException(
+            new InvalidOperationException("Video encoding testing is not available.")
+        );
     }
 
     [Flags]
@@ -1578,7 +1694,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
 public sealed record VideoQualityOption(VideoQuality Value, string Label);
 
-public sealed record VideoCodecOption(VideoCodec Value, string Label);
+public sealed record VideoProfileOption(VideoProfileSelection Value, string Label);
 
 public sealed record FrameRateOption(int Value, string Label);
 

@@ -397,6 +397,40 @@ public sealed class RecordingCoordinatorTests
     }
 
     [Fact]
+    public async Task CatalogStartupWaitsForPendingRecorderOutputPath()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var pendingStart = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var outputPath = Path.Combine(database.DirectoryPath, "manual.mp4");
+        var recorder = new FakeRecordingService
+        {
+            ActiveOutputPath = null,
+            PendingStart = pendingStart,
+        };
+        await using var coordinator = CreateCoordinator(
+            recorder,
+            recordingCatalog: database.Catalog
+        );
+
+        var startTask = coordinator.StartManualAsync(cancellationToken);
+        await WaitForAsync(() => recorder.Calls.Contains("start"));
+
+        Assert.False(startTask.IsCompleted);
+
+        recorder.ActiveOutputPath = outputPath;
+        pendingStart.SetResult();
+
+        Assert.Equal(RecordingCommandResult.Started, await startTask);
+        var started = Assert.Single(await database.Repository.ListAsync(cancellationToken));
+
+        Assert.Equal(outputPath, started.FilePath);
+        Assert.Equal(RecordingCatalogStatus.Recording, started.Status);
+    }
+
+    [Fact]
     public async Task CatalogRowIsRemovedWhenStartupFails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -605,6 +639,17 @@ public sealed class RecordingCoordinatorTests
                 DateTime.UtcNow < timeout,
                 $"Coordinator did not reach state {expectedState}."
             );
+            await Task.Delay(10);
+        }
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < timeout, "Condition was not met in time.");
             await Task.Delay(10);
         }
     }

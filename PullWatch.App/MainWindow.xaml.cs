@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace PullWatch;
@@ -8,6 +9,7 @@ public partial class MainWindow : Window
 {
     private readonly ApplicationController _controller;
     private readonly MainWindowViewModel _viewModel;
+    private readonly FfmpegEncoderTestService _encoderTestService;
     private readonly DispatcherTimer _durationTimer;
     private readonly ApplicationLifetimeCoordinator _lifetime;
     private bool _placementSaved;
@@ -24,6 +26,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _controller = controller;
         _lifetime = lifetime;
+        _encoderTestService = new FfmpegEncoderTestService(GetWindowHandleForEncoderTest);
         _viewModel = new MainWindowViewModel(
             controller,
             new WpfUiDispatcher(Dispatcher),
@@ -31,6 +34,7 @@ public partial class MainWindow : Window
             logs,
             new WpfDiagnosticsDialogs(),
             new WpfRecordingDialogs(),
+            TestVideoEncodingFromSettingsAsync,
             windowsStartupShortcut,
             applicationUpdater,
             RequestShutdownForUpdate,
@@ -47,6 +51,198 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         Closing += OnClosing;
         _viewModel.StartAutomaticUpdateCheck();
+    }
+
+    internal async Task PromptForEncoderCalibrationIfNeededAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var settings = _controller.Status.EffectiveSettings;
+        if (settings is null)
+        {
+            return;
+        }
+
+        var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(cancellationToken);
+        var status = EncoderCalibrationStatusEvaluator.Evaluate(settings, environment);
+        if (status.IsValid)
+        {
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        var promptResult = WpfConfirmationDialog.Show(
+            this,
+            new ConfirmationDialogRequest(
+                "PullWatch",
+                [
+                    "Recording stays disabled until this test passes. It only takes a few seconds and lets PullWatch choose the best working encoder.",
+                ],
+                [
+                    new ConfirmationDialogButton(
+                        "Test video encoding",
+                        ConfirmationDialogResult.Primary,
+                        ConfirmationDialogButtonKind.Accent,
+                        IsDefault: true
+                    ),
+                    new ConfirmationDialogButton(
+                        "Not now",
+                        ConfirmationDialogResult.Cancel,
+                        IsCancel: true
+                    ),
+                ],
+                Heading: "Test video encoding before recording?"
+            )
+        );
+
+        if (promptResult != ConfirmationDialogResult.Primary)
+        {
+            return;
+        }
+
+        await RunEncoderCalibrationAsync(environment, cancellationToken);
+    }
+
+    private async Task TestVideoEncodingFromSettingsAsync()
+    {
+        var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(CancellationToken.None);
+        await RunEncoderCalibrationAsync(environment, CancellationToken.None);
+    }
+
+    private async Task RunEncoderCalibrationAsync(
+        EncoderCalibrationEnvironment environment,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var progressWindow = new EncoderCalibrationProgressWindow();
+            var result = await progressWindow.RunAsync(
+                this,
+                progress =>
+                    RunEncoderCalibrationOperationAsync(environment, progress, cancellationToken)
+            );
+
+            if (!result.SaveResult.IsSaved)
+            {
+                ShowEncoderCalibrationError(
+                    result.SaveResult.ValidationErrors.Count == 0
+                        ? "PullWatch could not save the video encoding test results."
+                        : string.Join(Environment.NewLine, result.SaveResult.ValidationErrors)
+                );
+                return;
+            }
+
+            if (result.SelectedProfile is null)
+            {
+                ShowEncoderCalibrationError(
+                    "No video encoder profile passed the test. Recording will stay disabled."
+                );
+                return;
+            }
+
+            ShowEncoderCalibrationSuccess(result.SelectedProfile);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ShowEncoderCalibrationError(exception.Message);
+        }
+    }
+
+    private async Task<EncoderCalibrationRunResult> RunEncoderCalibrationOperationAsync(
+        EncoderCalibrationEnvironment environment,
+        IProgress<VideoEncoderTestProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        var settings =
+            _controller.Status.EffectiveSettings
+            ?? throw new InvalidOperationException("Settings are not available.");
+        var testResults = await _encoderTestService.TestAsync(
+            settings,
+            progress,
+            cancellationToken
+        );
+        var calibrationResults = testResults
+            .Select(result => result.ToCalibrationResult())
+            .ToArray();
+        var selectedProfile = VideoProfileSelectionPolicy.SelectBestPassingProfile(
+            calibrationResults
+        );
+        var saveResult = await _controller.SaveSettingsAsync(
+            settings with
+            {
+                Video = settings.Video with { SelectedProfile = selectedProfile },
+                EncoderCalibration = new EncoderCalibrationSettings
+                {
+                    Version = EncoderCalibrationSettings.CurrentVersion,
+                    TestedAt = DateTimeOffset.UtcNow,
+                    FfmpegPath = environment.FfmpegPath,
+                    FfmpegVersion = environment.FfmpegVersion,
+                    FfprobePath = environment.FfprobePath,
+                    FfprobeVersion = environment.FfprobeVersion,
+                    Results = calibrationResults,
+                },
+            },
+            cancellationToken
+        );
+
+        return new EncoderCalibrationRunResult(saveResult, selectedProfile);
+    }
+
+    private sealed record EncoderCalibrationRunResult(
+        SettingsSaveResult SaveResult,
+        VideoProfileSelection? SelectedProfile
+    );
+
+    private void ShowEncoderCalibrationSuccess(VideoProfileSelection selectedProfile)
+    {
+        WpfConfirmationDialog.Show(
+            this,
+            new ConfirmationDialogRequest(
+                "PullWatch",
+                [
+                    $"Using {VideoProfileFormatter.FormatDisplayName(selectedProfile)} for future recordings.",
+                ],
+                [
+                    new ConfirmationDialogButton(
+                        "OK",
+                        ConfirmationDialogResult.Primary,
+                        ConfirmationDialogButtonKind.Accent,
+                        IsDefault: true
+                    ),
+                ],
+                Heading: "Video encoding is ready"
+            )
+        );
+    }
+
+    private void ShowEncoderCalibrationError(string message)
+    {
+        WpfConfirmationDialog.Show(
+            this,
+            new ConfirmationDialogRequest(
+                "PullWatch",
+                [message],
+                [
+                    new ConfirmationDialogButton(
+                        "OK",
+                        ConfirmationDialogResult.Primary,
+                        IsDefault: true
+                    ),
+                ],
+                Heading: "Video encoding test failed"
+            )
+        );
+    }
+
+    private nint GetWindowHandleForEncoderTest()
+    {
+        return new WindowInteropHelper(this).EnsureHandle();
     }
 
     private void OnClosing(object? sender, CancelEventArgs eventArgs)

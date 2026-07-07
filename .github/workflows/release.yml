@@ -112,8 +112,7 @@ jobs:
             --outputDir $releaseDir `
             --icon .\PullWatch.App\Assets\favicon.ico `
             --shortcuts Desktop,StartMenuRoot `
-            --runtime win-x64 `
-            --framework vcredist143-x64
+            --runtime win-x64
 
           $releaseFiles = @(
             Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name

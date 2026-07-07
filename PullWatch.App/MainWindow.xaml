@@ -231,7 +231,7 @@
             />
 
             <Button
-              Command="{Binding Recordings.ManualRecordingCommand}"
+              Command="{Binding Recordings.StatusCardCommand}"
               Style="{StaticResource CollapsedStatusButtonStyle}"
               ToolTip="{Binding Recordings.CollapsedStatusToolTip}"
               ToolTipService.InitialShowDelay="250"

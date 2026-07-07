@@ -148,6 +148,7 @@ public sealed class SettingsStore
         public bool RecordRaidEncounters { get; init; } = true;
         public RecordingFilterSettings? RecordingFilters { get; init; } = new();
         public VideoSettings? Video { get; init; } = new();
+        public EncoderCalibrationSettings? EncoderCalibration { get; init; } = new();
         public AudioSettings? Audio { get; init; } = new();
         public StartupSettings? Startup { get; init; } = new();
         public RecordingStorageSettings? Storage { get; init; } = new();
@@ -165,6 +166,9 @@ public sealed class SettingsStore
                 RecordingFilters =
                     RecordingFilters ?? throw new JsonException("Recording filters are required."),
                 Video = Video ?? throw new JsonException("Video settings are required."),
+                EncoderCalibration =
+                    EncoderCalibration
+                    ?? throw new JsonException("Encoder calibration settings are required."),
                 Audio = Audio ?? throw new JsonException("Audio settings are required."),
                 Startup = Startup ?? throw new JsonException("Startup settings are required."),
                 Storage = Storage ?? throw new JsonException("Storage settings are required."),

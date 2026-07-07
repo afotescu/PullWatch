@@ -38,12 +38,39 @@ public sealed class SettingsStoreTests
             },
             Video = new VideoSettings
             {
-                Codec = VideoCodec.H265,
+                SelectedProfile = new VideoProfileSelection
+                {
+                    Codec = VideoCodec.H265,
+                    Provider = VideoEncoderProvider.AmdAmf,
+                },
                 Quality = VideoQuality.High,
                 FrameRate = VideoFrameRates.Standard,
                 Scaling = VideoScaling.Original,
                 CaptureCursor = false,
                 ShowCaptureBorder = true,
+            },
+            EncoderCalibration = new EncoderCalibrationSettings
+            {
+                Version = EncoderCalibrationSettings.CurrentVersion,
+                TestedAt = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero),
+                FfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe",
+                FfmpegVersion = "ffmpeg version test",
+                FfprobePath = @"C:\ffmpeg\bin\ffprobe.exe",
+                FfprobeVersion = "ffprobe version test",
+                Results =
+                [
+                    new EncoderCalibrationResult
+                    {
+                        Codec = VideoCodec.H265,
+                        Provider = VideoEncoderProvider.AmdAmf,
+                        EncoderName = "hevc_amf",
+                        Passed = true,
+                        Message = "hevc, 1920x1080, 2.0s",
+                        Width = 1920,
+                        Height = 1080,
+                        DurationSeconds = 2.0,
+                    },
+                ],
             },
             Audio = new AudioSettings { CaptureSystemAudio = false, CaptureMicrophone = true },
             Startup = new StartupSettings { StartWithWindows = true, StartMinimizedToTray = true },
@@ -59,7 +86,18 @@ public sealed class SettingsStoreTests
         var result = await store.LoadAsync(CancellationToken.None);
 
         Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
-        Assert.Equal(settings, result.Settings);
+        var actual = result.Settings!;
+        Assert.Equal(
+            settings with
+            {
+                EncoderCalibration = settings.EncoderCalibration with
+                {
+                    Results = actual.EncoderCalibration.Results,
+                },
+            },
+            actual
+        );
+        Assert.Equal(settings.EncoderCalibration.Results, actual.EncoderCalibration.Results);
     }
 
     [Fact]
@@ -98,6 +136,7 @@ public sealed class SettingsStoreTests
         Assert.NotNull(result.Settings);
         Assert.Equal(new RecordingFilterSettings(), result.Settings.RecordingFilters);
         Assert.Equal(new VideoSettings(), result.Settings.Video);
+        Assert.Equal(new EncoderCalibrationSettings(), result.Settings.EncoderCalibration);
         Assert.Equal(new AudioSettings(), result.Settings.Audio);
         Assert.Equal(new RecordingStorageSettings(), result.Settings.Storage);
         Assert.Equal(new UiSettings(), result.Settings.Ui);
@@ -106,6 +145,7 @@ public sealed class SettingsStoreTests
     [Theory]
     [InlineData("""{ "Version": 1, "RecordingFilters": null }""")]
     [InlineData("""{ "Version": 1, "Video": null }""")]
+    [InlineData("""{ "Version": 1, "EncoderCalibration": null }""")]
     [InlineData("""{ "Version": 1, "Audio": null }""")]
     [InlineData("""{ "Version": 1, "Startup": null }""")]
     [InlineData("""{ "Version": 1, "Storage": null }""")]

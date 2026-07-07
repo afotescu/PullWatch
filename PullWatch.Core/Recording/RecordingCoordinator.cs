@@ -441,13 +441,7 @@ public sealed class RecordingCoordinator : IAsyncDisposable
             return null;
         }
 
-        var activeOutputPath = _recordingService.ActiveOutputPath;
-
-        if (string.IsNullOrWhiteSpace(activeOutputPath) && startTask.IsCompleted)
-        {
-            await startTask;
-            activeOutputPath = _recordingService.ActiveOutputPath;
-        }
+        var activeOutputPath = await WaitForActiveOutputPathAsync(startTask);
 
         if (string.IsNullOrWhiteSpace(activeOutputPath))
         {
@@ -461,6 +455,47 @@ public sealed class RecordingCoordinator : IAsyncDisposable
         );
         _activeCatalogRecordingId = recordingId;
         return recordingId;
+    }
+
+    private async Task<string?> WaitForActiveOutputPathAsync(Task startTask)
+    {
+        var activeOutputPath = _recordingService.ActiveOutputPath;
+        if (!string.IsNullOrWhiteSpace(activeOutputPath))
+        {
+            return activeOutputPath;
+        }
+
+        if (startTask.IsCompleted)
+        {
+            await startTask;
+            return _recordingService.ActiveOutputPath;
+        }
+
+        var timeoutAt = DateTimeOffset.UtcNow + _startTimeout;
+        while (DateTimeOffset.UtcNow < timeoutAt)
+        {
+            var remaining = timeoutAt - DateTimeOffset.UtcNow;
+            var delay = Task.Delay(
+                remaining < TimeSpan.FromMilliseconds(25)
+                    ? remaining
+                    : TimeSpan.FromMilliseconds(25)
+            );
+            var completedTask = await Task.WhenAny(startTask, delay);
+
+            activeOutputPath = _recordingService.ActiveOutputPath;
+            if (!string.IsNullOrWhiteSpace(activeOutputPath))
+            {
+                return activeOutputPath;
+            }
+
+            if (completedTask == startTask)
+            {
+                await startTask;
+                return _recordingService.ActiveOutputPath;
+            }
+        }
+
+        return _recordingService.ActiveOutputPath;
     }
 
     private async Task CompleteCatalogRecordingAsync(

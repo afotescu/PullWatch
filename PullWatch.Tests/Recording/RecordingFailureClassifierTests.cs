@@ -3,57 +3,33 @@ namespace PullWatch.Tests;
 public sealed class RecordingFailureClassifierTests
 {
     [Fact]
-    public void ClassifiesDllLoadFailuresAsVisualCRuntimeFailures()
+    public void DetectsTargetUnavailableFailures()
     {
-        var exception = RecordingFailureClassifier.Classify(
-            new DllNotFoundException("Unable to load DLL 'ScreenRecorderLib.dll'.")
+        var exception = new InvalidOperationException(
+            "outer",
+            new CaptureTargetUnavailableException("Could not find target.")
         );
 
-        Assert.Contains("Visual C++ Redistributable", exception.Message);
-        Assert.IsType<DllNotFoundException>(exception.InnerException);
+        Assert.True(RecordingFailureClassifier.IsTargetUnavailable(exception));
     }
 
     [Fact]
-    public void ClassifiesBadImageFormatAsArchitectureFailure()
+    public void DetectsTargetUnavailableFailuresInAggregateExceptions()
     {
-        var exception = RecordingFailureClassifier.Classify(
-            new BadImageFormatException("Bad image format.")
+        var exception = new AggregateException(
+            new InvalidOperationException("first"),
+            new CaptureTargetUnavailableException("Could not find target.")
         );
 
-        Assert.Contains("wrong architecture", exception.Message);
-        Assert.IsType<BadImageFormatException>(exception.InnerException);
+        Assert.True(RecordingFailureClassifier.IsTargetUnavailable(exception));
     }
 
     [Fact]
-    public void ClassifiesMediaFoundationFailures()
+    public void IgnoresUnrelatedFailuresForTargetUnavailable()
     {
-        var exception = RecordingFailureClassifier.Classify(
-            new InvalidOperationException("Media Foundation encoder failed.")
-        );
+        var exception = new InvalidOperationException("encoder failed");
 
-        Assert.Contains("Windows Media Foundation", exception.Message);
-        Assert.Contains("Media Feature Pack", exception.Message);
-    }
-
-    [Fact]
-    public void ClassifiesMissingMfplatAsMediaFoundationFailure()
-    {
-        var exception = RecordingFailureClassifier.Classify(
-            new DllNotFoundException("Unable to load DLL 'mfplat.dll'.")
-        );
-
-        Assert.Contains("Windows Media Foundation", exception.Message);
-        Assert.Contains("Media Feature Pack", exception.Message);
-    }
-
-    [Fact]
-    public void LeavesUnknownFailuresUnchanged()
-    {
-        var original = new InvalidOperationException("encoder failed");
-
-        var exception = RecordingFailureClassifier.Classify(original);
-
-        Assert.Same(original, exception);
+        Assert.False(RecordingFailureClassifier.IsTargetUnavailable(exception));
     }
 
     [Fact]

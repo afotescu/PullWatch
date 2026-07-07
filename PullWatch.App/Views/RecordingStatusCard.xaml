@@ -32,6 +32,9 @@
         >
           <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
         </DataTrigger>
+        <DataTrigger Binding="{Binding IsVideoEncodingSetupRequired}" Value="True">
+          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        </DataTrigger>
       </Style.Triggers>
     </Style>
   </UserControl.Resources>
@@ -82,8 +85,8 @@
       <Button
         Margin="0,16,0,0"
         HorizontalAlignment="Stretch"
-        Command="{Binding ManualRecordingCommand}"
-        Content="{Binding ManualRecordingButtonText}"
+        Command="{Binding StatusCardCommand}"
+        Content="{Binding StatusCardButtonText}"
       >
         <Button.Style>
           <Style TargetType="Button" BasedOn="{StaticResource FilledButtonStyle}">
@@ -91,7 +94,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
             <Setter Property="Padding" Value="10,8" />
             <Style.Triggers>
-              <DataTrigger Binding="{Binding IsManualStopMode}" Value="True">
+              <DataTrigger Binding="{Binding IsStatusCardStopMode}" Value="True">
                 <Setter Property="Background" Value="{StaticResource FailureBrush}" />
                 <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
               </DataTrigger>

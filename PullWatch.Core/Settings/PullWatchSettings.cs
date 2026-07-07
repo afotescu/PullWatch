@@ -11,6 +11,7 @@ public sealed record PullWatchSettings
     public bool RecordRaidEncounters { get; init; } = true;
     public RecordingFilterSettings RecordingFilters { get; init; } = new();
     public VideoSettings Video { get; init; } = new();
+    public EncoderCalibrationSettings EncoderCalibration { get; init; } = new();
     public AudioSettings Audio { get; init; } = new();
     public StartupSettings Startup { get; init; } = new();
     public RecordingStorageSettings Storage { get; init; } = new();
@@ -55,7 +56,7 @@ public sealed record RaidEncounterRecordingFilterSettings
 
 public sealed record VideoSettings
 {
-    public VideoCodec Codec { get; init; } = VideoCodec.H264;
+    public VideoProfileSelection? SelectedProfile { get; init; }
     public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
     public int FrameRate { get; init; } = VideoFrameRates.High;
     public VideoScaling Scaling { get; init; } = VideoScaling.Optimized;
@@ -63,10 +64,48 @@ public sealed record VideoSettings
     public bool ShowCaptureBorder { get; init; }
 }
 
+public sealed record VideoProfileSelection
+{
+    public VideoCodec Codec { get; init; }
+    public VideoEncoderProvider Provider { get; init; }
+}
+
+public sealed record EncoderCalibrationSettings
+{
+    public const int CurrentVersion = 1;
+
+    public int Version { get; init; }
+    public DateTimeOffset? TestedAt { get; init; }
+    public string? FfmpegPath { get; init; }
+    public string? FfmpegVersion { get; init; }
+    public string? FfprobePath { get; init; }
+    public string? FfprobeVersion { get; init; }
+    public IReadOnlyList<EncoderCalibrationResult> Results { get; init; } = [];
+}
+
+public sealed record EncoderCalibrationResult
+{
+    public VideoCodec Codec { get; init; }
+    public VideoEncoderProvider Provider { get; init; }
+    public string EncoderName { get; init; } = string.Empty;
+    public bool Passed { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public double DurationSeconds { get; init; }
+}
+
 public enum VideoCodec
 {
     H264,
     H265,
+}
+
+public enum VideoEncoderProvider
+{
+    NvidiaNvenc = 1,
+    AmdAmf = 2,
+    Software = 4,
 }
 
 public enum VideoQuality

@@ -55,26 +55,9 @@ Closing the PullWatch window keeps the app running in the system tray. Use
 ## Requirements
 
 - Windows x64
-- Windows Media Foundation
-- Microsoft Visual C++ Redistributable 2015-2022 x64
 
 Portable releases are self-contained and do not require a separately installed
 .NET runtime.
-
-If recording cannot start because Windows Media Foundation is unavailable,
-install Microsoft's Media Feature Pack for Windows N editions, then restart
-PullWatch:
-
-```text
-https://support.microsoft.com/en-us/windows/media-feature-pack-for-windows-n-8622b390-4ce6-43c9-9b42-549e5328e407
-```
-
-If recording cannot start because the Visual C++ Redistributable is missing,
-install the official Microsoft x64 redistributable:
-
-```text
-https://aka.ms/vc14/vc_redist.x64.exe
-```
 
 Automatic recording requires World of Warcraft combat logging to be enabled so
 the game writes `WoWCombatLog*.txt` files.
@@ -110,8 +93,9 @@ before posting them publicly.
 
 ## Recording Behavior
 
-PullWatch captures the World of Warcraft window with H.264 video. It uses simple
-quality presets instead of exposing raw bitrate controls:
+PullWatch captures the World of Warcraft window with calibrated H.264 or H.265
+video encoding. It uses simple quality presets instead of exposing raw bitrate
+controls:
 
 - `Compact` for smaller files
 - `Balanced` for the default quality and size tradeoff
@@ -120,6 +104,38 @@ quality presets instead of exposing raw bitrate controls:
 Frame rate is selectable as `30 FPS` or `60 FPS`. The settings screen shows an
 approximate recording size per minute based on the primary display; actual
 recordings use the captured WoW window size.
+
+The following estimates assume `60 FPS`, system audio enabled at `96 kbps`, and
+a five-minute recording. FFmpeg uses the target bitrate shown here, plus a
+`1.5x` max rate and `2x` buffer size. Lower frame rates use proportionally less
+video bitrate.
+
+### Compact
+
+| Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
+| --- | ---: | ---: | ---: | ---: |
+| 4K / 3840x2160 | 24 Mbps | ~904 MB | 16 Mbps | ~604 MB |
+| 2K / 2560x1440 | 10 Mbps | ~379 MB | 7 Mbps | ~266 MB |
+| 1K / 1920x1080 | 6 Mbps | ~229 MB | 4 Mbps | ~154 MB |
+| 720p / 1280x720 | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
+
+### Balanced
+
+| Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
+| --- | ---: | ---: | ---: | ---: |
+| 4K / 3840x2160 | 35 Mbps | ~1,316 MB | 20 Mbps | ~754 MB |
+| 2K / 2560x1440 | 16 Mbps | ~604 MB | 9 Mbps | ~341 MB |
+| 1K / 1920x1080 | 9 Mbps | ~341 MB | 5 Mbps | ~191 MB |
+| 720p / 1280x720 | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
+
+### High
+
+| Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
+| --- | ---: | ---: | ---: | ---: |
+| 4K / 3840x2160 | 50 Mbps | ~1,879 MB | 30 Mbps | ~1,129 MB |
+| 2K / 2560x1440 | 22 Mbps | ~829 MB | 14 Mbps | ~529 MB |
+| 1K / 1920x1080 | 12 Mbps | ~454 MB | 8 Mbps | ~304 MB |
+| 720p / 1280x720 | 5 Mbps | ~191 MB | 4 Mbps | ~154 MB |
 
 Automatic recording starts only when PullWatch can see the WoW window and read
 the configured logs directory. If combat-log monitoring is unavailable, manual
@@ -150,13 +166,13 @@ Create a local self-contained Windows x64 build:
 ./scripts/publish-win-x64.ps1
 ```
 
-Most dependencies are bundled into `PullWatch.exe`. `ScreenRecorderLib.dll` is
-kept next to the executable because the native recorder library does not load
-reliably when embedded into the single-file bundle.
+Publish builds also include Gyan FFmpeg release essentials under the `ffmpeg`
+folder next to `PullWatch.exe`. PullWatch uses those bundled `ffmpeg.exe` and
+`ffprobe.exe` tools before falling back to a machine-level FFmpeg install.
 
 ## Key Dependencies
 
-- [ScreenRecorderLib](https://github.com/sskodje/ScreenRecorderLib)
+- [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)
 

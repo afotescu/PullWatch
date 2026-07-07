@@ -111,6 +111,8 @@ public partial class App : Application
             {
                 _mainWindow.Show();
             }
+
+            await _mainWindow.PromptForEncoderCalibrationIfNeededAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {

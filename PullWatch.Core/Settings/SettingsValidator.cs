@@ -30,10 +30,7 @@ public static class SettingsValidator
             );
         }
 
-        if (!Enum.IsDefined(settings.Video.Codec))
-        {
-            errors.Add("Video codec must be H.264 or H.265.");
-        }
+        ValidateVideoProfile(settings.Video.SelectedProfile, "Selected video profile", errors);
 
         if (!Enum.IsDefined(settings.Video.Quality))
         {
@@ -62,6 +59,15 @@ public static class SettingsValidator
             errors.Add("Recording storage limit cannot be negative.");
         }
 
+        foreach (var result in settings.EncoderCalibration.Results)
+        {
+            ValidateVideoProfile(
+                new VideoProfileSelection { Codec = result.Codec, Provider = result.Provider },
+                "Encoder calibration result",
+                errors
+            );
+        }
+
         var wowLogsDirectory = NormalizeOptionalPath(
             settings.WowLogsDirectory,
             "WoW logs directory",
@@ -77,6 +83,7 @@ public static class SettingsValidator
                 {
                     WowLogsDirectory = wowLogsDirectory,
                     RecordingsDirectory = recordingsDirectory,
+                    Audio = settings.Audio with { CaptureMicrophone = false },
                     Startup = settings.Startup with
                     {
                         StartMinimizedToTray =
@@ -168,6 +175,28 @@ public static class SettingsValidator
             {
                 // Preserve the original validation error.
             }
+        }
+    }
+
+    private static void ValidateVideoProfile(
+        VideoProfileSelection? profile,
+        string description,
+        ICollection<string> errors
+    )
+    {
+        if (profile is null)
+        {
+            return;
+        }
+
+        if (!Enum.IsDefined(profile.Codec))
+        {
+            errors.Add($"{description} codec must be H.264 or H.265.");
+        }
+
+        if (!Enum.IsDefined(profile.Provider))
+        {
+            errors.Add($"{description} encoder must be NVIDIA NVENC, AMD AMF, or Software.");
         }
     }
 }

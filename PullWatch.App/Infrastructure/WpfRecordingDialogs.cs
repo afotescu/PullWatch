@@ -9,7 +9,7 @@ public sealed class WpfRecordingDialogs : IRecordingDialogs
         var result = WpfConfirmationDialog.Show(
             Application.Current?.MainWindow,
             new ConfirmationDialogRequest(
-                "Delete recording",
+                "PullWatch",
                 [$"Delete '{recording.DisplayName}' permanently?", "This action cannot be undone."],
                 [
                     new ConfirmationDialogButton(
@@ -22,7 +22,8 @@ public sealed class WpfRecordingDialogs : IRecordingDialogs
                         ConfirmationDialogResult.Cancel,
                         IsCancel: true
                     ),
-                ]
+                ],
+                Heading: "Delete recording?"
             )
         );
 
