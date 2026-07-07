@@ -1,5 +1,9 @@
-using System.Drawing;
-using System.Windows.Forms;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using H.NotifyIcon;
+using H.NotifyIcon.Core;
 using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
@@ -11,9 +15,8 @@ public sealed class TrayIconManager : IDisposable
         UriKind.Absolute
     );
 
-    private readonly Icon _trayIcon;
-    private readonly NotifyIcon _notifyIcon;
-    private readonly ToolStripMenuItem _recordingItem;
+    private readonly TaskbarIcon _taskbarIcon;
+    private readonly MenuItem _recordingItem;
     private readonly ApplicationController _controller;
     private readonly ILogger<TrayIconManager> _logger;
     private readonly Action _showWindow;
@@ -30,25 +33,32 @@ public sealed class TrayIconManager : IDisposable
         _showWindow = showWindow;
         _requestExit = requestExit;
         _logger = logger;
-        _recordingItem = new ToolStripMenuItem();
-        _recordingItem.Click += OnRecordingClick;
-        _trayIcon = LoadTrayIcon(_logger);
+        _recordingItem = CreateMenuItem(string.Empty, OnRecordingClick);
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Open PullWatch", null, (_, _) => _showWindow());
+        var menu = CreateContextMenu();
+        var openItem = CreateMenuItem("Open PullWatch", (_, _) => _showWindow());
+        menu.Items.Add(openItem);
         menu.Items.Add(_recordingItem);
-        menu.Items.Add("Open recordings folder", null, OnOpenRecordingsFolder);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, OnExit);
+        var recordingsFolderItem = CreateMenuItem("Open recordings folder", OnOpenRecordingsFolder);
+        menu.Items.Add(recordingsFolderItem);
+        menu.Items.Add(new Separator());
+        var exitItem = CreateMenuItem("Exit", OnExit);
+        menu.Items.Add(exitItem);
 
-        _notifyIcon = new NotifyIcon
+        _taskbarIcon = new TaskbarIcon
         {
-            Icon = _trayIcon,
-            Text = "PullWatch",
-            ContextMenuStrip = menu,
-            Visible = true,
+            ToolTipText = "PullWatch",
+            ContextMenu = menu,
+            MenuActivation = PopupActivationMode.RightClick,
+            NoLeftClickDelay = true,
         };
-        _notifyIcon.DoubleClick += (_, _) => _showWindow();
+        if (LoadTrayIconSource(_logger) is { } iconSource)
+        {
+            _taskbarIcon.IconSource = iconSource;
+        }
+
+        _taskbarIcon.TrayLeftMouseDoubleClick += OnTrayLeftMouseDoubleClick;
+        _taskbarIcon.ForceCreate();
         _controller.StatusChanged += OnStatusChanged;
         ApplyStatus(_controller.Status);
     }
@@ -56,12 +66,12 @@ public sealed class TrayIconManager : IDisposable
     public void Dispose()
     {
         _controller.StatusChanged -= OnStatusChanged;
-        _notifyIcon.Visible = false;
-        _notifyIcon.Dispose();
-        _trayIcon.Dispose();
+        _taskbarIcon.TrayLeftMouseDoubleClick -= OnTrayLeftMouseDoubleClick;
+        _recordingItem.Click -= OnRecordingClick;
+        _taskbarIcon.Dispose();
     }
 
-    private async void OnRecordingClick(object? sender, EventArgs eventArgs)
+    private async void OnRecordingClick(object? sender, RoutedEventArgs eventArgs)
     {
         await RunCommandAsync(async () =>
         {
@@ -76,7 +86,7 @@ public sealed class TrayIconManager : IDisposable
         });
     }
 
-    private async void OnOpenRecordingsFolder(object? sender, EventArgs eventArgs)
+    private async void OnOpenRecordingsFolder(object? sender, RoutedEventArgs eventArgs)
     {
         await RunCommandAsync(async () =>
         {
@@ -84,9 +94,14 @@ public sealed class TrayIconManager : IDisposable
         });
     }
 
-    private async void OnExit(object? sender, EventArgs eventArgs)
+    private async void OnExit(object? sender, RoutedEventArgs eventArgs)
     {
         await RunCommandAsync(_requestExit);
+    }
+
+    private void OnTrayLeftMouseDoubleClick(object sender, RoutedEventArgs eventArgs)
+    {
+        _showWindow();
     }
 
     private void OnStatusChanged(ApplicationStatus status)
@@ -96,34 +111,65 @@ public sealed class TrayIconManager : IDisposable
 
     private void ApplyStatus(ApplicationStatus status)
     {
-        _recordingItem.Text =
+        _recordingItem.Header =
             status.Recording.State == RecordingCoordinatorState.Idle
                 ? "Start manual recording"
                 : "Stop recording";
-        _recordingItem.Enabled =
+        _recordingItem.IsEnabled =
             status.Recording.State
                 is RecordingCoordinatorState.Idle
                     or RecordingCoordinatorState.Recording;
     }
 
-    private static Icon LoadTrayIcon(ILogger logger)
+    private static ContextMenu CreateContextMenu()
+    {
+        var menu = new ContextMenu
+        {
+            Background = SystemColors.MenuBrush,
+            Foreground = SystemColors.MenuTextBrush,
+        };
+        menu.Resources.Add(typeof(TextBlock), CreateMenuTextBlockStyle());
+        menu.Resources.Add(typeof(MenuItem), CreateMenuItemStyle());
+        return menu;
+    }
+
+    private static MenuItem CreateMenuItem(string text, RoutedEventHandler click)
+    {
+        var item = new MenuItem { Header = text };
+        item.Click += click;
+        return item;
+    }
+
+    private static Style CreateMenuTextBlockStyle()
+    {
+        var style = new Style(typeof(TextBlock));
+        style.Setters.Add(new Setter(TextBlock.ForegroundProperty, SystemColors.MenuTextBrush));
+        return style;
+    }
+
+    private static Style CreateMenuItemStyle()
+    {
+        var style = new Style(typeof(MenuItem));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, SystemColors.MenuTextBrush));
+        return style;
+    }
+
+    private static ImageSource? LoadTrayIconSource(ILogger logger)
     {
         try
         {
-            var iconResource = System.Windows.Application.GetResourceStream(TrayIconUri);
-            if (iconResource is null)
+            var iconSource = BitmapFrame.Create(TrayIconUri);
+            if (iconSource.CanFreeze)
             {
-                logger.LogWarning("Tray icon resource was not found at {IconUri}", TrayIconUri);
-                return (Icon)SystemIcons.Application.Clone();
+                iconSource.Freeze();
             }
 
-            using var iconStream = iconResource.Stream;
-            return new Icon(iconStream);
+            return iconSource;
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Failed to load tray icon resource");
-            return (Icon)SystemIcons.Application.Clone();
+            return null;
         }
     }
 
@@ -136,11 +182,11 @@ public sealed class TrayIconManager : IDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Tray command failed");
-            _notifyIcon.ShowBalloonTip(
-                5000,
+            _taskbarIcon.ShowNotification(
                 "PullWatch command failed",
                 exception.Message,
-                ToolTipIcon.Error
+                NotificationIcon.Error,
+                timeout: TimeSpan.FromSeconds(5)
             );
         }
     }

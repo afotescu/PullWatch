@@ -1,7 +1,6 @@
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Forms = System.Windows.Forms;
 
 namespace PullWatch;
 
@@ -20,6 +19,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     );
     private const int MaximumRecordingStorageLimitGigabytes = 10_000;
     private const bool IsMicrophoneCaptureAvailable = false;
+    private const int PrimaryScreenWidthMetric = 0;
+    private const int PrimaryScreenHeightMetric = 1;
 
     private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
     private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
@@ -1652,12 +1653,16 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private static VideoCaptureSize GetPrimaryDisplayCaptureSize()
     {
-        var bounds = Forms.Screen.PrimaryScreen?.Bounds;
+        var width = GetSystemMetrics(PrimaryScreenWidthMetric);
+        var height = GetSystemMetrics(PrimaryScreenHeightMetric);
 
-        return bounds is { Width: > 0, Height: > 0 }
-            ? new VideoCaptureSize(bounds.Value.Width, bounds.Value.Height)
+        return width > 0 && height > 0
+            ? new VideoCaptureSize(width, height)
             : FallbackEstimateCaptureSize;
     }
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
 
     private static Task TestVideoEncodingUnavailableAsync()
     {
