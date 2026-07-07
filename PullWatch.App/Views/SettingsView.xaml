@@ -237,6 +237,19 @@
                 Command="{Binding TestVideoEncodingCommand}"
                 Content="{Binding TestVideoEncodingButtonText}"
               />
+              <TextBlock
+                Style="{StaticResource InputLabelStyle}"
+                Text="Encoder profile"
+                Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
+              />
+              <ComboBox
+                DisplayMemberPath="Label"
+                IsEnabled="{Binding CanChooseVideoProfile}"
+                ItemsSource="{Binding VideoProfileOptions}"
+                SelectedValue="{Binding SelectedVideoProfile, Mode=TwoWay}"
+                SelectedValuePath="Value"
+                Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
+              />
               <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video quality" />
               <ComboBox
                 DisplayMemberPath="Label"

@@ -388,17 +388,32 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool CanStartMinimizedToTray => IsEditingEnabled && StartWithWindows;
 
+    public IReadOnlyList<VideoProfileOption> VideoProfileOptions =>
+        VideoProfileSelectionPolicy
+            .GetPassingProfilesInPriorityOrder(_savedSettings.EncoderCalibration.Results)
+            .Select(profile => new VideoProfileOption(
+                profile,
+                VideoProfileFormatter.FormatDisplayName(profile)
+            ))
+            .ToArray();
+
+    public bool HasVideoProfileOptions => VideoProfileOptions.Count > 0;
+
+    public bool CanChooseVideoProfile => IsEditingEnabled && VideoProfileOptions.Count > 1;
+
     public VideoProfileSelection? SelectedVideoProfile
     {
         get;
-        private set
+        set
         {
-            if (SetProperty(ref field, value))
+            if (value is not null && !IsSelectableVideoProfile(value))
             {
-                OnPropertyChanged(nameof(VideoEncodingSummary));
-                OnPropertyChanged(nameof(VideoEncodingStatus));
-                OnPropertyChanged(nameof(TestVideoEncodingButtonText));
-                OnPropertyChanged(nameof(EstimatedRecordingSize));
+                return;
+            }
+
+            if (SetEditableProperty(ref field, value))
+            {
+                NotifyVideoProfileSelectionChanged();
             }
         }
     }
@@ -486,6 +501,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 NotifyCommandStatesChanged();
                 OnPropertyChanged(nameof(CanStartMinimizedToTray));
                 OnPropertyChanged(nameof(CanTestVideoEncoding));
+                OnPropertyChanged(nameof(CanChooseVideoProfile));
                 OnPropertyChanged(nameof(CanConfigureMythicPlus));
                 OnPropertyChanged(nameof(CanConfigureRaidEncounters));
                 OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
@@ -819,6 +835,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             },
             Video = _savedSettings.Video with
             {
+                SelectedProfile = SelectedVideoProfile,
                 Quality = SelectedVideoQuality,
                 FrameRate = SelectedFrameRate,
                 Scaling = SelectedVideoScaling,
@@ -1214,7 +1231,14 @@ public sealed partial class SettingsViewModel : ObservableObject
             StartWithWindows = settings.Startup.StartWithWindows;
             StartMinimizedToTray =
                 settings.Startup.StartWithWindows && settings.Startup.StartMinimizedToTray;
-            SelectedVideoProfile = settings.Video.SelectedProfile;
+            SelectedVideoProfile =
+                settings.Video.SelectedProfile is { } selectedProfile
+                && IsSelectableVideoProfile(selectedProfile)
+                    ? selectedProfile
+                    : null;
+            OnPropertyChanged(nameof(VideoProfileOptions));
+            OnPropertyChanged(nameof(HasVideoProfileOptions));
+            OnPropertyChanged(nameof(CanChooseVideoProfile));
             SelectedVideoQuality = settings.Video.Quality;
             SelectedFrameRate = settings.Video.FrameRate;
             SelectedVideoScaling = settings.Video.Scaling;
@@ -1298,6 +1322,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         return false;
+    }
+
+    private bool IsSelectableVideoProfile(VideoProfileSelection profile)
+    {
+        return VideoProfileOptions.Any(option => option.Value == profile);
+    }
+
+    private void NotifyVideoProfileSelectionChanged()
+    {
+        OnPropertyChanged(nameof(VideoEncodingSummary));
+        OnPropertyChanged(nameof(VideoEncodingStatus));
+        OnPropertyChanged(nameof(TestVideoEncodingButtonText));
+        OnPropertyChanged(nameof(EstimatedRecordingSize));
     }
 
     private void SetLoadedValue(Action update)
@@ -1479,7 +1516,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static bool ShouldRefreshEstimate(string? propertyName)
     {
         return propertyName
-            is nameof(SelectedVideoQuality)
+            is nameof(SelectedVideoProfile)
+                or nameof(SelectedVideoQuality)
                 or nameof(SelectedFrameRate)
                 or nameof(SelectedVideoScaling)
                 or nameof(CaptureSystemAudio)
@@ -1651,6 +1689,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 }
 
 public sealed record VideoQualityOption(VideoQuality Value, string Label);
+
+public sealed record VideoProfileOption(VideoProfileSelection Value, string Label);
 
 public sealed record FrameRateOption(int Value, string Label);
 

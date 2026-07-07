@@ -21,6 +21,9 @@ public sealed class SettingsViewModelTests
             "PullWatch needs to test video encoding before recording.",
             viewModel.VideoEncodingStatus
         );
+        Assert.Empty(viewModel.VideoProfileOptions);
+        Assert.False(viewModel.HasVideoProfileOptions);
+        Assert.False(viewModel.CanChooseVideoProfile);
         Assert.Equal("Test video encoding", viewModel.TestVideoEncodingButtonText);
         Assert.Equal(VideoQuality.Balanced, viewModel.SelectedVideoQuality);
         Assert.Equal(VideoFrameRates.High, viewModel.SelectedFrameRate);
@@ -45,6 +48,75 @@ public sealed class SettingsViewModelTests
         Assert.Equal(VideoFrameRates.Standard, saved.Video.FrameRate);
         Assert.Equal(VideoScaling.Original, saved.Video.Scaling);
         Assert.Equal("Settings saved.", viewModel.SaveMessage);
+    }
+
+    [Fact]
+    public async Task VideoProfileOptionsUsePassingCalibrationResultsAndAutosaveSelection()
+    {
+        var saves = new List<PullWatchSettings>();
+        var selectedProfile = Profile(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc);
+        var settings = new PullWatchSettings
+        {
+            Video = new VideoSettings { SelectedProfile = selectedProfile },
+            EncoderCalibration = new EncoderCalibrationSettings
+            {
+                Results =
+                [
+                    CalibrationResult(VideoCodec.H264, VideoEncoderProvider.Software, passed: true),
+                    CalibrationResult(
+                        VideoCodec.H265,
+                        VideoEncoderProvider.NvidiaNvenc,
+                        passed: true
+                    ),
+                    CalibrationResult(
+                        VideoCodec.H265,
+                        VideoEncoderProvider.Software,
+                        passed: false
+                    ),
+                    CalibrationResult(VideoCodec.H264, VideoEncoderProvider.AmdAmf, passed: true),
+                ],
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            save: savedSettings =>
+            {
+                saves.Add(savedSettings);
+                return Saved(savedSettings);
+            }
+        );
+
+        Assert.Equal(selectedProfile, viewModel.SelectedVideoProfile);
+        Assert.Equal("H.265 / NVIDIA NVENC", viewModel.VideoEncodingSummary);
+        Assert.True(viewModel.HasVideoProfileOptions);
+        Assert.True(viewModel.CanChooseVideoProfile);
+        Assert.Equal(
+            [
+                Profile(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc),
+                Profile(VideoCodec.H264, VideoEncoderProvider.AmdAmf),
+                Profile(VideoCodec.H264, VideoEncoderProvider.Software),
+            ],
+            viewModel.VideoProfileOptions.Select(option => option.Value)
+        );
+        Assert.Equal(
+            ["H.265 / NVIDIA NVENC", "H.264 / AMD AMF", "H.264 / Software"],
+            viewModel.VideoProfileOptions.Select(option => option.Label)
+        );
+
+        viewModel.SelectedVideoProfile = Profile(VideoCodec.H265, VideoEncoderProvider.Software);
+
+        Assert.Equal(selectedProfile, viewModel.SelectedVideoProfile);
+        Assert.Empty(saves);
+
+        viewModel.SelectedVideoProfile = Profile(VideoCodec.H264, VideoEncoderProvider.AmdAmf);
+
+        await WaitForAsync(() => saves.Count == 1);
+
+        Assert.Equal(
+            Profile(VideoCodec.H264, VideoEncoderProvider.AmdAmf),
+            saves[0].Video.SelectedProfile
+        );
+        Assert.Equal("H.264 / AMD AMF", viewModel.VideoEncodingSummary);
     }
 
     [Fact]
@@ -568,6 +640,17 @@ public sealed class SettingsViewModelTests
                         FrameRate = VideoFrameRates.Standard,
                         Scaling = VideoScaling.Original,
                     },
+                    EncoderCalibration = new EncoderCalibrationSettings
+                    {
+                        Results =
+                        [
+                            CalibrationResult(
+                                VideoCodec.H265,
+                                VideoEncoderProvider.NvidiaNvenc,
+                                passed: true
+                            ),
+                        ],
+                    },
                 }
             ),
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
@@ -909,6 +992,21 @@ public sealed class SettingsViewModelTests
     private static VideoProfileSelection Profile(VideoCodec codec, VideoEncoderProvider provider)
     {
         return new VideoProfileSelection { Codec = codec, Provider = provider };
+    }
+
+    private static EncoderCalibrationResult CalibrationResult(
+        VideoCodec codec,
+        VideoEncoderProvider provider,
+        bool passed
+    )
+    {
+        return new EncoderCalibrationResult
+        {
+            Codec = codec,
+            Provider = provider,
+            EncoderName = $"{codec}-{provider}",
+            Passed = passed,
+        };
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

@@ -18,15 +18,7 @@ public static class VideoProfileSelectionPolicy
     {
         ArgumentNullException.ThrowIfNull(results);
 
-        return SelectBestPassingProfile(
-            results
-                .Where(result => result.Passed)
-                .Select(result => new VideoProfileSelection
-                {
-                    Codec = result.Codec,
-                    Provider = result.Provider,
-                })
-        );
+        return GetPassingProfilesInPriorityOrder(results).FirstOrDefault();
     }
 
     public static VideoProfileSelection? SelectBestPassingProfile(
@@ -37,5 +29,32 @@ public static class VideoProfileSelectionPolicy
 
         var passingSet = passingProfiles.ToHashSet();
         return SelectionPriority.FirstOrDefault(passingSet.Contains);
+    }
+
+    public static IReadOnlyList<VideoProfileSelection> GetPassingProfilesInPriorityOrder(
+        IEnumerable<EncoderCalibrationResult> results
+    )
+    {
+        ArgumentNullException.ThrowIfNull(results);
+
+        return GetProfilesInPriorityOrder(
+            results
+                .Where(result => result.Passed)
+                .Select(result => new VideoProfileSelection
+                {
+                    Codec = result.Codec,
+                    Provider = result.Provider,
+                })
+        );
+    }
+
+    public static IReadOnlyList<VideoProfileSelection> GetProfilesInPriorityOrder(
+        IEnumerable<VideoProfileSelection> profiles
+    )
+    {
+        ArgumentNullException.ThrowIfNull(profiles);
+
+        var profileSet = profiles.ToHashSet();
+        return SelectionPriority.Where(profileSet.Contains).ToArray();
     }
 }
