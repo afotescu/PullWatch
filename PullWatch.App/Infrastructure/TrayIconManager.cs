@@ -10,6 +10,12 @@ namespace PullWatch;
 
 public sealed class TrayIconManager : IDisposable
 {
+    private const string SurfaceRaisedBrushKey = "SurfaceRaisedBrush";
+    private const string PrimaryTextBrushKey = "PrimaryTextBrush";
+    private const string SecondaryTextBrushKey = "SecondaryTextBrush";
+    private const string BorderBrushKey = "BorderBrush";
+    private const string ListItemHoverBrushKey = "ListItemHoverBrush";
+
     private static readonly Uri TrayIconUri = new(
         "pack://application:,,,/Assets/favicon.ico",
         UriKind.Absolute
@@ -41,7 +47,6 @@ public sealed class TrayIconManager : IDisposable
         menu.Items.Add(_recordingItem);
         var recordingsFolderItem = CreateMenuItem("Open recordings folder", OnOpenRecordingsFolder);
         menu.Items.Add(recordingsFolderItem);
-        menu.Items.Add(new Separator());
         var exitItem = CreateMenuItem("Exit", OnExit);
         menu.Items.Add(exitItem);
 
@@ -123,14 +128,54 @@ public sealed class TrayIconManager : IDisposable
 
     private static ContextMenu CreateContextMenu()
     {
+        var backgroundBrush = GetBrush(SurfaceRaisedBrushKey, Color.FromRgb(0x2A, 0x30, 0x38));
+        var foregroundBrush = GetBrush(PrimaryTextBrushKey, Color.FromRgb(0xF2, 0xF4, 0xF7));
+        var disabledForegroundBrush = GetBrush(
+            SecondaryTextBrushKey,
+            Color.FromRgb(0xAA, 0xB2, 0xBD)
+        );
+        var borderBrush = GetBrush(BorderBrushKey, Color.FromRgb(0x40, 0x49, 0x56));
+        var hoverBrush = GetBrush(ListItemHoverBrushKey, Color.FromRgb(0x30, 0x37, 0x42));
+
         var menu = new ContextMenu
         {
-            Background = SystemColors.MenuBrush,
-            Foreground = SystemColors.MenuTextBrush,
+            Background = backgroundBrush,
+            BorderBrush = borderBrush,
+            Foreground = foregroundBrush,
+            Padding = new Thickness(4),
+            Template = CreateContextMenuTemplate(),
         };
-        menu.Resources.Add(typeof(TextBlock), CreateMenuTextBlockStyle());
-        menu.Resources.Add(typeof(MenuItem), CreateMenuItemStyle());
+        menu.Resources.Add(typeof(TextBlock), CreateMenuTextBlockStyle(foregroundBrush));
+        menu.Resources.Add(
+            typeof(MenuItem),
+            CreateMenuItemStyle(foregroundBrush, disabledForegroundBrush, hoverBrush)
+        );
         return menu;
+    }
+
+    private static ControlTemplate CreateContextMenuTemplate()
+    {
+        var root = new FrameworkElementFactory(typeof(Border));
+        root.SetValue(
+            Border.BackgroundProperty,
+            new TemplateBindingExtension(Control.BackgroundProperty)
+        );
+        root.SetValue(
+            Border.BorderBrushProperty,
+            new TemplateBindingExtension(Control.BorderBrushProperty)
+        );
+        root.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        root.SetValue(
+            Border.PaddingProperty,
+            new TemplateBindingExtension(Control.PaddingProperty)
+        );
+        root.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
+
+        var items = new FrameworkElementFactory(typeof(ItemsPresenter));
+        items.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
+        root.AppendChild(items);
+
+        return new ControlTemplate(typeof(ContextMenu)) { VisualTree = root };
     }
 
     private static MenuItem CreateMenuItem(string text, RoutedEventHandler click)
@@ -140,18 +185,60 @@ public sealed class TrayIconManager : IDisposable
         return item;
     }
 
-    private static Style CreateMenuTextBlockStyle()
+    private static Style CreateMenuTextBlockStyle(Brush foregroundBrush)
     {
         var style = new Style(typeof(TextBlock));
-        style.Setters.Add(new Setter(TextBlock.ForegroundProperty, SystemColors.MenuTextBrush));
+        style.Setters.Add(new Setter(TextBlock.ForegroundProperty, foregroundBrush));
         return style;
     }
 
-    private static Style CreateMenuItemStyle()
+    private static Style CreateMenuItemStyle(
+        Brush foregroundBrush,
+        Brush disabledForegroundBrush,
+        Brush hoverBrush
+    )
     {
         var style = new Style(typeof(MenuItem));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, SystemColors.MenuTextBrush));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, foregroundBrush));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(16, 7, 24, 7)));
+        style.Setters.Add(new Setter(Control.TemplateProperty, CreateMenuItemTemplate(hoverBrush)));
+
+        var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+        disabledTrigger.Setters.Add(
+            new Setter(Control.ForegroundProperty, disabledForegroundBrush)
+        );
+        style.Triggers.Add(disabledTrigger);
+
         return style;
+    }
+
+    private static ControlTemplate CreateMenuItemTemplate(Brush hoverBrush)
+    {
+        var root = new FrameworkElementFactory(typeof(Border)) { Name = "Root" };
+        root.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        root.SetValue(
+            Border.PaddingProperty,
+            new TemplateBindingExtension(Control.PaddingProperty)
+        );
+
+        var content = new FrameworkElementFactory(typeof(ContentPresenter));
+        content.SetValue(ContentPresenter.ContentSourceProperty, "Header");
+        content.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+        content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        root.AppendChild(content);
+
+        var template = new ControlTemplate(typeof(MenuItem)) { VisualTree = root };
+        var hoverTrigger = new Trigger { Property = MenuItem.IsHighlightedProperty, Value = true };
+        hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, hoverBrush, "Root"));
+        template.Triggers.Add(hoverTrigger);
+
+        return template;
+    }
+
+    private static Brush GetBrush(string resourceKey, Color fallbackColor)
+    {
+        return System.Windows.Application.Current.TryFindResource(resourceKey) as Brush
+            ?? new SolidColorBrush(fallbackColor);
     }
 
     private static ImageSource? LoadTrayIconSource(ILogger logger)
