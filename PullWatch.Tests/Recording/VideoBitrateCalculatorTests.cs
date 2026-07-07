@@ -3,17 +3,17 @@ namespace PullWatch.Tests;
 public sealed class VideoBitrateCalculatorTests
 {
     [Theory]
-    [InlineData(1920, 1080, 60, VideoQuality.Compact, 9)]
-    [InlineData(1920, 1080, 60, VideoQuality.Balanced, 12)]
-    [InlineData(1920, 1080, 60, VideoQuality.High, 18)]
-    [InlineData(2560, 1440, 60, VideoQuality.Compact, 16)]
-    [InlineData(2560, 1440, 60, VideoQuality.Balanced, 22)]
-    [InlineData(2560, 1440, 60, VideoQuality.High, 30)]
-    [InlineData(3840, 2160, 60, VideoQuality.Compact, 35)]
-    [InlineData(3840, 2160, 60, VideoQuality.Balanced, 50)]
-    [InlineData(3840, 2160, 60, VideoQuality.High, 70)]
-    [InlineData(2560, 1440, 30, VideoQuality.Balanced, 12)]
-    [InlineData(3440, 1440, 60, VideoQuality.Balanced, 30)]
+    [InlineData(1920, 1080, 60, VideoQuality.Compact, 6)]
+    [InlineData(1920, 1080, 60, VideoQuality.Balanced, 9)]
+    [InlineData(1920, 1080, 60, VideoQuality.High, 12)]
+    [InlineData(2560, 1440, 60, VideoQuality.Compact, 10)]
+    [InlineData(2560, 1440, 60, VideoQuality.Balanced, 16)]
+    [InlineData(2560, 1440, 60, VideoQuality.High, 22)]
+    [InlineData(3840, 2160, 60, VideoQuality.Compact, 24)]
+    [InlineData(3840, 2160, 60, VideoQuality.Balanced, 35)]
+    [InlineData(3840, 2160, 60, VideoQuality.High, 50)]
+    [InlineData(2560, 1440, 30, VideoQuality.Balanced, 8)]
+    [InlineData(3440, 1440, 60, VideoQuality.Balanced, 20)]
     public void CalculatesFriendlyBitrateFromCaptureSize(
         int width,
         int height,
@@ -34,14 +34,24 @@ public sealed class VideoBitrateCalculatorTests
     [Fact]
     public void CalculatesLowerTargetBitrateForH265()
     {
-        var bitrate = VideoBitrateCalculator.CalculateBitrate(
-            new VideoCaptureSize(1920, 1080),
-            VideoFrameRates.High,
-            VideoQuality.Balanced,
-            VideoCodec.H265
+        Assert.Equal(
+            5_000_000,
+            VideoBitrateCalculator.CalculateBitrate(
+                new VideoCaptureSize(1920, 1080),
+                VideoFrameRates.High,
+                VideoQuality.Balanced,
+                VideoCodec.H265
+            )
         );
-
-        Assert.Equal(7_000_000, bitrate);
+        Assert.Equal(
+            14_000_000,
+            VideoBitrateCalculator.CalculateBitrate(
+                new VideoCaptureSize(2560, 1440),
+                VideoFrameRates.High,
+                VideoQuality.High,
+                VideoCodec.H265
+            )
+        );
     }
 
     [Fact]

@@ -603,23 +603,23 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("70 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
         Assert.Contains("H.264", viewModel.EstimatedRecordingSize);
         Assert.Contains("60 FPS", viewModel.EstimatedRecordingSize);
-        Assert.Contains("12 Mbps target", viewModel.EstimatedRecordingSize);
+        Assert.Contains("9 Mbps target", viewModel.EstimatedRecordingSize);
         Assert.Contains("per minute", viewModel.EstimatedRecordingSize);
         Assert.Contains("WoW window size", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
 
-        Assert.Contains("50 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("30 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("30 FPS", viewModel.EstimatedRecordingSize);
 
         viewModel.SelectedVideoScaling = VideoScaling.Original;
 
-        Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
+        Assert.Contains("60 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
 
         var h265ViewModel = CreateViewModel(
@@ -656,9 +656,9 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Contains("50 MB", h265ViewModel.EstimatedRecordingSize);
+        Assert.Contains("30 MB", h265ViewModel.EstimatedRecordingSize);
         Assert.Contains("H.265", h265ViewModel.EstimatedRecordingSize);
-        Assert.Contains("7 Mbps target", h265ViewModel.EstimatedRecordingSize);
+        Assert.Contains("4 Mbps target", h265ViewModel.EstimatedRecordingSize);
     }
 
     [Fact]

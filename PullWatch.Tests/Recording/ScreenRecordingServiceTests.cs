@@ -5,9 +5,9 @@ namespace PullWatch.Tests;
 public sealed class ScreenRecordingServiceTests
 {
     [Theory]
-    [InlineData(VideoQuality.Compact, 9_000_000)]
-    [InlineData(VideoQuality.Balanced, 12_000_000)]
-    [InlineData(VideoQuality.High, 18_000_000)]
+    [InlineData(VideoQuality.Compact, 6_000_000)]
+    [InlineData(VideoQuality.Balanced, 9_000_000)]
+    [InlineData(VideoQuality.High, 12_000_000)]
     public void VideoEncoderOptionsUseOptimizedOutputSizeAndLongRecordingDefaults(
         VideoQuality quality,
         int expectedBitrate
@@ -60,17 +60,17 @@ public sealed class ScreenRecordingServiceTests
         );
         var encoder = Assert.IsType<H265VideoEncoder>(options.Encoder);
 
-        Assert.Equal(7_000_000, options.Bitrate);
+        Assert.Equal(5_000_000, options.Bitrate);
         Assert.Equal(70, options.Quality);
         Assert.False(options.IsFragmentedMp4Enabled);
         Assert.Equal(H265BitrateControlMode.CBR, encoder.BitrateMode);
     }
 
     [Theory]
-    [InlineData(1920, 1080, 12_000_000)]
-    [InlineData(2560, 1440, 12_000_000)]
-    [InlineData(3440, 1440, 16_000_000)]
-    [InlineData(3840, 2160, 12_000_000)]
+    [InlineData(1920, 1080, 9_000_000)]
+    [InlineData(2560, 1440, 9_000_000)]
+    [InlineData(3440, 1440, 12_000_000)]
+    [InlineData(3840, 2160, 9_000_000)]
     public void VideoEncoderOptionsUseOutputSizeWhenCalculatingBitrate(
         int width,
         int height,
@@ -96,8 +96,8 @@ public sealed class ScreenRecordingServiceTests
     }
 
     [Theory]
-    [InlineData(VideoScaling.Target1440p, 22_000_000)]
-    [InlineData(VideoScaling.Target720p, 6_000_000)]
+    [InlineData(VideoScaling.Target1440p, 16_000_000)]
+    [InlineData(VideoScaling.Target720p, 4_000_000)]
     public void VideoEncoderOptionsUseSelectedScalingTarget(
         VideoScaling scaling,
         int expectedBitrate
@@ -141,7 +141,7 @@ public sealed class ScreenRecordingServiceTests
             new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Equal(22_000_000, options.Bitrate);
+        Assert.Equal(16_000_000, options.Bitrate);
     }
 
     [Fact]

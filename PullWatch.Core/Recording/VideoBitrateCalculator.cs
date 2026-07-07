@@ -28,8 +28,7 @@ public static class VideoBitrateCalculator
             captureSize.Width
             * (double)captureSize.Height
             * frameRate
-            * GetQualityFactor(quality)
-            * GetCodecFactor(codec)
+            * GetBitrateFactor(quality, codec)
             / BitsPerMegabit;
         var clampedMegabits = Math.Clamp(
             rawMegabits,
@@ -66,23 +65,21 @@ public static class VideoBitrateCalculator
         return (int)Math.Round(bitrate / (double)BitsPerMegabit, MidpointRounding.AwayFromZero);
     }
 
-    private static double GetQualityFactor(VideoQuality quality)
+    private static double GetBitrateFactor(VideoQuality quality, VideoCodec codec)
     {
-        return quality switch
+        return (quality, codec) switch
         {
-            VideoQuality.Compact => 0.07,
-            VideoQuality.Balanced => 0.10,
-            VideoQuality.High => 0.14,
-            _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null),
-        };
-    }
-
-    private static double GetCodecFactor(VideoCodec codec)
-    {
-        return codec switch
-        {
-            VideoCodec.H264 => 1,
-            VideoCodec.H265 => 0.6,
+            (VideoQuality.Compact, VideoCodec.H264) => 0.048,
+            (VideoQuality.Balanced, VideoCodec.H264) => 0.07,
+            (VideoQuality.High, VideoCodec.H264) => 0.096,
+            (VideoQuality.Compact, VideoCodec.H265) => 0.032,
+            (VideoQuality.Balanced, VideoCodec.H265) => 0.04,
+            (VideoQuality.High, VideoCodec.H265) => 0.062,
+            (_, _) when !Enum.IsDefined(quality) => throw new ArgumentOutOfRangeException(
+                nameof(quality),
+                quality,
+                null
+            ),
             _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, null),
         };
     }

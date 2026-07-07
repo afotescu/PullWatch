@@ -27,9 +27,9 @@ public sealed class FfmpegRecordingServiceTests
         var arguments = startInfo.ArgumentList.ToArray();
 
         AssertArgumentValue(arguments, "-c:v", "h264_nvenc");
-        AssertArgumentValue(arguments, "-b:v", "12000k");
-        AssertArgumentValue(arguments, "-maxrate", "18000k");
-        AssertArgumentValue(arguments, "-bufsize", "24000k");
+        AssertArgumentValue(arguments, "-b:v", "9000k");
+        AssertArgumentValue(arguments, "-maxrate", "13500k");
+        AssertArgumentValue(arguments, "-bufsize", "18000k");
         AssertArgumentValue(arguments, "-rc", "vbr");
         AssertArgumentValue(arguments, "-cq", "20");
         AssertArgumentValue(arguments, "-bf", "0");
@@ -214,9 +214,9 @@ public sealed class FfmpegRecordingServiceTests
         var arguments = startInfo.ArgumentList.ToArray();
 
         AssertArgumentValue(arguments, "-c:v", "hevc_amf");
-        AssertArgumentValue(arguments, "-b:v", "7000k");
-        AssertArgumentValue(arguments, "-maxrate", "10500k");
-        AssertArgumentValue(arguments, "-bufsize", "14000k");
+        AssertArgumentValue(arguments, "-b:v", "5000k");
+        AssertArgumentValue(arguments, "-maxrate", "7500k");
+        AssertArgumentValue(arguments, "-bufsize", "10000k");
         AssertArgumentValue(arguments, "-rc", "vbr_peak");
     }
 
