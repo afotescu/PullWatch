@@ -59,17 +59,34 @@ public sealed class FfmpegRecordingService(
             }
 
             var settings = settingsProvider.Current;
+            var selectedProfile =
+                settings.Video.SelectedProfile
+                ?? throw new InvalidOperationException(
+                    "Video encoding must be calibrated before recording."
+                );
+            var outputPath = ScreenRecordingService.CreateOutputPath(context, settings);
+            Volatile.Write(ref _outputPath, outputPath);
+
+            var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(cancellationToken);
+            var calibrationStatus = EncoderCalibrationStatusEvaluator.Evaluate(
+                settings,
+                environment
+            );
+            if (!calibrationStatus.IsValid)
+            {
+                throw new InvalidOperationException(calibrationStatus.Message);
+            }
+
             var (wowProcess, windowHandle) = FindWowProcess();
             var captureSize = WowWindowCaptureSizeDetector.GetCaptureSize(windowHandle);
             var outputSize = FfmpegVideoOutputSizeCalculator.CalculateOutputSize(
                 captureSize,
                 settings.Video.Scaling
             );
-            var outputPath = ScreenRecordingService.CreateOutputPath(context, settings);
-            var ffmpegPath = FfmpegToolPaths.ResolveFfmpegPath();
+            var ffmpegPath = environment.FfmpegPath;
             var encoderCapabilities = await DetectEncoderCapabilitiesAsync(
                 ffmpegPath,
-                settings.Video.Codec,
+                selectedProfile.Codec,
                 cancellationToken
             );
             var videoEncoderOptions = FfmpegEncoderOptionsFactory.CreateVideoEncoderOptions(
@@ -97,7 +114,7 @@ public sealed class FfmpegRecordingService(
             _recordingStarted = CreateCompletionSource();
             _recordingFinished = CreateCompletionSource();
             _isStopping = false;
-            _outputPath = outputPath;
+            Volatile.Write(ref _outputPath, outputPath);
             _wowProcess = wowProcess;
             _audioPipe = audioPipe;
             _recordingRequestedTimestamp = startRequestTimestamp;
@@ -467,7 +484,7 @@ public sealed class FfmpegRecordingService(
             options.EncoderName,
             options.Provider,
             settings.Video.Quality,
-            settings.Video.Codec,
+            options.Codec,
             VideoBitrateCalculator.ToMegabitsPerSecond(options.Bitrate),
             VideoBitrateCalculator.ToMegabitsPerSecond(options.MaxRate),
             VideoBitrateCalculator.ToMegabitsPerSecond(options.BufferSize)
@@ -797,7 +814,7 @@ public sealed class FfmpegRecordingService(
         var wowProcess = Interlocked.Exchange(ref _wowProcess, null);
         var audioPipe = Interlocked.Exchange(ref _audioPipe, null);
         _isStopping = false;
-        _outputPath = null;
+        Volatile.Write(ref _outputPath, null);
 
         audioPipe?.Dispose();
 

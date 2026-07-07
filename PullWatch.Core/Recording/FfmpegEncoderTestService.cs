@@ -15,6 +15,15 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         CancellationToken cancellationToken
     )
     {
+        return await TestAsync(settings, progress: null, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<VideoEncoderTestResult>> TestAsync(
+        PullWatchSettings settings,
+        IProgress<VideoEncoderTestProgress>? progress,
+        CancellationToken cancellationToken
+    )
+    {
         ArgumentNullException.ThrowIfNull(settings);
 
         var windowHandle = getWindowHandle();
@@ -31,10 +40,19 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         var ffmpegPath = FfmpegToolPaths.ResolveFfmpegPath();
         var ffprobePath = FfmpegToolPaths.ResolveFfprobePath();
         var results = new List<VideoEncoderTestResult>();
+        var profiles = GetTestProfiles();
 
-        foreach (var profile in GetTestProfiles())
+        for (var profileIndex = 0; profileIndex < profiles.Count; profileIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var profile = profiles[profileIndex];
+            progress?.Report(
+                new VideoEncoderTestProgress(
+                    profileIndex,
+                    profiles.Count,
+                    ToProfileSelection(profile)
+                )
+            );
             results.Add(
                 await TestProviderAsync(
                     ffmpegPath,
@@ -49,7 +67,23 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             );
         }
 
+        if (profiles.Count > 0)
+        {
+            progress?.Report(
+                new VideoEncoderTestProgress(
+                    profiles.Count,
+                    profiles.Count,
+                    ToProfileSelection(profiles[profiles.Count - 1])
+                )
+            );
+        }
+
         return results;
+    }
+
+    private static VideoProfileSelection ToProfileSelection(FfmpegVideoEncoderProfile profile)
+    {
+        return new VideoProfileSelection { Codec = profile.Codec, Provider = profile.Provider };
     }
 
     private static async Task<VideoEncoderTestResult> TestProviderAsync(
@@ -67,8 +101,11 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         {
             Video = settings.Video with
             {
-                Codec = profile.Codec,
-                Encoder = profile.Provider,
+                SelectedProfile = new VideoProfileSelection
+                {
+                    Codec = profile.Codec,
+                    Provider = profile.Provider,
+                },
                 CaptureCursor = false,
                 ShowCaptureBorder = false,
             },
@@ -144,7 +181,10 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
                 profile.Codec,
                 profile.Provider,
                 videoEncoderOptions.EncoderName,
-                $"{validation.CodecName}, {validation.Width}x{validation.Height}, {FormatDuration(validation.Duration)}"
+                $"{validation.CodecName}, {validation.Width}x{validation.Height}, {FormatDuration(validation.Duration)}",
+                validation.Width,
+                validation.Height,
+                validation.Duration
             );
         }
         catch (Exception exception)
@@ -574,17 +614,32 @@ public sealed record VideoEncoderTestResult(
     VideoEncoderProvider Provider,
     string? EncoderName,
     bool IsAvailable,
-    string Message
+    string Message,
+    int Width,
+    int Height,
+    double DurationSeconds
 )
 {
     public static VideoEncoderTestResult Available(
         VideoCodec codec,
         VideoEncoderProvider provider,
         string encoderName,
-        string message
+        string message,
+        int width,
+        int height,
+        double durationSeconds
     )
     {
-        return new VideoEncoderTestResult(codec, provider, encoderName, true, message);
+        return new VideoEncoderTestResult(
+            codec,
+            provider,
+            encoderName,
+            true,
+            message,
+            width,
+            height,
+            durationSeconds
+        );
     }
 
     public static VideoEncoderTestResult Unavailable(
@@ -594,6 +649,27 @@ public sealed record VideoEncoderTestResult(
         string message
     )
     {
-        return new VideoEncoderTestResult(codec, provider, encoderName, false, message);
+        return new VideoEncoderTestResult(codec, provider, encoderName, false, message, 0, 0, 0);
+    }
+
+    public EncoderCalibrationResult ToCalibrationResult()
+    {
+        return new EncoderCalibrationResult
+        {
+            Codec = Codec,
+            Provider = Provider,
+            EncoderName = EncoderName ?? string.Empty,
+            Passed = IsAvailable,
+            Message = Message,
+            Width = Width,
+            Height = Height,
+            DurationSeconds = DurationSeconds,
+        };
     }
 }
+
+public sealed record VideoEncoderTestProgress(
+    int CompletedProfiles,
+    int TotalProfiles,
+    VideoProfileSelection CurrentProfile
+);

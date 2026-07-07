@@ -265,15 +265,20 @@ public sealed class ScreenRecordingService(
     )
     {
         var outputSize = CalculateOutputSize(settings, captureSize);
+        var selectedProfile =
+            settings.Video.SelectedProfile
+            ?? throw new InvalidOperationException(
+                "Video encoding must be calibrated before recording."
+            );
 
         return new VideoEncoderOptions
         {
-            Encoder = CreateVideoEncoder(settings.Video.Codec),
+            Encoder = CreateVideoEncoder(selectedProfile.Codec),
             Bitrate = VideoBitrateCalculator.CalculateBitrate(
                 outputSize,
                 settings.Video.FrameRate,
                 settings.Video.Quality,
-                settings.Video.Codec
+                selectedProfile.Codec
             ),
             Framerate = settings.Video.FrameRate,
             Quality = GetVideoEncoderQuality(settings.Video.Quality),
@@ -281,7 +286,7 @@ public sealed class ScreenRecordingService(
             IsLowLatencyEnabled = false,
             IsFixedFramerate = false,
             IsThrottlingDisabled = false,
-            IsFragmentedMp4Enabled = settings.Video.Codec == VideoCodec.H264,
+            IsFragmentedMp4Enabled = selectedProfile.Codec == VideoCodec.H264,
             IsMp4FastStartEnabled = false,
         };
     }

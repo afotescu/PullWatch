@@ -15,7 +15,12 @@ public sealed class ScreenRecordingServiceTests
     {
         var settings = new PullWatchSettings
         {
-            Video = new VideoSettings { Quality = quality, FrameRate = VideoFrameRates.High },
+            Video = new VideoSettings
+            {
+                SelectedProfile = Profile(VideoCodec.H264),
+                Quality = quality,
+                FrameRate = VideoFrameRates.High,
+            },
         };
 
         var options = ScreenRecordingService.CreateVideoEncoderOptions(
@@ -43,7 +48,7 @@ public sealed class ScreenRecordingServiceTests
         {
             Video = new VideoSettings
             {
-                Codec = VideoCodec.H265,
+                SelectedProfile = Profile(VideoCodec.H265),
                 Quality = VideoQuality.Balanced,
                 FrameRate = VideoFrameRates.High,
             },
@@ -76,6 +81,7 @@ public sealed class ScreenRecordingServiceTests
         {
             Video = new VideoSettings
             {
+                SelectedProfile = Profile(VideoCodec.H264),
                 Quality = VideoQuality.Balanced,
                 FrameRate = VideoFrameRates.High,
             },
@@ -101,6 +107,7 @@ public sealed class ScreenRecordingServiceTests
         {
             Video = new VideoSettings
             {
+                SelectedProfile = Profile(VideoCodec.H264),
                 Quality = VideoQuality.Balanced,
                 FrameRate = VideoFrameRates.High,
                 Scaling = scaling,
@@ -122,6 +129,7 @@ public sealed class ScreenRecordingServiceTests
         {
             Video = new VideoSettings
             {
+                SelectedProfile = Profile(VideoCodec.H264),
                 Quality = VideoQuality.Balanced,
                 FrameRate = VideoFrameRates.High,
                 Scaling = VideoScaling.Original,
@@ -143,7 +151,10 @@ public sealed class ScreenRecordingServiceTests
 
         var options = ScreenRecordingService.CreateOptions(
             source,
-            new PullWatchSettings(),
+            new PullWatchSettings
+            {
+                Video = new VideoSettings { SelectedProfile = Profile(VideoCodec.H264) },
+            },
             new VideoCaptureSize(2560, 1440)
         );
 
@@ -204,6 +215,15 @@ public sealed class ScreenRecordingServiceTests
         {
             Directory.Delete(Path, true);
         }
+    }
+
+    private static VideoProfileSelection Profile(VideoCodec codec)
+    {
+        return new VideoProfileSelection
+        {
+            Codec = codec,
+            Provider = VideoEncoderProvider.Software,
+        };
     }
 
     private static int GetExpectedEncoderQuality(VideoQuality quality)

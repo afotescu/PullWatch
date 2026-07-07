@@ -48,12 +48,22 @@ public sealed class SettingsValidatorTests
     public void RejectsEntireSettingsObjectWhenVideoCodecIsInvalid()
     {
         var result = SettingsValidator.Validate(
-            new PullWatchSettings { Video = new VideoSettings { Codec = (VideoCodec)999 } }
+            new PullWatchSettings
+            {
+                Video = new VideoSettings
+                {
+                    SelectedProfile = new VideoProfileSelection
+                    {
+                        Codec = (VideoCodec)999,
+                        Provider = VideoEncoderProvider.Software,
+                    },
+                },
+            }
         );
 
         Assert.False(result.IsValid);
         Assert.Null(result.Settings);
-        Assert.Contains("Video codec must be H.264 or H.265.", result.Errors);
+        Assert.Contains("Selected video profile codec must be H.264 or H.265.", result.Errors);
     }
 
     [Fact]
@@ -62,13 +72,51 @@ public sealed class SettingsValidatorTests
         var result = SettingsValidator.Validate(
             new PullWatchSettings
             {
-                Video = new VideoSettings { Encoder = (VideoEncoderProvider)999 },
+                Video = new VideoSettings
+                {
+                    SelectedProfile = new VideoProfileSelection
+                    {
+                        Codec = VideoCodec.H264,
+                        Provider = (VideoEncoderProvider)999,
+                    },
+                },
             }
         );
 
         Assert.False(result.IsValid);
         Assert.Null(result.Settings);
-        Assert.Contains("Video encoder must be NVIDIA NVENC, AMD AMF, or Software.", result.Errors);
+        Assert.Contains(
+            "Selected video profile encoder must be NVIDIA NVENC, AMD AMF, or Software.",
+            result.Errors
+        );
+    }
+
+    [Fact]
+    public void RejectsEntireSettingsObjectWhenCalibrationResultProfileIsInvalid()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                EncoderCalibration = new EncoderCalibrationSettings
+                {
+                    Results =
+                    [
+                        new EncoderCalibrationResult
+                        {
+                            Codec = VideoCodec.H264,
+                            Provider = (VideoEncoderProvider)999,
+                        },
+                    ],
+                },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains(
+            "Encoder calibration result encoder must be NVIDIA NVENC, AMD AMF, or Software.",
+            result.Errors
+        );
     }
 
     [Fact]

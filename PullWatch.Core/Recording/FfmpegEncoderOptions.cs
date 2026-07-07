@@ -60,16 +60,6 @@ internal static class FfmpegEncoderOptionsFactory
         new() { Codec = VideoCodec.H264, Provider = VideoEncoderProvider.Software },
     ];
 
-    private static readonly IReadOnlyList<VideoProfileSelection> SelectionPriority =
-    [
-        new() { Codec = VideoCodec.H265, Provider = VideoEncoderProvider.NvidiaNvenc },
-        new() { Codec = VideoCodec.H265, Provider = VideoEncoderProvider.AmdAmf },
-        new() { Codec = VideoCodec.H264, Provider = VideoEncoderProvider.NvidiaNvenc },
-        new() { Codec = VideoCodec.H264, Provider = VideoEncoderProvider.AmdAmf },
-        new() { Codec = VideoCodec.H264, Provider = VideoEncoderProvider.Software },
-        new() { Codec = VideoCodec.H265, Provider = VideoEncoderProvider.Software },
-    ];
-
     public static IReadOnlyList<string> GetCandidateEncoderNames(VideoCodec codec)
     {
         return GetProfiles(codec).Select(profile => profile.EncoderName).ToArray();
@@ -80,27 +70,21 @@ internal static class FfmpegEncoderOptionsFactory
         return CalibrationOrder.Select(GetProfile).ToArray();
     }
 
-    public static IReadOnlyList<FfmpegVideoEncoderProfile> GetSelectionPriorityProfiles()
-    {
-        return SelectionPriority.Select(GetProfile).ToArray();
-    }
-
     public static VideoProfileSelection? SelectBestProfile(
         IEnumerable<VideoEncoderTestResult> results
     )
     {
         ArgumentNullException.ThrowIfNull(results);
 
-        var passingProfiles = results
-            .Where(result => result.IsAvailable)
-            .Select(result => new VideoProfileSelection
-            {
-                Codec = result.Codec,
-                Provider = result.Provider,
-            })
-            .ToHashSet();
-
-        return SelectionPriority.FirstOrDefault(passingProfiles.Contains);
+        return VideoProfileSelectionPolicy.SelectBestPassingProfile(
+            results
+                .Where(result => result.IsAvailable)
+                .Select(result => new VideoProfileSelection
+                {
+                    Codec = result.Codec,
+                    Provider = result.Provider,
+                })
+        );
     }
 
     public static FfmpegVideoEncoderOptions CreateVideoEncoderOptions(
@@ -112,22 +96,27 @@ internal static class FfmpegEncoderOptionsFactory
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(capabilities);
 
+        var selectedProfile =
+            settings.Video.SelectedProfile
+            ?? throw new InvalidOperationException(
+                "Video encoding must be calibrated before recording."
+            );
         var bitrate = VideoBitrateCalculator.CalculateBitrate(
             outputSize,
             settings.Video.FrameRate,
             settings.Video.Quality,
-            settings.Video.Codec
+            selectedProfile.Codec
         );
         var profile =
-            GetCandidateProfiles(settings.Video.Codec, settings.Video.Encoder)
+            GetCandidateProfiles(selectedProfile.Codec, selectedProfile.Provider)
                 .FirstOrDefault(profile => capabilities.Contains(profile.EncoderName))
             ?? throw CreateNoSupportedEncoderException(
-                settings.Video.Codec,
-                settings.Video.Encoder
+                selectedProfile.Codec,
+                selectedProfile.Provider
             );
 
         return new FfmpegVideoEncoderOptions(
-            settings.Video.Codec,
+            selectedProfile.Codec,
             profile.Provider,
             profile.DisplayName,
             profile.EncoderName,
@@ -203,31 +192,14 @@ internal static class FfmpegEncoderOptionsFactory
         VideoEncoderProvider provider
     )
     {
-        var codecName = codec switch
-        {
-            VideoCodec.H264 => "H.264",
-            VideoCodec.H265 => "H.265",
-            _ => codec.ToString(),
-        };
         var candidates = string.Join(
             ", ",
             GetCandidateProfiles(codec, provider).Select(profile => profile.EncoderName)
         );
 
         return new InvalidOperationException(
-            $"The selected FFmpeg encoder {GetProviderDisplayName(provider)} is not usable for {codecName}. Install an FFmpeg build and driver stack that supports: {candidates}, or choose another video encoder in settings."
+            $"The selected FFmpeg encoder {VideoProfileFormatter.FormatProviderName(provider)} is not usable for {VideoProfileFormatter.FormatCodecName(codec)}. Install an FFmpeg build and driver stack that supports: {candidates}, or choose another video encoder in settings."
         );
-    }
-
-    private static string GetProviderDisplayName(VideoEncoderProvider provider)
-    {
-        return provider switch
-        {
-            VideoEncoderProvider.NvidiaNvenc => "NVIDIA NVENC",
-            VideoEncoderProvider.AmdAmf => "AMD AMF",
-            VideoEncoderProvider.Software => "Software",
-            _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null),
-        };
     }
 
     private static int CalculateMaxRate(int bitrate)

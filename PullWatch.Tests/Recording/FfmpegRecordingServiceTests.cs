@@ -256,6 +256,14 @@ public sealed class FfmpegRecordingServiceTests
     {
         var settings = new PullWatchSettings
         {
+            Video = new VideoSettings
+            {
+                SelectedProfile = new VideoProfileSelection
+                {
+                    Codec = VideoCodec.H264,
+                    Provider = VideoEncoderProvider.Software,
+                },
+            },
             Audio = new AudioSettings { CaptureSystemAudio = true },
         };
         var captureSize = new VideoCaptureSize(1920, 1080);
@@ -339,13 +347,19 @@ public sealed class FfmpegRecordingServiceTests
                 VideoCodec.H264,
                 VideoEncoderProvider.NvidiaNvenc,
                 "h264_nvenc",
-                "ok"
+                "ok",
+                1920,
+                1080,
+                2.0
             ),
             VideoEncoderTestResult.Available(
                 VideoCodec.H265,
                 VideoEncoderProvider.NvidiaNvenc,
                 "hevc_nvenc",
-                "ok"
+                "ok",
+                1920,
+                1080,
+                2.0
             ),
         ]);
 
@@ -367,13 +381,19 @@ public sealed class FfmpegRecordingServiceTests
                 VideoCodec.H265,
                 VideoEncoderProvider.Software,
                 "libx265",
-                "ok"
+                "ok",
+                1920,
+                1080,
+                2.0
             ),
             VideoEncoderTestResult.Available(
                 VideoCodec.H264,
                 VideoEncoderProvider.Software,
                 "libx264",
-                "ok"
+                "ok",
+                1920,
+                1080,
+                2.0
             ),
         ]);
 
@@ -484,8 +504,11 @@ public sealed class FfmpegRecordingServiceTests
         {
             Video = new VideoSettings
             {
-                Codec = codec,
-                Encoder = encoderProvider,
+                SelectedProfile = new VideoProfileSelection
+                {
+                    Codec = codec,
+                    Provider = encoderProvider,
+                },
                 Quality = quality,
                 FrameRate = VideoFrameRates.High,
                 Scaling = scaling,

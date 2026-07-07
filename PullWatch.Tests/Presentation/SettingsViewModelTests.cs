@@ -15,32 +15,83 @@ public sealed class SettingsViewModelTests
             }
         );
 
-        Assert.Equal(VideoCodec.H264, viewModel.SelectedVideoCodec);
+        Assert.Null(viewModel.SelectedVideoProfile);
+        Assert.Equal("Not tested", viewModel.VideoEncodingSummary);
+        Assert.Equal(
+            "PullWatch needs to test video encoding before recording.",
+            viewModel.VideoEncodingStatus
+        );
+        Assert.Equal("Test video encoding", viewModel.TestVideoEncodingButtonText);
         Assert.Equal(VideoQuality.Balanced, viewModel.SelectedVideoQuality);
         Assert.Equal(VideoFrameRates.High, viewModel.SelectedFrameRate);
         Assert.Equal(VideoScaling.Optimized, viewModel.SelectedVideoScaling);
         Assert.Contains("1920x1080", viewModel.EstimatedRecordingSize);
 
-        viewModel.SelectedVideoCodec = VideoCodec.H265;
         viewModel.SelectedVideoQuality = VideoQuality.High;
         viewModel.SelectedFrameRate = VideoFrameRates.Standard;
         viewModel.SelectedVideoScaling = VideoScaling.Original;
 
         await WaitForAsync(() =>
             saves.Any(save =>
-                save.Video.Codec == VideoCodec.H265
-                && save.Video.Quality == VideoQuality.High
+                save.Video.Quality == VideoQuality.High
                 && save.Video.FrameRate == VideoFrameRates.Standard
                 && save.Video.Scaling == VideoScaling.Original
             )
         );
 
         var saved = saves.Last();
-        Assert.Equal(VideoCodec.H265, saved.Video.Codec);
+        Assert.Null(saved.Video.SelectedProfile);
         Assert.Equal(VideoQuality.High, saved.Video.Quality);
         Assert.Equal(VideoFrameRates.Standard, saved.Video.FrameRate);
         Assert.Equal(VideoScaling.Original, saved.Video.Scaling);
         Assert.Equal("Settings saved.", viewModel.SaveMessage);
+    }
+
+    [Fact]
+    public async Task TestVideoEncodingCommandRunsConfiguredAction()
+    {
+        var testStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var testCompleted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            testVideoEncoding: async () =>
+            {
+                testStarted.SetResult();
+                await testCompleted.Task;
+            }
+        );
+
+        var testTask = viewModel.TestVideoEncodingAsync();
+        await testStarted.Task;
+
+        Assert.True(viewModel.IsTestingVideoEncoding);
+        Assert.False(viewModel.CanTestVideoEncoding);
+        Assert.Equal("Testing video encoding...", viewModel.TestVideoEncodingButtonText);
+
+        testCompleted.SetResult();
+        await testTask;
+
+        Assert.False(viewModel.IsTestingVideoEncoding);
+        Assert.True(viewModel.CanTestVideoEncoding);
+        Assert.Equal("Test video encoding", viewModel.TestVideoEncodingButtonText);
+    }
+
+    [Fact]
+    public async Task TestVideoEncodingCommandReportsFailure()
+    {
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            testVideoEncoding: () => throw new InvalidOperationException("FFmpeg is missing.")
+        );
+
+        await viewModel.TestVideoEncodingAsync();
+
+        Assert.True(viewModel.IsSaveError);
+        Assert.Equal("Video encoding test failed: FFmpeg is missing.", viewModel.SaveMessage);
     }
 
     [Fact]
@@ -499,11 +550,32 @@ public sealed class SettingsViewModelTests
         Assert.Contains("90 MB", viewModel.EstimatedRecordingSize);
         Assert.Contains("2560x1440", viewModel.EstimatedRecordingSize);
 
-        viewModel.SelectedVideoCodec = VideoCodec.H265;
+        var h265ViewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                new PullWatchSettings
+                {
+                    RecordingsDirectory = Path.Combine(
+                        Path.GetTempPath(),
+                        "PullWatchViewModelTests"
+                    ),
+                    Video = new VideoSettings
+                    {
+                        SelectedProfile = Profile(
+                            VideoCodec.H265,
+                            VideoEncoderProvider.NvidiaNvenc
+                        ),
+                        FrameRate = VideoFrameRates.Standard,
+                        Scaling = VideoScaling.Original,
+                    },
+                }
+            ),
+            estimateCaptureSize: new VideoCaptureSize(2560, 1440)
+        );
 
-        Assert.Contains("50 MB", viewModel.EstimatedRecordingSize);
-        Assert.Contains("H.265", viewModel.EstimatedRecordingSize);
-        Assert.Contains("7 Mbps target", viewModel.EstimatedRecordingSize);
+        Assert.Contains("50 MB", h265ViewModel.EstimatedRecordingSize);
+        Assert.Contains("H.265", h265ViewModel.EstimatedRecordingSize);
+        Assert.Contains("7 Mbps target", h265ViewModel.EstimatedRecordingSize);
     }
 
     [Fact]
@@ -514,10 +586,6 @@ public sealed class SettingsViewModelTests
             estimateCaptureSize: new VideoCaptureSize(2560, 1440)
         );
 
-        Assert.Equal(
-            ["H.264 / AVC", "H.265 / HEVC"],
-            viewModel.VideoCodecOptions.Select(option => option.Label)
-        );
         Assert.Equal(
             ["Compact", "Balanced", "High"],
             viewModel.VideoQualityOptions.Select(option => option.Label)
@@ -792,6 +860,7 @@ public sealed class SettingsViewModelTests
         Func<PullWatchSettings, Task<SettingsSaveResult>>? save = null,
         VideoCaptureSize? estimateCaptureSize = null,
         ISettingsDialogs? dialogs = null,
+        Func<Task>? testVideoEncoding = null,
         IWindowsStartupShortcut? windowsStartupShortcut = null,
         RecordingStorageStatus? initialRecordingStorageStatus = null,
         NotificationCenterViewModel? notifications = null,
@@ -802,12 +871,13 @@ public sealed class SettingsViewModelTests
             status,
             settings => save?.Invoke(settings) ?? Saved(settings),
             dialogs ?? new FakeSettingsDialogs(),
-            () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080),
-            windowsStartupShortcut,
-            initialRecordingStorageStatus,
-            notifications,
-            ImmediateUiDispatcher.Instance,
-            settingsSuccessNotificationDuration
+            getEstimateCaptureSize: () => estimateCaptureSize ?? new VideoCaptureSize(1920, 1080),
+            testVideoEncoding: testVideoEncoding,
+            windowsStartupShortcut: windowsStartupShortcut,
+            initialRecordingStorageStatus: initialRecordingStorageStatus,
+            notifications: notifications,
+            notificationDispatcher: ImmediateUiDispatcher.Instance,
+            settingsSuccessNotificationDuration: settingsSuccessNotificationDuration
         );
     }
 
@@ -834,6 +904,11 @@ public sealed class SettingsViewModelTests
             new CombatLogReaderStatus(CombatLogReaderState.WaitingForCombatLog, null, null, null),
             new WowProcessStatus(WowProcessState.WaitingForProcess, null, null, null, null)
         );
+    }
+
+    private static VideoProfileSelection Profile(VideoCodec codec, VideoEncoderProvider provider)
+    {
+        return new VideoProfileSelection { Codec = codec, Provider = provider };
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
