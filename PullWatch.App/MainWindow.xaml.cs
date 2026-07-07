@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
@@ -18,6 +19,7 @@ public partial class MainWindow : Window
         ApplicationController controller,
         ApplicationLifetimeCoordinator lifetime,
         InMemoryLogProvider logs,
+        ILogger<FfmpegEncoderTestService> encoderTestLogger,
         IWindowsStartupShortcut windowsStartupShortcut,
         IApplicationUpdater applicationUpdater,
         bool showSettingsOnStartup
@@ -26,7 +28,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         _controller = controller;
         _lifetime = lifetime;
-        _encoderTestService = new FfmpegEncoderTestService(GetWindowHandleForEncoderTest);
+        _encoderTestService = new FfmpegEncoderTestService(
+            GetWindowHandleForEncoderTest,
+            encoderTestLogger
+        );
         _viewModel = new MainWindowViewModel(
             controller,
             new WpfUiDispatcher(Dispatcher),

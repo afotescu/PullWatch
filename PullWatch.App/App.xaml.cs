@@ -96,6 +96,7 @@ public partial class App : Application
                 _controller,
                 _lifetime,
                 _logs,
+                _loggerFactory.CreateLogger<FfmpegEncoderTestService>(),
                 windowsStartupShortcut,
                 applicationUpdater,
                 _controller.StartedWithCreatedSettingsFile

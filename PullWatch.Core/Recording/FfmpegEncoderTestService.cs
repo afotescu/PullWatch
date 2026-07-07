@@ -1,10 +1,14 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
-public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
+public sealed class FfmpegEncoderTestService(
+    Func<nint> getWindowHandle,
+    ILogger<FfmpegEncoderTestService> logger
+)
 {
     private static readonly TimeSpan TestDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(12);
@@ -25,9 +29,13 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        var testTimestamp = Stopwatch.GetTimestamp();
         var windowHandle = getWindowHandle();
         if (windowHandle == nint.Zero)
         {
+            logger.LogWarning(
+                "FFmpeg video encoder test could not start because no capture window was available"
+            );
             throw new InvalidOperationException("Could not find the PullWatch window to capture.");
         }
 
@@ -40,19 +48,37 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
         var results = new List<VideoEncoderTestResult>();
         var profiles = GetTestProfiles();
 
-        for (var profileIndex = 0; profileIndex < profiles.Count; profileIndex++)
+        logger.LogInformation(
+            "Starting FFmpeg video encoder test with {ProfileCount} profiles, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, FFmpeg path {FfmpegPath}",
+            profiles.Count,
+            captureSize.Width,
+            captureSize.Height,
+            outputSize.Width,
+            outputSize.Height,
+            ffmpegPath
+        );
+
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var profile = profiles[profileIndex];
-            progress?.Report(
-                new VideoEncoderTestProgress(
-                    profileIndex,
+            for (var profileIndex = 0; profileIndex < profiles.Count; profileIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var profile = profiles[profileIndex];
+                logger.LogInformation(
+                    "Testing FFmpeg video encoder profile {CurrentProfile}/{TotalProfiles}: {VideoEncoder} ({VideoEncoderName})",
+                    profileIndex + 1,
                     profiles.Count,
-                    ToProfileSelection(profile)
-                )
-            );
-            results.Add(
-                await TestProviderAsync(
+                    profile.DisplayName,
+                    profile.EncoderName
+                );
+                progress?.Report(
+                    new VideoEncoderTestProgress(
+                        profileIndex,
+                        profiles.Count,
+                        ToProfileSelection(profile)
+                    )
+                );
+                var result = await TestProviderAsync(
                     ffmpegPath,
                     windowHandle,
                     settings,
@@ -60,8 +86,18 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
                     captureSize,
                     outputSize,
                     cancellationToken
-                )
+                );
+                LogTestResult(profile, result);
+                results.Add(result);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation(
+                "FFmpeg video encoder test was canceled after {ElapsedMilliseconds:F1} ms",
+                Stopwatch.GetElapsedTime(testTimestamp).TotalMilliseconds
             );
+            throw;
         }
 
         if (profiles.Count > 0)
@@ -75,12 +111,41 @@ public sealed class FfmpegEncoderTestService(Func<nint> getWindowHandle)
             );
         }
 
+        var passedCount = results.Count(result => result.IsAvailable);
+        logger.LogInformation(
+            "Finished FFmpeg video encoder test in {ElapsedMilliseconds:F1} ms: {PassedProfileCount}/{ProfileCount} profiles passed",
+            Stopwatch.GetElapsedTime(testTimestamp).TotalMilliseconds,
+            passedCount,
+            profiles.Count
+        );
+
         return results;
     }
 
     private static VideoProfileSelection ToProfileSelection(FfmpegVideoEncoderProfile profile)
     {
         return new VideoProfileSelection { Codec = profile.Codec, Provider = profile.Provider };
+    }
+
+    private void LogTestResult(FfmpegVideoEncoderProfile profile, VideoEncoderTestResult result)
+    {
+        if (result.IsAvailable)
+        {
+            logger.LogInformation(
+                "FFmpeg video encoder profile passed: {VideoEncoder} ({VideoEncoderName}); {ResultMessage}",
+                profile.DisplayName,
+                result.EncoderName ?? profile.EncoderName,
+                result.Message
+            );
+            return;
+        }
+
+        logger.LogInformation(
+            "FFmpeg video encoder profile unavailable: {VideoEncoder} ({VideoEncoderName}); {ResultMessage}",
+            profile.DisplayName,
+            result.EncoderName ?? profile.EncoderName,
+            result.Message
+        );
     }
 
     private static async Task<VideoEncoderTestResult> TestProviderAsync(
