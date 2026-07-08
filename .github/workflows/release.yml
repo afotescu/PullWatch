@@ -124,7 +124,8 @@ jobs:
             --outputDir $releaseDir `
             --icon .\PullWatch.App\Assets\favicon.ico `
             --shortcuts Desktop,StartMenuRoot `
-            --runtime win-x64
+            --runtime win-x64 `
+            --noPortable
 
           $releaseFiles = @(
             Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name
@@ -132,6 +133,16 @@ jobs:
 
           if ($releaseFiles.Count -eq 0) {
             throw "Velopack did not produce any release files in $releaseDir"
+          }
+
+          $portableFiles = @(
+            $releaseFiles | Where-Object {
+              $_.Name -match "(?i)(portable|\.zip$)"
+            }
+          )
+          if ($portableFiles.Count -gt 0) {
+            $portableNames = $portableFiles.Name -join ", "
+            throw "Velopack produced unexpected portable release file(s): $portableNames"
           }
 
           $checksumPath = Join-Path $releaseDir "PullWatch-$env:RELEASE_TAG-win-x64.sha256"
