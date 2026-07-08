@@ -8,6 +8,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Assert-NativeCommandSucceeded {
+    param(
+        [string]$FailureMessage
+    )
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FailureMessage Exit code: $LASTEXITCODE."
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot "PullWatch.App/PullWatch.App.csproj"
 $publishPath = Join-Path $repoRoot $OutputPath
@@ -105,14 +115,10 @@ function Add-FfmpegBundle {
 
     $bundledFfmpegPath = Join-Path $destinationPath "ffmpeg.exe"
     $ffmpegVersion = & $bundledFfmpegPath -version 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Bundled ffmpeg.exe could not run."
-    }
+    Assert-NativeCommandSucceeded "Bundled ffmpeg.exe could not run."
 
     $ffmpegFilters = & $bundledFfmpegPath -hide_banner -filters 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Bundled ffmpeg.exe could not list filters."
-    }
+    Assert-NativeCommandSucceeded "Bundled ffmpeg.exe could not list filters."
 
     if (!($ffmpegFilters | Select-String -SimpleMatch "gfxcapture")) {
         throw "Bundled ffmpeg.exe does not include the required gfxcapture filter."
@@ -148,6 +154,7 @@ if (Test-Path -LiteralPath $publishPath) {
 dotnet clean $projectPath `
     -c Release `
     -p:Platform=x64
+Assert-NativeCommandSucceeded "dotnet clean failed."
 
 $publishProperties = @("-p:PublishProfile=win-x64")
 
@@ -157,6 +164,7 @@ if (![string]::IsNullOrWhiteSpace($Version)) {
 }
 
 dotnet publish $projectPath @publishProperties -o $publishPath
+Assert-NativeCommandSucceeded "dotnet publish failed."
 
 $expectedExe = Join-Path $publishPath "PullWatch.exe"
 $oldExe = Join-Path $publishPath "PullWatch.App.exe"

@@ -56,7 +56,7 @@ jobs:
           }
 
           $version = $tag.Substring(1)
-          if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$') {
             throw "Release tag must look like v0.1.0 or v0.1.0-beta.1. Received: $tag"
           }
 
@@ -126,6 +126,9 @@ jobs:
             --shortcuts Desktop,StartMenuRoot `
             --runtime win-x64 `
             --noPortable
+          if ($LASTEXITCODE -ne 0) {
+            throw "Velopack pack failed with exit code $LASTEXITCODE."
+          }
 
           $releaseFiles = @(
             Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name
@@ -133,6 +136,30 @@ jobs:
 
           if ($releaseFiles.Count -eq 0) {
             throw "Velopack did not produce any release files in $releaseDir"
+          }
+
+          $setupFile = Join-Path $releaseDir "PullWatch.Desktop-win-Setup.exe"
+          if (!(Test-Path -LiteralPath $setupFile)) {
+            throw "Velopack did not produce the expected setup executable: $setupFile"
+          }
+
+          $fullPackages = @(
+            $releaseFiles | Where-Object {
+              $_.Name -match "^PullWatch\.Desktop-.+-full\.nupkg$"
+            }
+          )
+          if ($fullPackages.Count -ne 1) {
+            throw "Velopack should produce exactly one full package, but found $($fullPackages.Count)."
+          }
+
+          $releasesFile = Join-Path $releaseDir "RELEASES"
+          if (!(Test-Path -LiteralPath $releasesFile)) {
+            throw "Velopack did not produce the RELEASES file: $releasesFile"
+          }
+
+          $releasesContent = Get-Content -LiteralPath $releasesFile -Raw
+          if ([string]::IsNullOrWhiteSpace($releasesContent)) {
+            throw "Velopack produced an empty RELEASES file."
           }
 
           $portableFiles = @(
