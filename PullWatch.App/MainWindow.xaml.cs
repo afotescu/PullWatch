@@ -188,6 +188,7 @@ public partial class MainWindow : Window
                     TestedAt = DateTimeOffset.UtcNow,
                     FfmpegPath = environment.FfmpegPath,
                     FfmpegVersion = environment.FfmpegVersion,
+                    FfmpegSha256 = environment.FfmpegSha256,
                     Results = calibrationResults,
                 },
             },

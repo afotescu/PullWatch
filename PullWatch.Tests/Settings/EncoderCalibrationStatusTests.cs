@@ -4,7 +4,8 @@ public sealed class EncoderCalibrationStatusTests
 {
     private static readonly EncoderCalibrationEnvironment CurrentEnvironment = new(
         @"C:\ffmpeg\bin\ffmpeg.exe",
-        "ffmpeg version test"
+        "ffmpeg version test",
+        "ABC123"
     );
 
     [Fact]
@@ -48,6 +49,22 @@ public sealed class EncoderCalibrationStatusTests
     public void StaleWhenFfmpegPathChanges()
     {
         var status = EncoderCalibrationStatusEvaluator.Evaluate(
+            CreateSettings(ffmpegSha256: null),
+            CurrentEnvironment with
+            {
+                FfmpegPath = @"D:\Tools\ffmpeg.exe",
+                FfmpegSha256 = null,
+            }
+        );
+
+        Assert.Equal(EncoderCalibrationStatusKind.Stale, status.Kind);
+        Assert.Contains("FFmpeg path", status.Message);
+    }
+
+    [Fact]
+    public void ValidWhenFfmpegPathChangesButExecutableFingerprintMatches()
+    {
+        var status = EncoderCalibrationStatusEvaluator.Evaluate(
             CreateSettings(),
             CurrentEnvironment with
             {
@@ -55,8 +72,22 @@ public sealed class EncoderCalibrationStatusTests
             }
         );
 
+        Assert.True(status.IsValid);
+    }
+
+    [Fact]
+    public void StaleWhenFfmpegExecutableFingerprintChanges()
+    {
+        var status = EncoderCalibrationStatusEvaluator.Evaluate(
+            CreateSettings(),
+            CurrentEnvironment with
+            {
+                FfmpegSha256 = "DEF456",
+            }
+        );
+
         Assert.Equal(EncoderCalibrationStatusKind.Stale, status.Kind);
-        Assert.Contains("FFmpeg path", status.Message);
+        Assert.Contains("FFmpeg executable", status.Message);
     }
 
     [Fact]
@@ -120,7 +151,8 @@ public sealed class EncoderCalibrationStatusTests
         VideoProfileSelection? selectedProfile = null,
         EncoderCalibrationResult? result = null,
         int calibrationVersion = EncoderCalibrationSettings.CurrentVersion,
-        bool includeSelectedProfile = true
+        bool includeSelectedProfile = true,
+        string? ffmpegSha256 = "ABC123"
     )
     {
         selectedProfile = includeSelectedProfile
@@ -141,6 +173,7 @@ public sealed class EncoderCalibrationStatusTests
                 TestedAt = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero),
                 FfmpegPath = CurrentEnvironment.FfmpegPath,
                 FfmpegVersion = CurrentEnvironment.FfmpegVersion,
+                FfmpegSha256 = ffmpegSha256,
                 Results = [result],
             },
         };

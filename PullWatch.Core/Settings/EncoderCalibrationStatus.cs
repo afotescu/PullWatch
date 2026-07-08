@@ -7,7 +7,11 @@ public enum EncoderCalibrationStatusKind
     Stale,
 }
 
-public sealed record EncoderCalibrationEnvironment(string FfmpegPath, string? FfmpegVersion);
+public sealed record EncoderCalibrationEnvironment(
+    string FfmpegPath,
+    string? FfmpegVersion,
+    string? FfmpegSha256 = null
+);
 
 public sealed record EncoderCalibrationStatus(EncoderCalibrationStatusKind Kind, string Message)
 {
@@ -42,7 +46,17 @@ public static class EncoderCalibrationStatusEvaluator
             return Stale("Video encoding needs to be retested after an app update.");
         }
 
-        if (!PathsEqual(calibration.FfmpegPath, environment.FfmpegPath))
+        if (HasExecutableFingerprintChanged(calibration, environment))
+        {
+            return Stale(
+                "Video encoding needs to be retested because the FFmpeg executable changed."
+            );
+        }
+
+        if (
+            !HasMatchingExecutableFingerprint(calibration, environment)
+            && !PathsEqual(calibration.FfmpegPath, environment.FfmpegPath)
+        )
         {
             return Stale("Video encoding needs to be retested because the FFmpeg path changed.");
         }
@@ -85,5 +99,31 @@ public static class EncoderCalibrationStatusEvaluator
     private static bool PathsEqual(string? left, string right)
     {
         return StringComparer.OrdinalIgnoreCase.Equals(left, right);
+    }
+
+    private static bool HasMatchingExecutableFingerprint(
+        EncoderCalibrationSettings calibration,
+        EncoderCalibrationEnvironment environment
+    )
+    {
+        return !string.IsNullOrWhiteSpace(calibration.FfmpegSha256)
+            && !string.IsNullOrWhiteSpace(environment.FfmpegSha256)
+            && StringComparer.OrdinalIgnoreCase.Equals(
+                calibration.FfmpegSha256,
+                environment.FfmpegSha256
+            );
+    }
+
+    private static bool HasExecutableFingerprintChanged(
+        EncoderCalibrationSettings calibration,
+        EncoderCalibrationEnvironment environment
+    )
+    {
+        return !string.IsNullOrWhiteSpace(calibration.FfmpegSha256)
+            && !string.IsNullOrWhiteSpace(environment.FfmpegSha256)
+            && !StringComparer.OrdinalIgnoreCase.Equals(
+                calibration.FfmpegSha256,
+                environment.FfmpegSha256
+            );
     }
 }

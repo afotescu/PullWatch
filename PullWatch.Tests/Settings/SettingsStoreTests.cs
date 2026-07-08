@@ -55,6 +55,7 @@ public sealed class SettingsStoreTests
                 TestedAt = new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero),
                 FfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe",
                 FfmpegVersion = "ffmpeg version test",
+                FfmpegSha256 = "ABC123",
                 FfprobePath = @"C:\ffmpeg\bin\ffprobe.exe",
                 FfprobeVersion = "ffprobe version test",
                 Results =

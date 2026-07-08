@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace PullWatch;
 
@@ -35,7 +36,8 @@ public static class FfmpegToolPaths
 
         return new EncoderCalibrationEnvironment(
             ffmpegPath,
-            await TryGetToolVersionAsync(ffmpegPath, cancellationToken)
+            await TryGetToolVersionAsync(ffmpegPath, cancellationToken),
+            await TryGetToolSha256Async(ffmpegPath, cancellationToken)
         );
     }
 
@@ -126,6 +128,34 @@ public static class FfmpegToolPaths
         }
 
         return null;
+    }
+
+    private static async Task<string?> TryGetToolSha256Async(
+        string toolPath,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (!File.Exists(toolPath))
+            {
+                return null;
+            }
+
+            await using var stream = new FileStream(
+                toolPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
+            var hash = await SHA256.HashDataAsync(stream, cancellationToken);
+            return Convert.ToHexString(hash);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static void TryKill(Process process)
