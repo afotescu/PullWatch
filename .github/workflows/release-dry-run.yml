@@ -1,0 +1,188 @@
+name: Release Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp into the dry-run build
+        required: false
+        default: 0.0.0-dryrun.1
+        type: string
+      bundle_ffmpeg:
+        description: Bundle FFmpeg in the dry-run artifact
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIGURATION: Release
+  PLATFORM: x64
+  PUBLISH_DIR: artifacts/publish/win-x64-dry-run
+  VELOPACK_VERSION: 1.2.0
+  VELOPACK_RELEASE_DIR: artifacts/velopack/dry-run
+  FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip
+  FFMPEG_SHA256: db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec
+
+jobs:
+  dry-run:
+    name: Build and package release dry run
+    runs-on: windows-latest
+
+    steps:
+      - name: Resolve dry-run version
+        id: dry-run-version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          $version = $env:INPUT_VERSION
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = "0.0.0-dryrun.1"
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$') {
+            throw "Dry-run version must look like 0.1.0 or 0.1.0-rc.1. Received: $version"
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore PullWatch.sln --locked-mode -p:Platform=${{ env.PLATFORM }}
+
+      - name: Build
+        run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }} -p:Version=${{ steps.dry-run-version.outputs.version }} -p:InformationalVersion=${{ steps.dry-run-version.outputs.version }}
+
+      - name: Test
+        run: dotnet test PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-build -p:Platform=${{ env.PLATFORM }}
+
+      - name: Publish
+        shell: pwsh
+        env:
+          DRY_RUN_VERSION: ${{ steps.dry-run-version.outputs.version }}
+          BUNDLE_FFMPEG: ${{ github.event.inputs.bundle_ffmpeg }}
+        run: |
+          $arguments = @(
+            "-OutputPath",
+            $env:PUBLISH_DIR,
+            "-Version",
+            $env:DRY_RUN_VERSION,
+            "-FfmpegDownloadUrl",
+            $env:FFMPEG_DOWNLOAD_URL,
+            "-FfmpegSha256",
+            $env:FFMPEG_SHA256
+          )
+
+          $bundleFfmpeg = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:BUNDLE_FFMPEG,
+            "true"
+          )
+          if (!$bundleFfmpeg) {
+            $arguments += "-SkipFfmpegBundle"
+          }
+
+          ./scripts/publish-win-x64.ps1 @arguments
+
+      - name: Install Velopack CLI
+        run: dotnet tool install --tool-path .tools vpk --version ${{ env.VELOPACK_VERSION }}
+
+      - name: Package Velopack release
+        id: package
+        shell: pwsh
+        env:
+          DRY_RUN_VERSION: ${{ steps.dry-run-version.outputs.version }}
+        run: |
+          $releaseDir = $env:VELOPACK_RELEASE_DIR
+
+          if (Test-Path -LiteralPath $releaseDir) {
+            Remove-Item -LiteralPath $releaseDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          .\.tools\vpk.exe pack `
+            --packId PullWatch.Desktop `
+            --packTitle PullWatch `
+            --packVersion $env:DRY_RUN_VERSION `
+            --packDir $env:PUBLISH_DIR `
+            --mainExe PullWatch.exe `
+            --outputDir $releaseDir `
+            --icon .\PullWatch.App\Assets\favicon.ico `
+            --shortcuts Desktop,StartMenuRoot `
+            --runtime win-x64 `
+            --noPortable
+          if ($LASTEXITCODE -ne 0) {
+            throw "Velopack pack failed with exit code $LASTEXITCODE."
+          }
+
+          $releaseFiles = @(
+            Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name
+          )
+
+          if ($releaseFiles.Count -eq 0) {
+            throw "Velopack did not produce any release files in $releaseDir"
+          }
+
+          $setupFile = Join-Path $releaseDir "PullWatch.Desktop-win-Setup.exe"
+          if (!(Test-Path -LiteralPath $setupFile)) {
+            throw "Velopack did not produce the expected setup executable: $setupFile"
+          }
+
+          $fullPackages = @(
+            $releaseFiles | Where-Object {
+              $_.Name -match "^PullWatch\.Desktop-.+-full\.nupkg$"
+            }
+          )
+          if ($fullPackages.Count -ne 1) {
+            throw "Velopack should produce exactly one full package, but found $($fullPackages.Count)."
+          }
+
+          $releasesFile = Join-Path $releaseDir "RELEASES"
+          if (!(Test-Path -LiteralPath $releasesFile)) {
+            throw "Velopack did not produce the RELEASES file: $releasesFile"
+          }
+
+          $releasesContent = Get-Content -LiteralPath $releasesFile -Raw
+          if ([string]::IsNullOrWhiteSpace($releasesContent)) {
+            throw "Velopack produced an empty RELEASES file."
+          }
+
+          $portableFiles = @(
+            $releaseFiles | Where-Object {
+              $_.Name -match "(?i)(portable|\.zip$)"
+            }
+          )
+          if ($portableFiles.Count -gt 0) {
+            $portableNames = $portableFiles.Name -join ", "
+            throw "Velopack produced unexpected portable release file(s): $portableNames"
+          }
+
+          $checksumPath = Join-Path $releaseDir "PullWatch-dry-run-$env:DRY_RUN_VERSION-win-x64.sha256"
+          $checksumLines = $releaseFiles | ForEach-Object {
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
+            "{0}  {1}" -f $hash.Hash.ToLowerInvariant(), $_.Name
+          }
+          Set-Content -LiteralPath $checksumPath -Value $checksumLines -Encoding ASCII
+
+          "release_dir=$releaseDir" >> $env:GITHUB_OUTPUT
+
+      - name: Upload dry-run artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: PullWatch-${{ steps.dry-run-version.outputs.version }}-dry-run-win-x64
+          path: ${{ steps.package.outputs.release_dir }}/*
+          if-no-files-found: error
