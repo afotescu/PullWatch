@@ -1,0 +1,67 @@
+name: Refresh NuGet lock files
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  PLATFORM: x64
+
+jobs:
+  refresh-lock-files:
+    name: Refresh lock files
+    if: >
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/nuget/')
+    runs-on: windows-latest
+
+    permissions:
+      actions: write
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Refresh lock files
+        run: dotnet restore PullWatch.sln --force-evaluate -p:Platform=${{ env.PLATFORM }}
+
+      - name: Commit updated lock files
+        id: commit-lock-files
+        shell: pwsh
+        run: |
+          $lockFilePathspec = ":(glob)**/packages.lock.json"
+          $changes = git status --porcelain -- $lockFilePathspec
+
+          if (-not $changes) {
+            "changed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $lockFilePathspec
+          git commit -m "Update NuGet lock files"
+          git push
+
+          "changed=true" >> $env:GITHUB_OUTPUT
+
+      - name: Run CI for refreshed commit
+        if: steps.commit-lock-files.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: gh workflow run ci.yml --ref "$env:PR_BRANCH"
