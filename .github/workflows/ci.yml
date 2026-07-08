@@ -39,7 +39,7 @@ jobs:
         run: dotnet csharpier check .
 
       - name: Restore
-        run: dotnet restore PullWatch.sln -p:Platform=${{ env.PLATFORM }}
+        run: dotnet restore PullWatch.sln --locked-mode -p:Platform=${{ env.PLATFORM }}
 
       - name: Build
         run: dotnet build PullWatch.sln --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -p:Platform=${{ env.PLATFORM }}

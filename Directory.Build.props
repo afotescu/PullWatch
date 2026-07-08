@@ -5,6 +5,7 @@
     <InformationalVersion Condition="'$(InformationalVersion)' == ''"
       >$(Version)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <PullWatchArtifactsRoot>$(MSBuildThisFileDirectory)artifacts\</PullWatchArtifactsRoot>
     <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\bin\**;$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\artifacts\**;$(PullWatchArtifactsRoot)**</DefaultItemExcludes>
   </PropertyGroup>
