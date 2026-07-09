@@ -164,12 +164,19 @@ if (![string]::IsNullOrWhiteSpace($Version)) {
     $publishProperties += "-p:InformationalVersion=$Version"
 }
 
-$publishArguments = @()
 if ($LockedRestore) {
-    $publishArguments += "--locked-mode"
+    dotnet restore $projectPath `
+        --locked-mode `
+        -p:Platform=x64
+    Assert-NativeCommandSucceeded "dotnet restore failed."
 }
 
+$publishArguments = @()
 $publishArguments += $publishProperties
+if ($LockedRestore) {
+    $publishArguments += "--no-restore"
+}
+
 $publishArguments += @("-o", $publishPath)
 
 dotnet publish $projectPath @publishArguments
