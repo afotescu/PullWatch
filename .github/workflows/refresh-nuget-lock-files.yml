@@ -8,9 +8,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: refresh-lock-files-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
 env:
   DOTNET_VERSION: 10.0.x
   PLATFORM: x64
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 jobs:
   refresh-lock-files:
@@ -20,6 +29,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'dependabot/nuget/')
     runs-on: windows-latest
+    timeout-minutes: 20
 
     permissions:
       actions: write
@@ -35,6 +45,8 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Refresh lock files
         run: dotnet restore PullWatch.sln --force-evaluate -p:Platform=${{ env.PLATFORM }}
