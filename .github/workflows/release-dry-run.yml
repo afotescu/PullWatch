@@ -1,5 +1,5 @@
 name: Release Dry Run
-run-name: Release dry run ${{ github.event.inputs.version || '0.0.0-dryrun.1' }}
+run-name: Release dry run ${{ github.event.inputs.version || '0.0.1-dryrun.1' }}
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       version:
         description: Version to stamp into the dry-run build
         required: false
-        default: 0.0.0-dryrun.1
+        default: 0.0.1-dryrun.1
         type: string
       bundle_ffmpeg:
         description: Bundle FFmpeg in the dry-run artifact
@@ -48,7 +48,7 @@ jobs:
         run: |
           $version = $env:INPUT_VERSION
           if ([string]::IsNullOrWhiteSpace($version)) {
-            $version = "0.0.0-dryrun.1"
+            $version = "0.0.1-dryrun.1"
           }
 
           if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$') {

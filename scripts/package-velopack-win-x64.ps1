@@ -66,6 +66,11 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$') {
     throw "Version must look like 0.1.0 or 0.1.0-rc.1. Received: $Version"
 }
 
+$versionCore = ($Version -split '-', 2)[0]
+if ([version]$versionCore -lt [version]"0.0.1") {
+    throw "Version must be >= 0.0.1 because Velopack rejects lower package versions. Received: $Version"
+}
+
 if ([string]::IsNullOrWhiteSpace($ChecksumFileName) -or
     $ChecksumFileName -ne [System.IO.Path]::GetFileName($ChecksumFileName)) {
     throw "ChecksumFileName must be a file name, not a path."
