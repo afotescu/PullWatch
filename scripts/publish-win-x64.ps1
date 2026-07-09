@@ -19,20 +19,38 @@ function Assert-NativeCommandSucceeded {
     }
 }
 
+function Get-NormalizedFullPath {
+    param(
+        [string]$Path
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $trimmedPath = $fullPath.TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar)
+    $trimmedPath.Replace(
+        [System.IO.Path]::AltDirectorySeparatorChar,
+        [System.IO.Path]::DirectorySeparatorChar)
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot "PullWatch.App/PullWatch.App.csproj"
-$publishPath = Join-Path $repoRoot $OutputPath
-$resolvedPublishPath = [System.IO.Path]::GetFullPath($publishPath)
-$artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "artifacts"))
-$artifactsRootWithSeparator = $artifactsRoot.TrimEnd(
-    [System.IO.Path]::DirectorySeparatorChar,
-    [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+$publishPath = if ([System.IO.Path]::IsPathRooted($OutputPath)) {
+    $OutputPath
+} else {
+    Join-Path $repoRoot $OutputPath
+}
+$resolvedPublishPath = Get-NormalizedFullPath $publishPath
+$artifactsRoot = Get-NormalizedFullPath (Join-Path $repoRoot "artifacts")
+$artifactsRootWithSeparator = $artifactsRoot + [System.IO.Path]::DirectorySeparatorChar
 
 if (!$resolvedPublishPath.StartsWith(
         $artifactsRootWithSeparator,
         [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "OutputPath must resolve under the artifacts directory: $artifactsRoot"
+    throw "OutputPath must resolve under the artifacts directory: $artifactsRoot. Resolved OutputPath: $resolvedPublishPath"
 }
+
+$publishPath = $resolvedPublishPath
 
 function Add-FfmpegBundle {
     param(

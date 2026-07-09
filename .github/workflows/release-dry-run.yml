@@ -85,24 +85,20 @@ jobs:
           DRY_RUN_VERSION: ${{ steps.dry-run-version.outputs.version }}
           BUNDLE_FFMPEG: ${{ github.event.inputs.bundle_ffmpeg }}
         run: |
-          $arguments = @(
-            "-OutputPath",
-            $env:PUBLISH_DIR,
-            "-Version",
-            $env:DRY_RUN_VERSION,
-            "-FfmpegDownloadUrl",
-            $env:FFMPEG_DOWNLOAD_URL,
-            "-FfmpegSha256",
-            $env:FFMPEG_SHA256,
-            "-LockedRestore"
-          )
+          $arguments = @{
+            OutputPath = $env:PUBLISH_DIR
+            Version = $env:DRY_RUN_VERSION
+            FfmpegDownloadUrl = $env:FFMPEG_DOWNLOAD_URL
+            FfmpegSha256 = $env:FFMPEG_SHA256
+            LockedRestore = $true
+          }
 
           $bundleFfmpeg = [System.StringComparer]::OrdinalIgnoreCase.Equals(
             $env:BUNDLE_FFMPEG,
             "true"
           )
           if (!$bundleFfmpeg) {
-            $arguments += "-SkipFfmpegBundle"
+            $arguments.SkipFfmpegBundle = $true
           }
 
           ./scripts/publish-win-x64.ps1 @arguments
