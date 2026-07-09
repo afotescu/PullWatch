@@ -3,6 +3,7 @@ obj/
 artifacts/
 .tools/
 /packages/
+/.nuget/
 riderModule.iml
 /_ReSharper.Caches/
 .idea/
