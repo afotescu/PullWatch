@@ -3,7 +3,8 @@ param(
     [string]$Version,
     [string]$FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
     [string]$FfmpegSha256 = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
-    [switch]$SkipFfmpegBundle
+    [switch]$SkipFfmpegBundle,
+    [switch]$LockedRestore
 )
 
 $ErrorActionPreference = "Stop"
@@ -163,7 +164,15 @@ if (![string]::IsNullOrWhiteSpace($Version)) {
     $publishProperties += "-p:InformationalVersion=$Version"
 }
 
-dotnet publish $projectPath @publishProperties -o $publishPath
+$publishArguments = @()
+if ($LockedRestore) {
+    $publishArguments += "--locked-mode"
+}
+
+$publishArguments += $publishProperties
+$publishArguments += @("-o", $publishPath)
+
+dotnet publish $projectPath @publishArguments
 Assert-NativeCommandSucceeded "dotnet publish failed."
 
 $expectedExe = Join-Path $publishPath "PullWatch.exe"

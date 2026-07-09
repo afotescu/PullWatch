@@ -93,7 +93,8 @@ jobs:
             "-FfmpegDownloadUrl",
             $env:FFMPEG_DOWNLOAD_URL,
             "-FfmpegSha256",
-            $env:FFMPEG_SHA256
+            $env:FFMPEG_SHA256,
+            "-LockedRestore"
           )
 
           $bundleFfmpeg = [System.StringComparer]::OrdinalIgnoreCase.Equals(

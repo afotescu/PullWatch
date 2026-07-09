@@ -111,7 +111,7 @@ jobs:
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
-        run: ./scripts/publish-win-x64.ps1 -OutputPath $env:PUBLISH_DIR -Version $env:RELEASE_VERSION -FfmpegDownloadUrl $env:FFMPEG_DOWNLOAD_URL -FfmpegSha256 $env:FFMPEG_SHA256
+        run: ./scripts/publish-win-x64.ps1 -OutputPath $env:PUBLISH_DIR -Version $env:RELEASE_VERSION -FfmpegDownloadUrl $env:FFMPEG_DOWNLOAD_URL -FfmpegSha256 $env:FFMPEG_SHA256 -LockedRestore
 
       - name: Install Velopack CLI
         run: dotnet tool install --tool-path .tools vpk --version ${{ env.VELOPACK_VERSION }}
