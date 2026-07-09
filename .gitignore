@@ -10,3 +10,4 @@ riderModule.iml
 PullWatch/Tools/ffmpeg/
 *.sln.DotSettings
 *.sln.DotSettings.user
+.vscode
