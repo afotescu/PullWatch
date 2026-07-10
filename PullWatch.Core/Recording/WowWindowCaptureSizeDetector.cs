@@ -9,29 +9,44 @@ public static class WowWindowCaptureSizeDetector
 
     public static bool TryFindWowWindow(out Process wowProcess, out nint windowHandle)
     {
-        foreach (var process in Process.GetProcessesByName(WowProcessName))
-        {
-            try
-            {
-                windowHandle = process.MainWindowHandle;
+        var processes = Process.GetProcessesByName(WowProcessName);
+        Process? selectedProcess = null;
 
-                if (windowHandle != nint.Zero)
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
                 {
-                    wowProcess = process;
-                    return true;
+                    windowHandle = process.MainWindowHandle;
+
+                    if (windowHandle != nint.Zero)
+                    {
+                        selectedProcess = process;
+                        wowProcess = selectedProcess;
+                        return true;
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited while it was being inspected.
                 }
             }
-            catch (InvalidOperationException)
-            {
-                // The process exited while it was being inspected.
-            }
 
-            process.Dispose();
+            wowProcess = null!;
+            windowHandle = nint.Zero;
+            return false;
         }
-
-        wowProcess = null!;
-        windowHandle = nint.Zero;
-        return false;
+        finally
+        {
+            foreach (var process in processes)
+            {
+                if (!ReferenceEquals(process, selectedProcess))
+                {
+                    process.Dispose();
+                }
+            }
+        }
     }
 
     public static bool TryGetCurrentCaptureSize(out VideoCaptureSize captureSize)
