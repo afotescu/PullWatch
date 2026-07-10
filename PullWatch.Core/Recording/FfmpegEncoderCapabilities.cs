@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -117,7 +116,7 @@ internal static class FfmpegEncoderCapabilityDetector
     {
         // Listing encoders only proves that FFmpeg was compiled with the wrapper.
         // Hardware wrappers still need a small initialization probe to catch missing GPUs/drivers.
-        FfmpegProcessResult result;
+        ExternalProcessResult result;
         try
         {
             result = await RunFfmpegAsync(
@@ -156,56 +155,18 @@ internal static class FfmpegEncoderCapabilityDetector
             || encoderName.EndsWith("_amf", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<FfmpegProcessResult> RunFfmpegAsync(
+    private static async Task<ExternalProcessResult> RunFfmpegAsync(
         string ffmpegPath,
         IReadOnlyCollection<string> arguments,
         CancellationToken cancellationToken
     )
     {
-        using var timeoutCancellation = new CancellationTokenSource(ProbeTimeout);
-        using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+        return await ExternalProcessRunner.RunAsync(
+            CreateProbeStartInfo(ffmpegPath, arguments),
+            ProbeTimeout,
             cancellationToken,
-            timeoutCancellation.Token
+            "FFmpeg encoder capability check"
         );
-        using var process = new Process { StartInfo = CreateProbeStartInfo(ffmpegPath, arguments) };
-
-        try
-        {
-            if (!process.Start())
-            {
-                throw new InvalidOperationException("FFmpeg probe did not start.");
-            }
-        }
-        catch (Win32Exception)
-        {
-            throw;
-        }
-
-        var standardOutput = process.StandardOutput.ReadToEndAsync();
-        var standardError = process.StandardError.ReadToEndAsync();
-
-        try
-        {
-            await process.WaitForExitAsync(combinedCancellation.Token);
-        }
-        catch (OperationCanceledException exception)
-            when (timeoutCancellation.IsCancellationRequested
-                && !cancellationToken.IsCancellationRequested
-            )
-        {
-            TryKill(process);
-            throw new TimeoutException(
-                $"FFmpeg probe did not finish within {ProbeTimeout}.",
-                exception
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            TryKill(process);
-            throw;
-        }
-
-        return new FfmpegProcessResult(process.ExitCode, await standardOutput, await standardError);
     }
 
     private static ProcessStartInfo CreateProbeStartInfo(
@@ -213,13 +174,7 @@ internal static class FfmpegEncoderCapabilityDetector
         IEnumerable<string> arguments
     )
     {
-        var startInfo = new ProcessStartInfo(ffmpegPath)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
+        var startInfo = new ProcessStartInfo(ffmpegPath);
 
         foreach (var argument in arguments)
         {
@@ -229,22 +184,7 @@ internal static class FfmpegEncoderCapabilityDetector
         return startInfo;
     }
 
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
-        {
-            // The process exited while timeout cleanup was running.
-        }
-    }
-
-    private static string FormatProcessOutput(FfmpegProcessResult result)
+    private static string FormatProcessOutput(ExternalProcessResult result)
     {
         var output = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(result.StandardError))
@@ -260,10 +200,4 @@ internal static class FfmpegEncoderCapabilityDetector
 
         return output.ToString();
     }
-
-    private sealed record FfmpegProcessResult(
-        int ExitCode,
-        string StandardOutput,
-        string StandardError
-    );
 }

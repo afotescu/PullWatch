@@ -67,51 +67,32 @@ public static class FfmpegToolPaths
         CancellationToken cancellationToken
     )
     {
-        using var timeoutCancellation = new CancellationTokenSource(VersionProbeTimeout);
-        using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeoutCancellation.Token
-        );
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo(toolPath)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
-        };
-        process.StartInfo.ArgumentList.Add("-version");
+        var startInfo = new ProcessStartInfo(toolPath);
+        startInfo.ArgumentList.Add("-version");
 
         try
         {
-            if (!process.Start())
+            var result = await ExternalProcessRunner.RunAsync(
+                startInfo,
+                VersionProbeTimeout,
+                cancellationToken
+            );
+
+            if (result.ExitCode != 0)
             {
                 return null;
             }
 
-            var standardOutput = process.StandardOutput.ReadToEndAsync();
-            var standardError = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(combinedCancellation.Token);
-
-            if (process.ExitCode != 0)
-            {
-                return null;
-            }
-
-            return GetFirstVersionLine(await standardOutput)
-                ?? GetFirstVersionLine(await standardError);
+            return GetFirstVersionLine(result.StandardOutput)
+                ?? GetFirstVersionLine(result.StandardError);
         }
-        catch (OperationCanceledException) when (timeoutCancellation.IsCancellationRequested)
+        catch (TimeoutException)
         {
-            TryKill(process);
             return null;
         }
         catch (Exception exception)
             when (exception is IOException or InvalidOperationException or Win32Exception)
         {
-            TryKill(process);
             return null;
         }
     }
@@ -155,21 +136,6 @@ public static class FfmpegToolPaths
             when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             return null;
-        }
-    }
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
-        {
-            // The process exited while cleanup was running.
         }
     }
 }

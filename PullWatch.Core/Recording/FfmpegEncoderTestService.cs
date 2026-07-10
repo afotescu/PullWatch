@@ -209,9 +209,12 @@ public sealed class FfmpegEncoderTestService(
                 null,
                 TestDuration
             );
-            startInfo.RedirectStandardOutput = true;
-
-            var recordingResult = await RunProcessAsync(startInfo, TestTimeout, cancellationToken);
+            var recordingResult = await ExternalProcessRunner.RunAsync(
+                startInfo,
+                TestTimeout,
+                cancellationToken,
+                $"{Path.GetFileName(startInfo.FileName)} test"
+            );
             if (recordingResult.ExitCode != 0)
             {
                 return VideoEncoderTestResult.Unavailable(
@@ -305,13 +308,7 @@ public sealed class FfmpegEncoderTestService(
             return FfmpegTestOutputValidation.Invalid("No output file was produced.");
         }
 
-        var startInfo = new ProcessStartInfo(ffmpegPath)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
+        var startInfo = new ProcessStartInfo(ffmpegPath);
         foreach (
             var argument in new[]
             {
@@ -334,10 +331,15 @@ public sealed class FfmpegEncoderTestService(
             startInfo.ArgumentList.Add(argument);
         }
 
-        FfmpegProcessResult result;
+        ExternalProcessResult result;
         try
         {
-            result = await RunProcessAsync(startInfo, TestTimeout, cancellationToken);
+            result = await ExternalProcessRunner.RunAsync(
+                startInfo,
+                TestTimeout,
+                cancellationToken,
+                $"{Path.GetFileName(startInfo.FileName)} test"
+            );
         }
         catch (Exception exception)
             when (exception
@@ -368,54 +370,7 @@ public sealed class FfmpegEncoderTestService(
         );
     }
 
-    private static async Task<FfmpegProcessResult> RunProcessAsync(
-        ProcessStartInfo startInfo,
-        TimeSpan timeout,
-        CancellationToken cancellationToken
-    )
-    {
-        using var timeoutCancellation = new CancellationTokenSource(timeout);
-        using var combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeoutCancellation.Token
-        );
-        using var process = new Process { StartInfo = startInfo };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException(
-                $"{Path.GetFileName(startInfo.FileName)} test process did not start."
-            );
-        }
-
-        var standardOutput = process.StandardOutput.ReadToEndAsync();
-        var standardError = process.StandardError.ReadToEndAsync();
-
-        try
-        {
-            await process.WaitForExitAsync(combinedCancellation.Token);
-        }
-        catch (OperationCanceledException exception)
-            when (timeoutCancellation.IsCancellationRequested
-                && !cancellationToken.IsCancellationRequested
-            )
-        {
-            TryKill(process);
-            throw new TimeoutException(
-                $"{Path.GetFileName(startInfo.FileName)} test did not finish within {timeout}.",
-                exception
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            TryKill(process);
-            throw;
-        }
-
-        return new FfmpegProcessResult(process.ExitCode, await standardOutput, await standardError);
-    }
-
-    private static string CreateFailureMessage(string prefix, FfmpegProcessResult result)
+    private static string CreateFailureMessage(string prefix, ExternalProcessResult result)
     {
         return CreateFailureMessage(
             prefix,
@@ -576,27 +531,6 @@ public sealed class FfmpegEncoderTestService(
             // Test files are temporary diagnostics; cleanup failure should not hide the result.
         }
     }
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
-        {
-            // The process exited while timeout cleanup was running.
-        }
-    }
-
-    private sealed record FfmpegProcessResult(
-        int ExitCode,
-        string StandardOutput,
-        string StandardError
-    );
 }
 
 internal sealed class FfmpegEncoderTestValidationException(string message, Exception innerException)
