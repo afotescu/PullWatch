@@ -364,7 +364,7 @@ public sealed class ApplicationController : IAsyncDisposable
             var previousSettings = settingsService.Current;
             var result = await settingsService.SaveAsync(settings, cancellationToken);
 
-            if (!result.IsSaved)
+            if (!result.WasPersisted)
             {
                 return result;
             }
@@ -457,7 +457,7 @@ public sealed class ApplicationController : IAsyncDisposable
                 cancellationToken
             );
 
-            if (result.IsSaved)
+            if (result.WasPersisted)
             {
                 UpdateStatus(status => status with { EffectiveSettings = result.Settings });
             }

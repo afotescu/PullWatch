@@ -16,7 +16,7 @@ public sealed record SettingsSaveResult(
     Exception? Error = null
 )
 {
-    public bool IsSaved =>
+    public bool WasPersisted =>
         Status is SettingsSaveStatus.Saved or SettingsSaveStatus.ApplicationFailed;
 }
 

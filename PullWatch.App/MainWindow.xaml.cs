@@ -132,7 +132,7 @@ public partial class MainWindow : Window
                     RunEncoderCalibrationOperationAsync(environment, progress, cancellationToken)
             );
 
-            if (!result.SaveResult.IsSaved)
+            if (!result.SaveResult.WasPersisted)
             {
                 ShowEncoderCalibrationError(
                     result.SaveResult.ValidationErrors.Count == 0

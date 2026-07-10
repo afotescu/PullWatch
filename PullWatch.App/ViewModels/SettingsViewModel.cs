@@ -923,7 +923,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             var result = await _saveSettings(settings);
 
-            if (!result.IsSaved)
+            if (!result.WasPersisted)
             {
                 ApplySaveFailure(result, pendingSave, settings);
                 return;
