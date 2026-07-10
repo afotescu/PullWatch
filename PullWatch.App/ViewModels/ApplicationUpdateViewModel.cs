@@ -478,11 +478,7 @@ public sealed partial class ApplicationUpdateViewModel : ObservableObject
             return "the update";
         }
 
-        const double kibibyte = 1024;
-        const double mebibyte = kibibyte * 1024;
-        const double gibibyte = mebibyte * 1024;
-
-        return bytes >= gibibyte ? $"{bytes / gibibyte:0.#} GB" : $"{bytes / mebibyte:0.#} MB";
+        return FileSizeFormatter.Format(bytes);
     }
 
     private enum ApplicationUpdateState

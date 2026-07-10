@@ -6,21 +6,10 @@
   Width="480"
   MinWidth="420"
   MaxWidth="560"
-  AllowsTransparency="True"
-  Background="Transparent"
-  ResizeMode="NoResize"
-  ShowInTaskbar="False"
-  SizeToContent="Height"
+  Style="{StaticResource DialogWindowStyle}"
   WindowStartupLocation="CenterOwner"
-  WindowStyle="None"
 >
-  <Border
-    Background="{StaticResource WindowBrush}"
-    BorderBrush="{StaticResource BorderBrush}"
-    BorderThickness="1"
-    CornerRadius="8"
-    SnapsToDevicePixels="True"
-  >
+  <Border Style="{StaticResource DialogSurfaceStyle}">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />

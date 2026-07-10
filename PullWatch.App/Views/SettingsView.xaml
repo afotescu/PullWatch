@@ -60,7 +60,6 @@
             <ProgressBar
               Width="300"
               HorizontalAlignment="Left"
-              Height="8"
               Margin="0,8,0,0"
               IsIndeterminate="{Binding IsRecordingStorageUsageIndeterminate, Mode=OneWay}"
               Maximum="100"
@@ -68,45 +67,7 @@
               Visibility="{Binding IsRecordingStorageProgressVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
             >
               <ProgressBar.Style>
-                <Style TargetType="ProgressBar">
-                  <Setter Property="Background" Value="{StaticResource ProgressTrackBrush}" />
-                  <Setter
-                    Property="BorderBrush"
-                    Value="{StaticResource ProgressTrackBorderBrush}"
-                  />
-                  <Setter Property="BorderThickness" Value="1" />
-                  <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
-                  <Setter Property="Template">
-                    <Setter.Value>
-                      <ControlTemplate TargetType="ProgressBar">
-                        <Grid x:Name="ProgressRoot" SnapsToDevicePixels="True">
-                          <Border
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="3"
-                          />
-                          <Grid Margin="1" ClipToBounds="True">
-                            <Border x:Name="PART_Track" Background="Transparent" />
-                            <Border
-                              x:Name="PART_Indicator"
-                              HorizontalAlignment="Left"
-                              Background="{TemplateBinding Foreground}"
-                              CornerRadius="2"
-                            />
-                          </Grid>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                          <Trigger Property="IsIndeterminate" Value="True">
-                            <Setter TargetName="PART_Indicator" Property="Opacity" Value="0.7" />
-                          </Trigger>
-                          <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="ProgressRoot" Property="Opacity" Value="0.45" />
-                          </Trigger>
-                        </ControlTemplate.Triggers>
-                      </ControlTemplate>
-                    </Setter.Value>
-                  </Setter>
+                <Style BasedOn="{StaticResource CompactProgressBarStyle}" TargetType="ProgressBar">
                   <Style.Triggers>
                     <DataTrigger Binding="{Binding IsRecordingStorageOverLimit}" Value="True">
                       <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />

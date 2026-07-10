@@ -9,6 +9,64 @@
     <Setter Property="FontFamily" Value="Segoe UI" />
   </Style>
 
+  <Style x:Key="DialogWindowStyle" TargetType="Window">
+    <Setter Property="AllowsTransparency" Value="True" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+    <Setter Property="FontFamily" Value="Segoe UI" />
+    <Setter Property="ResizeMode" Value="NoResize" />
+    <Setter Property="ShowInTaskbar" Value="False" />
+    <Setter Property="SizeToContent" Value="Height" />
+    <Setter Property="WindowStyle" Value="None" />
+  </Style>
+
+  <Style x:Key="DialogSurfaceStyle" TargetType="Border">
+    <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+  </Style>
+
+  <Style x:Key="CompactProgressBarStyle" TargetType="ProgressBar">
+    <Setter Property="Height" Value="8" />
+    <Setter Property="Background" Value="{StaticResource ProgressTrackBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource ProgressTrackBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ProgressBar">
+          <Grid x:Name="ProgressRoot" SnapsToDevicePixels="True">
+            <Border
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}"
+              CornerRadius="3"
+            />
+            <Grid Margin="1" ClipToBounds="True">
+              <Border x:Name="PART_Track" Background="Transparent" />
+              <Border
+                x:Name="PART_Indicator"
+                HorizontalAlignment="Left"
+                Background="{TemplateBinding Foreground}"
+                CornerRadius="2"
+              />
+            </Grid>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsIndeterminate" Value="True">
+              <Setter TargetName="PART_Indicator" Property="Opacity" Value="0.7" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="ProgressRoot" Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="TextBlock">
     <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
   </Style>

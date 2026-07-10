@@ -6,21 +6,10 @@
   Width="440"
   MinWidth="400"
   MaxWidth="520"
-  AllowsTransparency="True"
-  Background="Transparent"
-  ResizeMode="NoResize"
-  ShowInTaskbar="False"
-  SizeToContent="Height"
+  Style="{StaticResource DialogWindowStyle}"
   WindowStartupLocation="CenterOwner"
-  WindowStyle="None"
 >
-  <Border
-    Background="{StaticResource WindowBrush}"
-    BorderBrush="{StaticResource BorderBrush}"
-    BorderThickness="1"
-    CornerRadius="8"
-    SnapsToDevicePixels="True"
-  >
+  <Border Style="{StaticResource DialogSurfaceStyle}">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
@@ -53,38 +42,12 @@
         <ProgressBar
           x:Name="ProfileProgressBar"
           Grid.Row="2"
-          Height="8"
           Margin="0,16,0,0"
-          Background="{StaticResource ProgressTrackBrush}"
-          BorderBrush="{StaticResource ProgressTrackBorderBrush}"
-          BorderThickness="1"
-          Foreground="{StaticResource AccentBrush}"
           Maximum="1"
           Minimum="0"
+          Style="{StaticResource CompactProgressBarStyle}"
           Value="0"
-        >
-          <ProgressBar.Template>
-            <ControlTemplate TargetType="ProgressBar">
-              <Grid SnapsToDevicePixels="True">
-                <Border
-                  Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="3"
-                />
-                <Grid Margin="1" ClipToBounds="True">
-                  <Border x:Name="PART_Track" Background="Transparent" />
-                  <Border
-                    x:Name="PART_Indicator"
-                    HorizontalAlignment="Left"
-                    Background="{TemplateBinding Foreground}"
-                    CornerRadius="2"
-                  />
-                </Grid>
-              </Grid>
-            </ControlTemplate>
-          </ProgressBar.Template>
-        </ProgressBar>
+        />
 
         <TextBlock
           x:Name="StepTextBlock"

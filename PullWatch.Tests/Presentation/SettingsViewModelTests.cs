@@ -588,6 +588,25 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task UnexpectedStartupShortcutFailureIsConvertedToSaveError()
+    {
+        var shortcut = new FakeWindowsStartupShortcut
+        {
+            Exception = new Exception("unexpected startup failure"),
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            windowsStartupShortcut: shortcut
+        );
+
+        viewModel.StartWithWindows = true;
+
+        await WaitForAsync(() => viewModel.IsSaveError);
+
+        Assert.Equal("Could not save settings: unexpected startup failure", viewModel.SaveMessage);
+    }
+
+    [Fact]
     public async Task StartupShortcutFailureRetriesOnNextAutosave()
     {
         var shortcut = new FakeWindowsStartupShortcut

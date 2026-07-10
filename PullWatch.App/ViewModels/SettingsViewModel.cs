@@ -11,35 +11,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string FixHighlightedSettingsMessage = "Fix the highlighted settings.";
     private const string SettingsLockedMessage = "Settings are locked while recording.";
 
-    private const long BytesPerKilobyte = 1024;
-    private const long BytesPerMegabyte = BytesPerKilobyte * 1024;
-    private const long BytesPerGigabyte = BytesPerMegabyte * 1024;
-    private const int DefaultRecordingStorageLimitGigabytes = (int)(
-        RecordingStorageSettings.DefaultMaxUsageBytes / BytesPerGigabyte
-    );
-    private const int MaximumRecordingStorageLimitGigabytes = 10_000;
     private const bool IsMicrophoneCaptureAvailable = false;
-    private const int PrimaryScreenWidthMetric = 0;
-    private const int PrimaryScreenHeightMetric = 1;
 
-    private static readonly VideoCaptureSize FallbackEstimateCaptureSize = new(1920, 1080);
-    private static readonly TimeSpan EstimateDuration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan SettingsSuccessNotificationDuration = TimeSpan.FromSeconds(5);
 
-    private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _saveSettings;
+    private readonly SettingsAutosaveCoordinator _autosave;
+    private readonly VideoSettingsPresenter _videoPresenter;
+    private readonly RecordingStoragePresenter _recordingStoragePresenter;
     private readonly Func<Task> _testVideoEncoding;
     private readonly ISettingsDialogs _dialogs;
-    private readonly Func<VideoCaptureSize> _getEstimateCaptureSize;
     private readonly IWindowsStartupShortcut _windowsStartupShortcut;
     private readonly NotificationCenterViewModel? _notifications;
     private readonly IUiDispatcher? _notificationDispatcher;
     private readonly TimeSpan _settingsSuccessNotificationDuration;
-    private readonly object _autosaveSync = new();
-    private PullWatchSettings _savedSettings;
-    private Task? _autosaveTask;
-    private PendingSettingsSave? _pendingAutosave;
-    private PendingSettingsSave _retryOnNextAutosave = PendingSettingsSave.None;
-    private RecordingStorageStatus _recordingStorageStatus = RecordingStorageStatus.Initial;
     private CancellationTokenSource? _settingsSuccessNotificationCancellation;
     private SettingsNotificationKind? _activeSettingsNotificationKind;
     private bool _isLoading;
@@ -57,17 +41,27 @@ public sealed partial class SettingsViewModel : ObservableObject
         TimeSpan? settingsSuccessNotificationDuration = null
     )
     {
-        _saveSettings = saveSettings;
         _testVideoEncoding = testVideoEncoding ?? TestVideoEncodingUnavailableAsync;
         _dialogs = dialogs;
-        _getEstimateCaptureSize = getEstimateCaptureSize ?? GetEstimatedCaptureSize;
+        _videoPresenter = new VideoSettingsPresenter(
+            getEstimateCaptureSize ?? VideoSettingsPresenter.GetEstimatedCaptureSize
+        );
         _windowsStartupShortcut = windowsStartupShortcut ?? NoOpWindowsStartupShortcut.Instance;
-        _recordingStorageStatus = initialRecordingStorageStatus ?? RecordingStorageStatus.Initial;
+        _recordingStoragePresenter = new RecordingStoragePresenter(
+            initialRecordingStorageStatus ?? RecordingStorageStatus.Initial
+        );
         _notifications = notifications;
         _notificationDispatcher = notificationDispatcher;
         _settingsSuccessNotificationDuration =
             settingsSuccessNotificationDuration ?? SettingsSuccessNotificationDuration;
-        _savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
+        var savedSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
+        _autosave = new SettingsAutosaveCoordinator(
+            savedSettings,
+            () => IsEditingEnabled,
+            BuildSettings,
+            saveSettings,
+            HandleAutosaveResultAsync
+        );
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
             () => ExecuteCommandAsync(CommitWowLogsDirectoryAsync),
             () => IsEditingEnabled
@@ -80,7 +74,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             TestVideoEncodingAsync,
             () => CanTestVideoEncoding
         );
-        LoadSettings(_savedSettings);
+        LoadSettings(savedSettings);
         ApplyStatus(initialStatus);
     }
 
@@ -102,33 +96,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             .Supported.Select(frameRate => new FrameRateOption(frameRate, $"{frameRate} FPS"))
             .ToArray();
 
-    public IReadOnlyList<VideoScalingOption> VideoScalingOptions
-    {
-        get
-        {
-            var captureSize = _getEstimateCaptureSize();
-            var candidates = new (VideoScaling Value, string Label, VideoCaptureSize OutputSize)[]
-            {
-                (
-                    VideoScaling.Original,
-                    FormatScalingOptionLabel("Original", captureSize),
-                    captureSize
-                ),
-                CreateScalingOption("1440p", VideoScaling.Target1440p, captureSize),
-                CreateScalingOption("1080p", VideoScaling.Optimized, captureSize),
-                CreateScalingOption("720p", VideoScaling.Target720p, captureSize),
-            };
-
-            return candidates
-                .Where(option =>
-                    option.Value == VideoScaling.Original
-                    || option.Value == SelectedVideoScaling
-                    || option.OutputSize != captureSize
-                )
-                .Select(option => new VideoScalingOption(option.Value, option.Label))
-                .ToArray();
-        }
-    }
+    public IReadOnlyList<VideoScalingOption> VideoScalingOptions =>
+        _videoPresenter.GetScalingOptions(SelectedVideoScaling);
 
     public string? WowLogsDirectory
     {
@@ -175,7 +144,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         get;
         set
         {
-            var limitGigabytes = Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes);
+            var limitGigabytes = Math.Clamp(
+                value,
+                1,
+                RecordingStoragePresenter.MaximumLimitGigabytes
+            );
 
             if (SetEditableProperty(ref field, limitGigabytes))
             {
@@ -189,7 +162,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         get;
         set
         {
-            var limitGigabytes = Math.Clamp(value, 1, MaximumRecordingStorageLimitGigabytes);
+            var limitGigabytes = Math.Clamp(
+                value,
+                1,
+                RecordingStoragePresenter.MaximumLimitGigabytes
+            );
 
             if (!SetProperty(ref field, limitGigabytes))
             {
@@ -210,96 +187,41 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public string RecordingStorageUsageText
-    {
-        get
-        {
-            var usageText = _recordingStorageStatus.UsageBytes is { } usageBytes
-                ? FormatStorageSize(usageBytes)
-                : "Calculating";
-            var limitText = IsRecordingStorageLimitEnabled
-                ? FormatStorageSize(GetConfiguredRecordingStorageLimitBytes())
-                : "Unlimited";
+    public string RecordingStorageUsageText =>
+        _recordingStoragePresenter.GetUsageText(
+            IsRecordingStorageLimitEnabled,
+            GetConfiguredRecordingStorageLimitBytes()
+        );
 
-            return $"Managed recordings storage: {usageText} / {limitText}";
-        }
-    }
+    public string RecordingStorageStatusText =>
+        _recordingStoragePresenter.GetStatusText(
+            IsRecordingStorageLimitEnabled,
+            GetConfiguredRecordingStorageLimitBytes()
+        );
 
-    public string RecordingStorageStatusText
-    {
-        get
-        {
-            if (_recordingStorageStatus.LastError is not null)
-            {
-                return $"Could not read managed recordings storage: {_recordingStorageStatus.LastError.Message}";
-            }
-
-            if (_recordingStorageStatus.IsCleaning)
-            {
-                return "Cleaning up old recordings...";
-            }
-
-            if (_recordingStorageStatus.IsRefreshing)
-            {
-                return "Calculating managed recordings storage...";
-            }
-
-            if (_recordingStorageStatus.UsageBytes is null)
-            {
-                return "Managed recordings storage has not been scanned yet.";
-            }
-
-            if (!IsRecordingStorageLimitEnabled)
-            {
-                return "Storage limit is disabled. PullWatch-owned recordings are still counted.";
-            }
-
-            if (IsRecordingStorageOverLimit)
-            {
-                return "Managed recordings are over the configured limit.";
-            }
-
-            if (IsRecordingStorageNearLimit)
-            {
-                return "Managed recordings are close to the configured limit.";
-            }
-
-            return "Oldest managed recordings are removed first when the limit is reached.";
-        }
-    }
-
-    public double RecordingStorageUsagePercent
-    {
-        get
-        {
-            var limitBytes = GetConfiguredRecordingStorageLimitBytes();
-            return limitBytes > 0 && _recordingStorageStatus.UsageBytes is { } usageBytes
-                ? Math.Clamp(usageBytes * 100d / limitBytes, 0, 100)
-                : 0;
-        }
-    }
+    public double RecordingStorageUsagePercent =>
+        _recordingStoragePresenter.GetUsagePercent(GetConfiguredRecordingStorageLimitBytes());
 
     public bool IsRecordingStorageProgressVisible => IsRecordingStorageLimitEnabled;
 
     public bool IsRecordingStorageUsageIndeterminate =>
-        IsRecordingStorageLimitEnabled
-        && _recordingStorageStatus.UsageBytes is null
-        && (_recordingStorageStatus.IsRefreshing || _recordingStorageStatus.IsCleaning);
+        _recordingStoragePresenter.IsUsageIndeterminate(IsRecordingStorageLimitEnabled);
 
     public bool IsRecordingStorageOverLimit =>
-        IsRecordingStorageLimitEnabled
-        && _recordingStorageStatus.UsageBytes is { } usageBytes
-        && usageBytes > GetConfiguredRecordingStorageLimitBytes();
+        _recordingStoragePresenter.IsOverLimit(
+            IsRecordingStorageLimitEnabled,
+            GetConfiguredRecordingStorageLimitBytes()
+        );
 
     public bool IsRecordingStorageNearLimit =>
-        IsRecordingStorageLimitEnabled
-        && !IsRecordingStorageOverLimit
-        && _recordingStorageStatus.UsageBytes is { } usageBytes
-        && usageBytes >= GetConfiguredRecordingStorageLimitBytes() * 0.85d;
+        _recordingStoragePresenter.IsNearLimit(
+            IsRecordingStorageLimitEnabled,
+            GetConfiguredRecordingStorageLimitBytes()
+        );
 
     public void ApplyRecordingStorageStatus(RecordingStorageStatus status)
     {
-        if (SetProperty(ref _recordingStorageStatus, status))
+        if (_recordingStoragePresenter.ApplyStatus(status))
         {
             NotifyRecordingStorageUsageChanged();
         }
@@ -392,7 +314,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<VideoProfileOption> VideoProfileOptions =>
         VideoProfileSelectionPolicy
-            .GetPassingProfilesInPriorityOrder(_savedSettings.EncoderCalibration.Results)
+            .GetPassingProfilesInPriorityOrder(_autosave.SavedSettings.EncoderCalibration.Results)
             .Select(profile => new VideoProfileOption(
                 profile,
                 VideoProfileFormatter.FormatDisplayName(profile)
@@ -569,42 +491,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public string EstimatedRecordingSize
-    {
-        get
-        {
-            var captureSize = _getEstimateCaptureSize();
-            var outputSize = VideoOutputSizeCalculator.CalculateOutputSize(
-                captureSize,
-                SelectedVideoScaling
-            );
-            var bitrate = VideoBitrateCalculator.CalculateBitrate(
-                outputSize,
-                SelectedFrameRate,
-                SelectedVideoQuality,
-                GetEstimatedCodec()
-            );
-            var megabytes = VideoBitrateCalculator.EstimateFileSizeMegabytes(
-                bitrate,
-                new AudioSettings
-                {
-                    CaptureSystemAudio = CaptureSystemAudio,
-                    CaptureMicrophone = CaptureMicrophone,
-                },
-                EstimateDuration
-            );
-
-            return string.Join(
-                " ",
-                $"About {FormatFileSize(megabytes)} per minute",
-                FormatEstimateSizeText(captureSize, outputSize),
-                VideoProfileFormatter.FormatCodecName(GetEstimatedCodec()),
-                $"{SelectedFrameRate} FPS",
-                FormatBitrateText(bitrate),
-                "Actual recording uses the WoW window size."
-            );
-        }
-    }
+    public string EstimatedRecordingSize =>
+        _videoPresenter.GetEstimatedRecordingSize(
+            SelectedVideoProfile,
+            SelectedVideoQuality,
+            SelectedFrameRate,
+            SelectedVideoScaling,
+            CaptureSystemAudio,
+            CaptureMicrophone
+        );
 
     public void ApplyStatus(ApplicationStatus status)
     {
@@ -625,12 +520,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         if (
             status.EffectiveSettings is not null
-            && status.EffectiveSettings != _savedSettings
+            && status.EffectiveSettings != _autosave.SavedSettings
             && !HasPendingLocalChanges()
         )
         {
-            _savedSettings = status.EffectiveSettings;
-            LoadSettings(_savedSettings);
+            _autosave.UpdateSavedSettings(status.EffectiveSettings);
+            LoadSettings(status.EffectiveSettings);
         }
     }
 
@@ -807,30 +702,39 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         await QueueAutosaveAsync(
-            CreatePendingSettingsSave(includeWowLogsDirectory, includeRecordingsDirectory)
+            CreateSettingsSaveScope(includeWowLogsDirectory, includeRecordingsDirectory)
         );
         return !IsSaveError;
     }
 
-    private PullWatchSettings BuildSettings(PendingSettingsSave pendingSave)
+    private PullWatchSettings BuildSettings(
+        PullWatchSettings savedSettings,
+        SettingsSaveScope saveScope
+    )
     {
-        return _savedSettings with
+        return savedSettings with
         {
-            WowLogsDirectory = Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
+            WowLogsDirectory = SettingsAutosaveCoordinator.Includes(
+                saveScope,
+                SettingsSaveScope.WowLogsDirectory
+            )
                 ? NormalizeEmpty(WowLogsDirectory)
-                : _savedSettings.WowLogsDirectory,
-            RecordingsDirectory = Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
+                : savedSettings.WowLogsDirectory,
+            RecordingsDirectory = SettingsAutosaveCoordinator.Includes(
+                saveScope,
+                SettingsSaveScope.RecordingsDirectory
+            )
                 ? NormalizeEmpty(RecordingsDirectory)
-                : _savedSettings.RecordingsDirectory,
+                : savedSettings.RecordingsDirectory,
             RecordMythicPlus = RecordMythicPlus,
             RecordRaidEncounters = RecordRaidEncounters,
-            RecordingFilters = _savedSettings.RecordingFilters with
+            RecordingFilters = savedSettings.RecordingFilters with
             {
-                MythicPlus = _savedSettings.RecordingFilters.MythicPlus with
+                MythicPlus = savedSettings.RecordingFilters.MythicPlus with
                 {
                     MinimumKeystoneLevel = MinimumMythicPlusKeystoneLevel,
                 },
-                RaidEncounters = _savedSettings.RecordingFilters.RaidEncounters with
+                RaidEncounters = savedSettings.RecordingFilters.RaidEncounters with
                 {
                     RecordRaidFinder = RecordRaidFinder,
                     RecordNormal = RecordNormalRaid,
@@ -838,7 +742,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                     RecordMythic = RecordMythicRaid,
                 },
             },
-            Video = _savedSettings.Video with
+            Video = savedSettings.Video with
             {
                 SelectedProfile = SelectedVideoProfile,
                 Quality = SelectedVideoQuality,
@@ -847,124 +751,89 @@ public sealed partial class SettingsViewModel : ObservableObject
                 CaptureCursor = CaptureCursor,
                 ShowCaptureBorder = ShowCaptureBorder,
             },
-            Audio = _savedSettings.Audio with
+            Audio = savedSettings.Audio with
             {
                 CaptureSystemAudio = CaptureSystemAudio,
                 CaptureMicrophone = false,
             },
-            Startup = _savedSettings.Startup with
+            Startup = savedSettings.Startup with
             {
                 StartWithWindows = StartWithWindows,
                 StartMinimizedToTray = StartWithWindows && StartMinimizedToTray,
             },
-            Storage = _savedSettings.Storage with
+            Storage = savedSettings.Storage with
             {
                 MaxUsageBytes = IsRecordingStorageLimitEnabled
-                    ? GigabytesToBytes(RecordingStorageLimitGigabytes)
+                    ? RecordingStoragePresenter.GigabytesToBytes(RecordingStorageLimitGigabytes)
                     : RecordingStorageSettings.UnlimitedBytes,
             },
         };
     }
 
-    private Task QueueAutosaveAsync(PendingSettingsSave requestedSave)
+    private Task QueueAutosaveAsync(SettingsSaveScope requestedScope)
     {
-        lock (_autosaveSync)
-        {
-            _pendingAutosave = (_pendingAutosave ?? PendingSettingsSave.None) | requestedSave;
-            _autosaveTask ??= ProcessAutosavesAsync();
-
-            if (_autosaveTask.IsCompleted)
-            {
-                _autosaveTask = ProcessAutosavesAsync();
-            }
-
-            return _autosaveTask;
-        }
+        return _autosave.QueueSaveAsync(requestedScope);
     }
 
-    private async Task ProcessAutosavesAsync()
+    private async Task HandleAutosaveResultAsync(SettingsAutosaveOutcome outcome)
     {
-        await Task.Yield();
-
-        while (true)
-        {
-            PendingSettingsSave pendingSave;
-
-            lock (_autosaveSync)
-            {
-                if (_pendingAutosave is null)
-                {
-                    _autosaveTask = null;
-                    return;
-                }
-
-                pendingSave = _pendingAutosave.Value | _retryOnNextAutosave;
-                _pendingAutosave = null;
-            }
-
-            await RunAutosaveAsync(pendingSave);
-        }
-    }
-
-    private async Task RunAutosaveAsync(PendingSettingsSave pendingSave)
-    {
-        if (!IsEditingEnabled)
+        if (outcome.WasSkipped)
         {
             ApplyLockedStatus();
             return;
         }
 
-        var settings = BuildSettings(pendingSave);
-        var shouldSyncStartupShortcut =
-            Includes(pendingSave, PendingSettingsSave.StartupShortcut)
-            || settings.Startup != _savedSettings.Startup;
+        if (outcome.Exception is not null)
+        {
+            HandleAutosaveException(outcome.Exception, outcome.Scope, outcome.AttemptedSettings);
+            return;
+        }
 
         try
         {
-            var result = await _saveSettings(settings);
+            var result = outcome.SaveResult!;
 
             if (!result.WasPersisted)
             {
-                ApplySaveFailure(result, pendingSave, settings);
+                ApplySaveFailure(result, outcome.Scope, outcome.AttemptedSettings);
                 return;
             }
 
-            ApplySaveSuccess(result, pendingSave);
+            ApplySaveSuccess(result, outcome.Scope);
 
-            if (shouldSyncStartupShortcut)
+            if (outcome.ShouldSyncStartupShortcut)
             {
                 await SyncStartupShortcutAsync(result.Settings!.Startup);
             }
         }
         catch (Exception exception)
         {
-            HandleAutosaveException(exception, pendingSave, settings);
+            HandleAutosaveException(exception, outcome.Scope, outcome.AttemptedSettings);
         }
     }
 
-    private void ApplySaveSuccess(SettingsSaveResult result, PendingSettingsSave pendingSave)
+    private void ApplySaveSuccess(SettingsSaveResult result, SettingsSaveScope saveScope)
     {
         var savedSettings = result.Settings!;
-        _savedSettings = savedSettings;
 
         if (
-            Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
+            SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.WowLogsDirectory)
             && PathsMatchSaved(WowLogsDirectory, savedSettings.WowLogsDirectory)
         )
         {
             IsWowLogsDirectoryPending = false;
-            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.WowLogsDirectory, shouldRetry: false);
             SetLoadedValue(() => WowLogsDirectory = savedSettings.WowLogsDirectory);
             WowLogsDirectoryError = null;
         }
 
         if (
-            Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
+            SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.RecordingsDirectory)
             && PathsMatchSaved(RecordingsDirectory, savedSettings.RecordingsDirectory)
         )
         {
             IsRecordingsDirectoryPending = false;
-            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: false);
             SetLoadedValue(() => RecordingsDirectory = savedSettings.RecordingsDirectory);
             RecordingsDirectoryError = null;
         }
@@ -1142,7 +1011,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         try
         {
             await _windowsStartupShortcut.SyncAsync(settings);
-            SetRetryOnNextAutosave(PendingSettingsSave.StartupShortcut, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.StartupShortcut, shouldRetry: false);
         }
         catch (Exception exception)
             when (exception
@@ -1152,7 +1021,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                         or COMException
             )
         {
-            SetRetryOnNextAutosave(PendingSettingsSave.StartupShortcut, shouldRetry: true);
+            SetRetryOnNextAutosave(SettingsSaveScope.StartupShortcut, shouldRetry: true);
             IsSaveError = true;
             SaveMessage =
                 $"Settings saved, but Windows startup could not be updated: {exception.Message}";
@@ -1161,7 +1030,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void ApplySaveFailure(
         SettingsSaveResult result,
-        PendingSettingsSave pendingSave,
+        SettingsSaveScope saveScope,
         PullWatchSettings attemptedSettings
     )
     {
@@ -1175,12 +1044,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         if (result.Status == SettingsSaveStatus.PersistenceFailed)
         {
-            MarkIncludedPathsForRetry(pendingSave, attemptedSettings);
+            MarkIncludedPathsForRetry(saveScope, attemptedSettings);
             SaveMessage = $"Could not save settings: {result.Error?.Message}";
             return;
         }
 
-        ClearIncludedPathRetries(pendingSave);
+        ClearIncludedPathRetries(saveScope);
         SaveMessage = FixHighlightedSettingsMessage;
 
         foreach (var error in result.ValidationErrors)
@@ -1198,17 +1067,17 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void HandleCommandFailure(Exception exception)
     {
-        HandleAutosaveException(exception, PendingSettingsSave.None, attemptedSettings: null);
+        HandleAutosaveException(exception, SettingsSaveScope.None, attemptedSettings: null);
     }
 
     private void HandleAutosaveException(
         Exception exception,
-        PendingSettingsSave pendingSave,
+        SettingsSaveScope saveScope,
         PullWatchSettings? attemptedSettings
     )
     {
         IsSaveError = true;
-        MarkIncludedPathsForRetry(pendingSave, attemptedSettings);
+        MarkIncludedPathsForRetry(saveScope, attemptedSettings);
         SaveMessage = $"Could not save settings: {exception.Message}";
     }
 
@@ -1220,8 +1089,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordingsDirectory = settings.RecordingsDirectory;
             IsRecordingStorageLimitEnabled = settings.Storage.IsLimitEnabled;
             RecordingStorageLimitGigabytes = settings.Storage.IsLimitEnabled
-                ? BytesToGigabytes(settings.Storage.MaxUsageBytes)
-                : DefaultRecordingStorageLimitGigabytes;
+                ? RecordingStoragePresenter.BytesToGigabytes(settings.Storage.MaxUsageBytes)
+                : RecordingStoragePresenter.DefaultLimitGigabytes;
             RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
             RecordMythicPlus = settings.RecordMythicPlus;
             MinimumMythicPlusKeystoneLevel = settings
@@ -1288,7 +1157,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
             else
             {
-                _ = QueueAutosaveAsync(PendingSettingsSave.None);
+                _ = QueueAutosaveAsync(SettingsSaveScope.None);
             }
         }
 
@@ -1315,14 +1184,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (propertyName == nameof(WowLogsDirectory))
         {
             IsWowLogsDirectoryPending = true;
-            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.WowLogsDirectory, shouldRetry: false);
             return true;
         }
 
         if (propertyName == nameof(RecordingsDirectory))
         {
             IsRecordingsDirectoryPending = true;
-            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: false);
             return true;
         }
 
@@ -1385,14 +1254,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private bool HasPendingLocalChanges()
     {
-        lock (_autosaveSync)
-        {
-            return IsWowLogsDirectoryPending
-                || IsRecordingsDirectoryPending
-                || HasPendingRecordingStorageLimitChange
-                || _pendingAutosave is not null
-                || _autosaveTask is { IsCompleted: false };
-        }
+        return IsWowLogsDirectoryPending
+            || IsRecordingsDirectoryPending
+            || HasPendingRecordingStorageLimitChange
+            || _autosave.HasPendingSave;
     }
 
     private void NotifyCommandStatesChanged()
@@ -1413,74 +1278,67 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private void MarkIncludedPathsForRetry(
-        PendingSettingsSave pendingSave,
+        SettingsSaveScope saveScope,
         PullWatchSettings? attemptedSettings
     )
     {
         if (
-            Includes(pendingSave, PendingSettingsSave.WowLogsDirectory)
+            SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.WowLogsDirectory)
             && IsWowLogsDirectoryPending
             && attemptedSettings is not null
             && PathsMatchSaved(WowLogsDirectory, attemptedSettings.WowLogsDirectory)
         )
         {
-            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: true);
+            SetRetryOnNextAutosave(SettingsSaveScope.WowLogsDirectory, shouldRetry: true);
         }
 
         if (
-            Includes(pendingSave, PendingSettingsSave.RecordingsDirectory)
+            SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.RecordingsDirectory)
             && IsRecordingsDirectoryPending
             && attemptedSettings is not null
             && PathsMatchSaved(RecordingsDirectory, attemptedSettings.RecordingsDirectory)
         )
         {
-            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: true);
+            SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: true);
         }
     }
 
-    private void ClearIncludedPathRetries(PendingSettingsSave pendingSave)
+    private void ClearIncludedPathRetries(SettingsSaveScope saveScope)
     {
-        if (Includes(pendingSave, PendingSettingsSave.WowLogsDirectory))
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.WowLogsDirectory))
         {
-            SetRetryOnNextAutosave(PendingSettingsSave.WowLogsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.WowLogsDirectory, shouldRetry: false);
         }
 
-        if (Includes(pendingSave, PendingSettingsSave.RecordingsDirectory))
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.RecordingsDirectory))
         {
-            SetRetryOnNextAutosave(PendingSettingsSave.RecordingsDirectory, shouldRetry: false);
+            SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: false);
         }
     }
 
-    private void SetRetryOnNextAutosave(PendingSettingsSave scope, bool shouldRetry)
+    private void SetRetryOnNextAutosave(SettingsSaveScope scope, bool shouldRetry)
     {
-        _retryOnNextAutosave = shouldRetry
-            ? _retryOnNextAutosave | scope
-            : _retryOnNextAutosave & ~scope;
+        _autosave.SetRetryOnNextSave(scope, shouldRetry);
     }
 
-    private static PendingSettingsSave CreatePendingSettingsSave(
+    private static SettingsSaveScope CreateSettingsSaveScope(
         bool includeWowLogsDirectory,
         bool includeRecordingsDirectory
     )
     {
-        var pendingSave = PendingSettingsSave.None;
+        var saveScope = SettingsSaveScope.None;
 
         if (includeWowLogsDirectory)
         {
-            pendingSave |= PendingSettingsSave.WowLogsDirectory;
+            saveScope |= SettingsSaveScope.WowLogsDirectory;
         }
 
         if (includeRecordingsDirectory)
         {
-            pendingSave |= PendingSettingsSave.RecordingsDirectory;
+            saveScope |= SettingsSaveScope.RecordingsDirectory;
         }
 
-        return pendingSave;
-    }
-
-    private static bool Includes(PendingSettingsSave pendingSave, PendingSettingsSave scope)
-    {
-        return (pendingSave & scope) != PendingSettingsSave.None;
+        return saveScope;
     }
 
     private static string? NormalizeEmpty(string? value)
@@ -1550,134 +1408,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     private long GetConfiguredRecordingStorageLimitBytes()
     {
         return IsRecordingStorageLimitEnabled
-            ? GigabytesToBytes(RecordingStorageLimitGigabytes)
+            ? RecordingStoragePresenter.GigabytesToBytes(RecordingStorageLimitGigabytes)
             : RecordingStorageSettings.UnlimitedBytes;
     }
-
-    private static long GigabytesToBytes(int gigabytes)
-    {
-        return Math.Clamp(gigabytes, 1, MaximumRecordingStorageLimitGigabytes) * BytesPerGigabyte;
-    }
-
-    private static int BytesToGigabytes(long bytes)
-    {
-        if (bytes <= 0)
-        {
-            return DefaultRecordingStorageLimitGigabytes;
-        }
-
-        return Math.Clamp(
-            (int)Math.Ceiling(bytes / (double)BytesPerGigabyte),
-            1,
-            MaximumRecordingStorageLimitGigabytes
-        );
-    }
-
-    private static string FormatStorageSize(long bytes)
-    {
-        bytes = Math.Max(0, bytes);
-
-        if (bytes >= BytesPerGigabyte)
-        {
-            return $"{bytes / (double)BytesPerGigabyte:0.#} GB";
-        }
-
-        if (bytes >= BytesPerMegabyte)
-        {
-            return $"{bytes / (double)BytesPerMegabyte:0.#} MB";
-        }
-
-        return $"{bytes / (double)BytesPerKilobyte:0.#} KB";
-    }
-
-    private static string FormatFileSize(int megabytes)
-    {
-        if (megabytes >= 1_000)
-        {
-            return $"{megabytes / 1_000d:0.#} GB";
-        }
-
-        var roundedMegabytes = Math.Max(1, (int)Math.Round(megabytes / 10d) * 10);
-        return $"{roundedMegabytes} MB";
-    }
-
-    private static string FormatEstimateSizeText(
-        VideoCaptureSize captureSize,
-        VideoCaptureSize outputSize
-    )
-    {
-        if (outputSize == captureSize)
-        {
-            return $"at estimated {FormatCaptureSize(captureSize)} capture,";
-        }
-
-        return $"at estimated {FormatCaptureSize(outputSize)} output from {FormatCaptureSize(captureSize)} capture,";
-    }
-
-    private static (
-        VideoScaling Value,
-        string Label,
-        VideoCaptureSize OutputSize
-    ) CreateScalingOption(string label, VideoScaling scaling, VideoCaptureSize captureSize)
-    {
-        var outputSize = VideoOutputSizeCalculator.CalculateOutputSize(captureSize, scaling);
-        return (scaling, FormatScalingOptionLabel(label, outputSize), outputSize);
-    }
-
-    private static string FormatScalingOptionLabel(string label, VideoCaptureSize size)
-    {
-        return $"{label} ({FormatCaptureSize(size)} estimated)";
-    }
-
-    private static string FormatCaptureSize(VideoCaptureSize size)
-    {
-        return $"{size.Width}x{size.Height}";
-    }
-
-    private VideoCodec GetEstimatedCodec()
-    {
-        return SelectedVideoProfile?.Codec ?? VideoCodec.H264;
-    }
-
-    private static string FormatBitrateText(int bitrate)
-    {
-        return $"({VideoBitrateCalculator.ToMegabitsPerSecond(bitrate)} Mbps target).";
-    }
-
-    private static VideoCaptureSize GetEstimatedCaptureSize()
-    {
-        return WowWindowCaptureSizeDetector.TryGetCurrentCaptureSize(out var wowCaptureSize)
-            ? wowCaptureSize
-            : GetPrimaryDisplayCaptureSize();
-    }
-
-    private static VideoCaptureSize GetPrimaryDisplayCaptureSize()
-    {
-        var width = GetSystemMetrics(PrimaryScreenWidthMetric);
-        var height = GetSystemMetrics(PrimaryScreenHeightMetric);
-
-        return width > 0 && height > 0
-            ? new VideoCaptureSize(width, height)
-            : FallbackEstimateCaptureSize;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int nIndex);
 
     private static Task TestVideoEncodingUnavailableAsync()
     {
         return Task.FromException(
             new InvalidOperationException("Video encoding testing is not available.")
         );
-    }
-
-    [Flags]
-    private enum PendingSettingsSave
-    {
-        None = 0,
-        WowLogsDirectory = 1,
-        RecordingsDirectory = 2,
-        StartupShortcut = 4,
     }
 
     private enum SettingsNotificationKind

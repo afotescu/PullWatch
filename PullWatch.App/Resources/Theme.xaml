@@ -27,6 +27,5 @@
   <SolidColorBrush x:Key="ListItemSurfaceBrush" Color="#252B33" />
   <SolidColorBrush x:Key="ListItemHoverBrush" Color="#303742" />
   <SolidColorBrush x:Key="SelectedSurfaceBrush" Color="#35404C" />
-  <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#2F2428" />
   <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="#111318" />
 </ResourceDictionary>
