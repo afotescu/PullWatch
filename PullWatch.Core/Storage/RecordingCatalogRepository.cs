@@ -47,7 +47,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         ChallengeEndedAtUtc,
         TotalTimeMilliseconds,
         OnTimeSeconds,
-        TimerLimitSeconds
+        MythicRatingAfterRun
         """;
 
     private readonly SqliteConnectionFactory _connectionFactory =
@@ -391,7 +391,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     ChallengeEndedAtUtc,
                     TotalTimeMilliseconds,
                     OnTimeSeconds,
-                    TimerLimitSeconds
+                    MythicRatingAfterRun
                 )
                 VALUES (
                     @RecordingId,
@@ -405,7 +405,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     @ChallengeEndedAtUtc,
                     @TotalTimeMilliseconds,
                     @OnTimeSeconds,
-                    @TimerLimitSeconds
+                    @MythicRatingAfterRun
                 )
                 ON CONFLICT(RecordingId) DO UPDATE SET
                     DungeonName = excluded.DungeonName,
@@ -418,7 +418,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     ChallengeEndedAtUtc = excluded.ChallengeEndedAtUtc,
                     TotalTimeMilliseconds = excluded.TotalTimeMilliseconds,
                     OnTimeSeconds = excluded.OnTimeSeconds,
-                    TimerLimitSeconds = excluded.TimerLimitSeconds;
+                    MythicRatingAfterRun = excluded.MythicRatingAfterRun;
                 """,
                 ToParameters(challengeMode),
                 transaction,
@@ -498,7 +498,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
                     ChallengeEndedAtUtc = @ChallengeEndedAtUtc,
                     TotalTimeMilliseconds = @TotalTimeMilliseconds,
                     OnTimeSeconds = @OnTimeSeconds,
-                    TimerLimitSeconds = @TimerLimitSeconds
+                    MythicRatingAfterRun = @MythicRatingAfterRun
                 WHERE RecordingId = @RecordingId;
                 """,
                 ToParameters(challengeModeCompletion),
@@ -656,7 +656,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.ParseNullableUtc(row.ChallengeEndedAtUtc),
             ToNullableInt32(row.TotalTimeMilliseconds),
             row.OnTimeSeconds,
-            ToNullableInt32(row.TimerLimitSeconds)
+            ToNullableInt32(row.MythicRatingAfterRun)
         );
     }
 
@@ -803,7 +803,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string? ChallengeEndedAtUtc,
         int? TotalTimeMilliseconds,
         double? OnTimeSeconds,
-        int? TimerLimitSeconds
+        int? MythicRatingAfterRun
     );
 
     private sealed record RaidEncounterParameters(
@@ -826,7 +826,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string ChallengeEndedAtUtc,
         int? TotalTimeMilliseconds,
         double? OnTimeSeconds,
-        int? TimerLimitSeconds
+        int? MythicRatingAfterRun
     );
 
     private sealed record RaidEncounterCompletionParameters(
@@ -850,7 +850,7 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string? ChallengeEndedAtUtc,
         long? TotalTimeMilliseconds,
         double? OnTimeSeconds,
-        long? TimerLimitSeconds
+        long? MythicRatingAfterRun
     );
 
     private sealed record RaidEncounterRow(
