@@ -556,6 +556,112 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public async Task NewestOverlappingRefreshWinsWithoutDuplicatingRows()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var firstRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var secondRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var older = CatalogFile(
+                Path.Combine(directory, "older-result.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            );
+            var newer = CatalogFile(
+                Path.Combine(directory, "newer-result.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var loadCalls = 0;
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    ++loadCalls switch
+                    {
+                        1 => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([]),
+                        2 => firstRefresh.Task,
+                        3 => secondRefresh.Task,
+                        _ => throw new InvalidOperationException("Unexpected catalog load."),
+                    }
+            );
+
+            var firstTask = viewModel.RefreshRecordingsAsync();
+            var secondTask = viewModel.RefreshRecordingsAsync();
+            secondRefresh.SetResult([newer]);
+            await secondTask;
+            firstRefresh.SetResult([older]);
+            await firstTask;
+
+            Assert.Equal(3, loadCalls);
+            Assert.Equal(newer.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(newer.Id, viewModel.SelectedRecording?.Id);
+            Assert.Equal(1, CountFor(viewModel, RecordingListCategory.Manual));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task ObsoleteRefreshFailureDoesNotReplaceNewerSuccessfulResult()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var obsoleteRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var currentRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var current = CatalogFile(
+                Path.Combine(directory, "current.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var loadCalls = 0;
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    ++loadCalls switch
+                    {
+                        1 => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([]),
+                        2 => obsoleteRefresh.Task,
+                        3 => currentRefresh.Task,
+                        _ => throw new InvalidOperationException("Unexpected catalog load."),
+                    }
+            );
+
+            var obsoleteTask = viewModel.RefreshRecordingsAsync();
+            var currentTask = viewModel.RefreshRecordingsAsync();
+            currentRefresh.SetResult([current]);
+            await currentTask;
+            obsoleteRefresh.SetException(new IOException("obsolete failure"));
+            await obsoleteTask;
+
+            Assert.Equal(current.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void FiltersRecordingsBySelectedCategoryAndTracksCounts()
     {
         var directory = CreateTempDirectory();
@@ -866,6 +972,72 @@ public sealed class RecordingsViewModelTests
 
             Assert.Equal("Recording deleted.", viewModel.CommandMessage);
             Assert.True(viewModel.IsCommandMessageVisible);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshStartedBeforeDeleteCannotRestoreDeletedRecording()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var deleted = CatalogFile(
+                Path.Combine(directory, "deleted.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var kept = CatalogFile(
+                Path.Combine(directory, "kept.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            );
+            var staleRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var loadCalls = 0;
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    ++loadCalls switch
+                    {
+                        1 => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([deleted, kept]),
+                        2 => staleRefresh.Task,
+                        _ => throw new InvalidOperationException("Unexpected catalog load."),
+                    },
+                deleteRecording: _ =>
+                {
+                    deleteStarted.SetResult();
+                    return deleteCompletion.Task;
+                },
+                confirmPermanentDelete: _ => true
+            );
+
+            var refreshTask = viewModel.RefreshRecordingsAsync();
+            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
+            await deleteStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
+            staleRefresh.SetResult([deleted, kept]);
+            await refreshTask;
+
+            Assert.Equal(kept.Id, Assert.Single(viewModel.Recordings).Id);
+            deleteCompletion.SetResult();
+            await deleteTask;
+            Assert.Equal(kept.Id, Assert.Single(viewModel.Recordings).Id);
         }
         finally
         {

@@ -43,6 +43,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private RecordingListItem? _selectedRecording;
     private RecordingCategoryTab _selectedRecordingCategory = null!;
     private int _knownSavedCount;
+    private int _recordingsRefreshVersion;
     private bool _isTestingVideoEncoding;
 
     public RecordingsViewModel(
@@ -330,27 +331,28 @@ public sealed partial class RecordingsViewModel : ObservableObject
         bool preferMostRecent = false
     )
     {
+        var refreshVersion = ++_recordingsRefreshVersion;
+        var recordingsDirectory = _recordingsDirectory;
         var existingSelectionPath = SelectedRecording?.Path;
-        _allRecordings.Clear();
-        Recordings.Clear();
-        UpdateCategoryCounts();
 
-        if (string.IsNullOrWhiteSpace(_recordingsDirectory))
+        if (string.IsNullOrWhiteSpace(recordingsDirectory))
         {
-            SelectedRecording = null;
-            RecordingLibraryStatus = NoRecordingsDirectoryMessage;
+            ClearRecordingLibrary(NoRecordingsDirectoryMessage);
             return;
         }
 
         try
         {
-            var recordings = await _loadRecordings(_recordingsDirectory);
+            var recordings = await _loadRecordings(recordingsDirectory);
+            var recordingItems = CreateRecordingListItems(recordings);
 
-            foreach (var recording in CreateRecordingListItems(recordings))
+            if (!IsCurrentRecordingRefresh(refreshVersion, recordingsDirectory))
             {
-                _allRecordings.Add(recording);
+                return;
             }
 
+            _allRecordings.Clear();
+            _allRecordings.AddRange(recordingItems);
             UpdateCategoryCounts();
 
             var preferredRecording = FindAllRecordingByPath(preferredSelectionPath);
@@ -370,9 +372,26 @@ public sealed partial class RecordingsViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            SelectedRecording = null;
-            RecordingLibraryStatus = $"Could not read recordings catalog: {exception.Message}";
+            if (IsCurrentRecordingRefresh(refreshVersion, recordingsDirectory))
+            {
+                ClearRecordingLibrary($"Could not read recordings catalog: {exception.Message}");
+            }
         }
+    }
+
+    private bool IsCurrentRecordingRefresh(int refreshVersion, string recordingsDirectory)
+    {
+        return refreshVersion == _recordingsRefreshVersion
+            && PathsEqual(recordingsDirectory, _recordingsDirectory);
+    }
+
+    private void ClearRecordingLibrary(string status)
+    {
+        _allRecordings.Clear();
+        Recordings.Clear();
+        UpdateCategoryCounts();
+        SelectedRecording = null;
+        RecordingLibraryStatus = status;
     }
 
     internal static IReadOnlyList<RecordingListItem> CreateRecordingListItems(
@@ -674,6 +693,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
             return;
         }
 
+        _recordingsRefreshVersion++;
         var removal = RemoveRecording(recording);
         SelectedRecording = null;
         UpdateRecordingLibraryStatus();
