@@ -2,6 +2,12 @@ namespace PullWatch.Tests;
 
 public sealed class RecordingsViewModelTests
 {
+    private static readonly EncoderCalibrationEnvironment CurrentEncoderEnvironment = new(
+        @"C:\ffmpeg\bin\ffmpeg.exe",
+        "ffmpeg version test",
+        "ABC123"
+    );
+
     [Theory]
     [InlineData(
         RecordingCoordinatorState.Idle,
@@ -110,6 +116,23 @@ public sealed class RecordingsViewModelTests
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
         Assert.True(viewModel.StatusCardCommand.CanExecute(null));
         Assert.Equal("Test video encoding", viewModel.StatusCardButtonText);
+    }
+
+    [Fact]
+    public void StaleCalibrationVersionReplacesManualActionWithSetupAction()
+    {
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                encoderCalibrationVersion: EncoderCalibrationSettings.CurrentVersion + 1
+            )
+        );
+
+        Assert.Equal("Setup needed", viewModel.StateTitle);
+        Assert.Contains("retested after an app update", viewModel.ReadinessDetail);
+        Assert.True(viewModel.IsVideoEncodingSetupRequired);
+        Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+        Assert.True(viewModel.StatusCardCommand.CanExecute(null));
     }
 
     [Fact]
@@ -1168,7 +1191,8 @@ public sealed class RecordingsViewModelTests
         string? activeOutputPath = null,
         RecordingListCategory selectedRecordingCategory = RecordingListCategory.ChallengeMode,
         bool includeSelectedVideoProfile = true,
-        bool includeEncoderCalibrationResults = true
+        bool includeEncoderCalibrationResults = true,
+        int encoderCalibrationVersion = EncoderCalibrationSettings.CurrentVersion
     )
     {
         var selectedProfile = includeSelectedVideoProfile
@@ -1185,21 +1209,26 @@ public sealed class RecordingsViewModelTests
             EncounterRecordingContext => RecordingOwner.Encounter,
             _ => null,
         };
+        var settings = new PullWatchSettings
+        {
+            RecordingsDirectory = recordingsDirectory,
+            Video = new VideoSettings { SelectedProfile = selectedProfile },
+            EncoderCalibration = new EncoderCalibrationSettings
+            {
+                Version = encoderCalibrationVersion,
+                FfmpegPath = CurrentEncoderEnvironment.FfmpegPath,
+                FfmpegVersion = CurrentEncoderEnvironment.FfmpegVersion,
+                FfmpegSha256 = CurrentEncoderEnvironment.FfmpegSha256,
+                Results =
+                    includeEncoderCalibrationResults && selectedProfile is not null
+                        ? [CalibrationResult(selectedProfile)]
+                        : [],
+            },
+            Ui = new UiSettings { SelectedRecordingCategory = selectedRecordingCategory },
+        };
 
         return new ApplicationStatus(
-            new PullWatchSettings
-            {
-                RecordingsDirectory = recordingsDirectory,
-                Video = new VideoSettings { SelectedProfile = selectedProfile },
-                EncoderCalibration = new EncoderCalibrationSettings
-                {
-                    Results =
-                        includeEncoderCalibrationResults && selectedProfile is not null
-                            ? [CalibrationResult(selectedProfile)]
-                            : [],
-                },
-                Ui = new UiSettings { SelectedRecordingCategory = selectedRecordingCategory },
-            },
+            settings,
             new RecordingCoordinatorStatus(
                 state,
                 owner,
@@ -1216,7 +1245,8 @@ public sealed class RecordingsViewModelTests
                 Statistics = new RecordingStatistics(0, savedCount),
             },
             new CombatLogReaderStatus(combatLogState, combatLogPath, null, combatLogError),
-            new WowProcessStatus(wowProcessState, wowProcessId, null, wowWindowTitle, null)
+            new WowProcessStatus(wowProcessState, wowProcessId, null, wowWindowTitle, null),
+            EncoderCalibrationStatusEvaluator.Evaluate(settings, CurrentEncoderEnvironment)
         );
     }
 

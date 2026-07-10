@@ -34,7 +34,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private RecordingCoordinatorStatus _recording;
     private CombatLogReaderStatus _combatLog;
     private WowProcessStatus _wowProcess;
-    private PullWatchSettings? _settings;
+    private EncoderCalibrationStatus? _videoEncoding;
     private string? _recordingsDirectory;
     private Exception? _dismissedFailure;
     private string _duration = "00:00:00";
@@ -61,7 +61,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _recording = initialStatus.Recording;
         _combatLog = initialStatus.CombatLog;
         _wowProcess = initialStatus.WowProcess;
-        _settings = initialStatus.EffectiveSettings;
+        _videoEncoding = initialStatus.VideoEncoding;
         _recordingsDirectory = initialStatus.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = initialStatus.Recording.Statistics.SavedCount;
         _startManual = startManual;
@@ -147,7 +147,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     public string ReadinessDetail =>
         IsVideoEncodingSetupRequired
-            ? GetVideoEncodingSetupRequiredDetail(_settings, _recording.LastFailure)
+            ? GetVideoEncodingSetupRequiredDetail(_videoEncoding, _recording.LastFailure)
             : GetReadinessDetail(_recording, _combatLog, _wowProcess);
 
     public RecordingStatusHealth StatusHealth =>
@@ -157,10 +157,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     public bool IsVideoEncodingSetupRequired =>
         _recording.State == RecordingCoordinatorState.Idle
-        && (
-            IsVideoEncodingSetupIncomplete(_settings)
-            || IsVideoEncodingSetupFailure(_recording.LastFailure)
-        );
+        && (_videoEncoding?.IsValid != true || IsVideoEncodingSetupFailure(_recording.LastFailure));
 
     public bool IsRecordingActive => _recording.State == RecordingCoordinatorState.Recording;
 
@@ -273,7 +270,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _recording = status.Recording;
         _combatLog = status.CombatLog;
         _wowProcess = status.WowProcess;
-        _settings = status.EffectiveSettings;
+        _videoEncoding = status.VideoEncoding;
         _recordingsDirectory = status.EffectiveSettings?.RecordingsDirectory;
         _knownSavedCount = status.Recording.Statistics.SavedCount;
 
@@ -1101,74 +1098,17 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return RecordingFailureClassifier.IsTargetUnavailable(exception);
     }
 
-    private static bool IsVideoEncodingSetupIncomplete(PullWatchSettings? settings)
-    {
-        if (settings is null)
-        {
-            return false;
-        }
-
-        if (settings.EncoderCalibration.Results.Count == 0)
-        {
-            return true;
-        }
-
-        var selectedProfile = settings.Video.SelectedProfile;
-        if (selectedProfile is null)
-        {
-            return true;
-        }
-
-        var selectedResult = settings.EncoderCalibration.Results.FirstOrDefault(result =>
-            result.Codec == selectedProfile.Codec && result.Provider == selectedProfile.Provider
-        );
-
-        return selectedResult is null || !selectedResult.Passed;
-    }
-
     private static string GetVideoEncodingSetupRequiredDetail(
-        PullWatchSettings? settings,
+        EncoderCalibrationStatus? videoEncoding,
         Exception? failure
     )
     {
         var message =
             TryGetVideoEncodingSetupFailureMessage(failure)
-            ?? GetVideoEncodingSetupSettingsMessage(settings)
+            ?? videoEncoding?.Message
             ?? VideoEncodingSetupFallbackMessage;
 
         return JoinSentences(message, VideoEncodingSetupRequiredSuffix);
-    }
-
-    private static string? GetVideoEncodingSetupSettingsMessage(PullWatchSettings? settings)
-    {
-        if (settings is null)
-        {
-            return null;
-        }
-
-        if (settings.EncoderCalibration.Results.Count == 0)
-        {
-            return VideoEncodingSetupFallbackMessage;
-        }
-
-        if (settings.Video.SelectedProfile is null)
-        {
-            return "No tested video encoder profile has been selected.";
-        }
-
-        var selectedResult = settings.EncoderCalibration.Results.FirstOrDefault(result =>
-            result.Codec == settings.Video.SelectedProfile.Codec
-            && result.Provider == settings.Video.SelectedProfile.Provider
-        );
-
-        if (selectedResult is null)
-        {
-            return "The selected video encoder profile has not been tested.";
-        }
-
-        return selectedResult.Passed
-            ? null
-            : "The selected video encoder profile did not pass testing.";
     }
 
     private static bool IsVideoEncodingSetupFailure(Exception? exception)

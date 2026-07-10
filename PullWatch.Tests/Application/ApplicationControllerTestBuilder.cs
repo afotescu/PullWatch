@@ -5,11 +5,19 @@ namespace PullWatch.Tests;
 
 internal sealed class ApplicationControllerTestBuilder(SettingsBootstrapper settingsBootstrapper)
 {
+    internal static EncoderCalibrationEnvironment DefaultEncoderCalibrationEnvironment { get; } =
+        new(@"C:\ffmpeg\bin\ffmpeg.exe", "ffmpeg version test", "ABC123");
+
     private Func<SettingsProvider, IRecordingService> _createRecordingService =
         _ => new FakeRecordingService();
     private Func<string, DateTimeOffset?, Func<bool>, ICombatLogMonitor> _createCombatLogMonitor =
         CreateDefaultCombatLogMonitor;
     private Func<IWowProcessMonitor> _createWowProcessMonitor = () => new FakeWowProcessMonitor();
+    private Func<
+        CancellationToken,
+        Task<EncoderCalibrationEnvironment>
+    > _resolveEncoderCalibrationEnvironment = _ =>
+        Task.FromResult(DefaultEncoderCalibrationEnvironment);
     private IRecordingStorageInitializer? _storageInitializer;
 
     private static ICombatLogMonitor CreateDefaultCombatLogMonitor(
@@ -82,6 +90,14 @@ internal sealed class ApplicationControllerTestBuilder(SettingsBootstrapper sett
         return this;
     }
 
+    public ApplicationControllerTestBuilder WithEncoderCalibrationEnvironmentResolver(
+        Func<CancellationToken, Task<EncoderCalibrationEnvironment>> resolveEnvironment
+    )
+    {
+        _resolveEncoderCalibrationEnvironment = resolveEnvironment;
+        return this;
+    }
+
     public ApplicationController Build()
     {
         return new ApplicationController(
@@ -90,7 +106,8 @@ internal sealed class ApplicationControllerTestBuilder(SettingsBootstrapper sett
             _createCombatLogMonitor,
             NullLoggerFactory.Instance,
             _createWowProcessMonitor,
-            _storageInitializer
+            storageInitializer: _storageInitializer,
+            resolveEncoderCalibrationEnvironment: _resolveEncoderCalibrationEnvironment
         );
     }
 }

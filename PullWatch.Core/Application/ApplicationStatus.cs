@@ -4,5 +4,6 @@ public sealed record ApplicationStatus(
     PullWatchSettings? EffectiveSettings,
     RecordingCoordinatorStatus Recording,
     CombatLogReaderStatus CombatLog,
-    WowProcessStatus WowProcess
+    WowProcessStatus WowProcess,
+    EncoderCalibrationStatus? VideoEncoding = null
 );

@@ -49,6 +49,103 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task StartupPublishesCanonicalStaleEncoderCalibrationStatus()
+    {
+        using var directory = new TemporaryDirectory();
+        var environment = ApplicationControllerTestBuilder.DefaultEncoderCalibrationEnvironment;
+        var selectedProfile = new VideoProfileSelection
+        {
+            Codec = VideoCodec.H265,
+            Provider = VideoEncoderProvider.NvidiaNvenc,
+        };
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+                Video = new VideoSettings { SelectedProfile = selectedProfile },
+                EncoderCalibration = new EncoderCalibrationSettings
+                {
+                    Version = EncoderCalibrationSettings.CurrentVersion + 1,
+                    FfmpegPath = environment.FfmpegPath,
+                    FfmpegVersion = environment.FfmpegVersion,
+                    FfmpegSha256 = environment.FfmpegSha256,
+                    Results =
+                    [
+                        new EncoderCalibrationResult
+                        {
+                            Codec = selectedProfile.Codec,
+                            Provider = selectedProfile.Provider,
+                            EncoderName = "hevc_nvenc",
+                            Passed = true,
+                        },
+                    ],
+                },
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        await using var controller = new ApplicationControllerTestBuilder(bootstrapper).Build();
+
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(controller.Status.VideoEncoding);
+        Assert.Equal(EncoderCalibrationStatusKind.Stale, controller.Status.VideoEncoding.Kind);
+        Assert.Equal(
+            "Video encoding needs to be retested after an app update.",
+            controller.Status.VideoEncoding.Message
+        );
+    }
+
+    [Fact]
+    public async Task UnrelatedSettingsSaveKeepsPublishedVideoEncodingStatusWithoutResolvingFfmpeg()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = Path.Combine(directory.Path, "Recordings"),
+            },
+            TestContext.Current.CancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        var resolutionCount = 0;
+        var builder = new ApplicationControllerTestBuilder(
+            bootstrapper
+        ).WithEncoderCalibrationEnvironmentResolver(_ =>
+        {
+            resolutionCount++;
+            return Task.FromResult(
+                ApplicationControllerTestBuilder.DefaultEncoderCalibrationEnvironment
+            );
+        });
+        await using var controller = builder.Build();
+        await controller.StartAsync(TestContext.Current.CancellationToken);
+        var initialVideoEncoding = controller.Status.VideoEncoding;
+
+        var saveResult = await controller.SaveSettingsAsync(
+            controller.Status.EffectiveSettings! with
+            {
+                RecordMythicPlus = false,
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(SettingsSaveStatus.Saved, saveResult.Status);
+        Assert.Equal(1, resolutionCount);
+        Assert.Same(initialVideoEncoding, controller.Status.VideoEncoding);
+    }
+
+    [Fact]
     public async Task StartupWithUnavailableRecordingsDirectoryKeepsApplicationRunning()
     {
         using var directory = new TemporaryDirectory();
@@ -568,6 +665,7 @@ public sealed class ApplicationControllerTests
     public async Task CalibrationSaveClearsPreviousVideoEncodingSetupFailure()
     {
         using var directory = new TemporaryDirectory();
+        var environment = ApplicationControllerTestBuilder.DefaultEncoderCalibrationEnvironment;
         var setupFailure = new InvalidOperationException(
             "Video encoding needs to be retested because the FFmpeg path changed."
         );
@@ -604,6 +702,9 @@ public sealed class ApplicationControllerTests
                 EncoderCalibration = new EncoderCalibrationSettings
                 {
                     Version = EncoderCalibrationSettings.CurrentVersion,
+                    FfmpegPath = environment.FfmpegPath,
+                    FfmpegVersion = environment.FfmpegVersion,
+                    FfmpegSha256 = environment.FfmpegSha256,
                     Results =
                     [
                         new EncoderCalibrationResult
@@ -621,6 +722,8 @@ public sealed class ApplicationControllerTests
 
         Assert.Equal(SettingsSaveStatus.Saved, saveResult.Status);
         Assert.Null(controller.Status.Recording.LastFailure);
+        Assert.NotNull(controller.Status.VideoEncoding);
+        Assert.True(controller.Status.VideoEncoding.IsValid);
     }
 
     [Fact]

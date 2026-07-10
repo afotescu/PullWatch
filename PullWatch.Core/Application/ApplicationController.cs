@@ -46,6 +46,10 @@ public sealed class ApplicationController : IAsyncDisposable
         ICombatLogMonitor
     > _createCombatLogMonitor;
     private readonly Func<IWowProcessMonitor> _createWowProcessMonitor;
+    private readonly Func<
+        CancellationToken,
+        Task<EncoderCalibrationEnvironment>
+    > _resolveEncoderCalibrationEnvironment;
     private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly RecordingCatalog? _recordingCatalog;
     private readonly RecordingStorageCoordinator _recordingStorageCoordinator;
@@ -79,7 +83,8 @@ public sealed class ApplicationController : IAsyncDisposable
             loggerFactory,
             () => new WowProcessMonitor(loggerFactory.CreateLogger<WowProcessMonitor>()),
             CreateDefaultStorageInitializer(loggerFactory),
-            CreateDefaultRecordingCatalog()
+            CreateDefaultRecordingCatalog(),
+            resolveEncoderCalibrationEnvironment: FfmpegToolPaths.ResolveEnvironmentAsync
         ) { }
 
     internal ApplicationController(
@@ -90,7 +95,11 @@ public sealed class ApplicationController : IAsyncDisposable
         Func<IWowProcessMonitor> createWowProcessMonitor,
         IRecordingStorageInitializer? storageInitializer = null,
         RecordingCatalog? recordingCatalog = null,
-        RecordingStorageRetentionService? recordingStorageRetention = null
+        RecordingStorageRetentionService? recordingStorageRetention = null,
+        Func<
+            CancellationToken,
+            Task<EncoderCalibrationEnvironment>
+        >? resolveEncoderCalibrationEnvironment = null
     )
     {
         _settingsBootstrapper = settingsBootstrapper;
@@ -99,6 +108,8 @@ public sealed class ApplicationController : IAsyncDisposable
         _createWowProcessMonitor =
             createWowProcessMonitor
             ?? throw new ArgumentNullException(nameof(createWowProcessMonitor));
+        _resolveEncoderCalibrationEnvironment =
+            resolveEncoderCalibrationEnvironment ?? FfmpegToolPaths.ResolveEnvironmentAsync;
         _storageInitializer = storageInitializer ?? NoOpRecordingStorageInitializer.Instance;
         _recordingCatalog = recordingCatalog;
         _loggerFactory = loggerFactory;
@@ -159,6 +170,13 @@ public sealed class ApplicationController : IAsyncDisposable
                 await _settingsBootstrapper.LoadEffectiveWithMetadataAsync(cancellationToken)
                 ?? throw new InvalidOperationException("Could not load valid effective settings.");
             var settings = bootstrapResult.Settings;
+            var encoderCalibrationEnvironment = await _resolveEncoderCalibrationEnvironment(
+                cancellationToken
+            );
+            var videoEncoding = EncoderCalibrationStatusEvaluator.Evaluate(
+                settings,
+                encoderCalibrationEnvironment
+            );
             await _storageInitializer.InitializeAsync(cancellationToken);
             var settingsProvider = new SettingsProvider(settings);
             var settingsService = new ApplicationSettingsService(
@@ -193,7 +211,8 @@ public sealed class ApplicationController : IAsyncDisposable
                         settings,
                         status.WowProcess
                     ),
-                    status.WowProcess
+                    status.WowProcess,
+                    videoEncoding
                 ));
                 _recordingStorageCoordinator.Start(settings);
                 await monitoringSupervisor.StartAsync(cancellationToken);
@@ -367,6 +386,11 @@ public sealed class ApplicationController : IAsyncDisposable
             }
 
             var savedSettings = result.Settings!;
+            var videoEncoding = await EvaluateVideoEncodingAfterSaveAsync(
+                previousSettings,
+                savedSettings,
+                cancellationToken
+            );
             UpdateStatus(status =>
                 status with
                 {
@@ -374,8 +398,10 @@ public sealed class ApplicationController : IAsyncDisposable
                     Recording = ClearVideoEncodingSetupFailureAfterSave(
                         status.Recording,
                         previousSettings,
-                        savedSettings
+                        savedSettings,
+                        videoEncoding
                     ),
+                    VideoEncoding = videoEncoding,
                 }
             );
 
@@ -655,14 +681,15 @@ public sealed class ApplicationController : IAsyncDisposable
     private static RecordingCoordinatorStatus ClearVideoEncodingSetupFailureAfterSave(
         RecordingCoordinatorStatus recording,
         PullWatchSettings previousSettings,
-        PullWatchSettings savedSettings
+        PullWatchSettings savedSettings,
+        EncoderCalibrationStatus videoEncoding
     )
     {
         if (
             recording.LastFailure is null
             || !VideoEncodingSetupFailureClassifier.IsSetupFailure(recording.LastFailure)
             || !VideoEncodingSetupSettingsChanged(previousSettings, savedSettings)
-            || !HasPassingSelectedVideoProfile(savedSettings)
+            || !videoEncoding.IsValid
         )
         {
             return recording;
@@ -683,19 +710,19 @@ public sealed class ApplicationController : IAsyncDisposable
             || previousSettings.EncoderCalibration != currentSettings.EncoderCalibration;
     }
 
-    private static bool HasPassingSelectedVideoProfile(PullWatchSettings settings)
+    private async Task<EncoderCalibrationStatus> EvaluateVideoEncodingAfterSaveAsync(
+        PullWatchSettings previousSettings,
+        PullWatchSettings savedSettings,
+        CancellationToken cancellationToken
+    )
     {
-        var selectedProfile = settings.Video.SelectedProfile;
-        if (selectedProfile is null)
+        if (!VideoEncodingSetupSettingsChanged(previousSettings, savedSettings))
         {
-            return false;
+            return Status.VideoEncoding!;
         }
 
-        return settings.EncoderCalibration.Results.Any(result =>
-            result.Codec == selectedProfile.Codec
-            && result.Provider == selectedProfile.Provider
-            && result.Passed
-        );
+        var environment = await _resolveEncoderCalibrationEnvironment(cancellationToken);
+        return EncoderCalibrationStatusEvaluator.Evaluate(savedSettings, environment);
     }
 
     private void OnRecordingStatusChanged(RecordingCoordinatorStatus status)

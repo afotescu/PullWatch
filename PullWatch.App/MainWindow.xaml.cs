@@ -68,9 +68,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(cancellationToken);
-        var status = EncoderCalibrationStatusEvaluator.Evaluate(settings, environment);
-        if (status.IsValid)
+        if (_controller.Status.VideoEncoding?.IsValid == true)
         {
             return;
         }
@@ -109,6 +107,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(cancellationToken);
         await RunEncoderCalibrationAsync(environment, cancellationToken);
     }
 
