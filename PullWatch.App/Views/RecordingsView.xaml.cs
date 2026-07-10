@@ -13,7 +13,7 @@ namespace PullWatch;
 
 public partial class RecordingsView : UserControl, IDisposable
 {
-    private FullscreenPlayerWindow? _fullscreenWindow;
+    private MainWindow? _fullScreenHostWindow;
     private Window? _keyboardWindow;
     private object _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
     private bool _isDisposed;
@@ -40,7 +40,7 @@ public partial class RecordingsView : UserControl, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs eventArgs)
     {
         DetachWindowKeyHandler();
-        CloseFullScreenWindow();
+        CloseFullScreen();
         RecordingPlayer.SuspendPlayback();
     }
 
@@ -53,7 +53,7 @@ public partial class RecordingsView : UserControl, IDisposable
 
         _isDisposed = true;
         DetachWindowKeyHandler();
-        CloseFullScreenWindow();
+        CloseFullScreen();
         RecordingPlayer.FullScreenRequested -= OnPlayerFullScreenRequested;
         RecordingPlayer.ExitFullScreenRequested -= OnPlayerExitFullScreenRequested;
         Loaded -= OnLoaded;
@@ -91,6 +91,16 @@ public partial class RecordingsView : UserControl, IDisposable
     private void OnWindowPreviewKeyDown(object sender, WpfKeyEventArgs eventArgs)
     {
         if (
+            RecordingPlayer.IsFullScreen
+            && (eventArgs.Key == WpfKey.Escape || eventArgs.SystemKey == WpfKey.F4)
+        )
+        {
+            eventArgs.Handled = true;
+            CloseFullScreen();
+            return;
+        }
+
+        if (
             eventArgs.Handled
             || ShouldLeaveShortcutToFocusedControl(eventArgs.OriginalSource, eventArgs.Key)
         )
@@ -103,7 +113,11 @@ public partial class RecordingsView : UserControl, IDisposable
 
     private void OnPlayerFullScreenRequested(object? sender, EventArgs eventArgs)
     {
-        if (_fullscreenWindow is not null || RecordingPlayer.Source is null)
+        if (
+            _fullScreenHostWindow is not null
+            || RecordingPlayer.Source is null
+            || Window.GetWindow(this) is not MainWindow hostWindow
+        )
         {
             return;
         }
@@ -113,55 +127,36 @@ public partial class RecordingsView : UserControl, IDisposable
         );
         RecordingPlayer.DataContext = DataContext;
         PlayerHost.Content = null;
+        _fullScreenHostWindow = hostWindow;
 
-        var fullscreenWindow = new FullscreenPlayerWindow
+        if (!hostWindow.EnterFullScreenPlayer(RecordingPlayer, CloseFullScreen))
         {
-            Owner = Window.GetWindow(this),
-            DataContext = DataContext,
-        };
-        fullscreenWindow.ExitRequested += OnFullScreenExitRequested;
-        fullscreenWindow.Closed += OnFullScreenClosed;
-        fullscreenWindow.SetPlayer(RecordingPlayer);
-
-        _fullscreenWindow = fullscreenWindow;
-        fullscreenWindow.Show();
-        fullscreenWindow.Activate();
+            _fullScreenHostWindow = null;
+            PlayerHost.Content = RecordingPlayer;
+            RestorePlayerDataContext();
+        }
     }
 
     private void OnPlayerExitFullScreenRequested(object? sender, EventArgs eventArgs)
     {
-        CloseFullScreenWindow();
+        CloseFullScreen();
     }
 
-    private void OnFullScreenExitRequested(object? sender, EventArgs eventArgs)
+    private void CloseFullScreen()
     {
-        CloseFullScreenWindow();
-    }
-
-    private void CloseFullScreenWindow()
-    {
-        _fullscreenWindow?.Close();
-    }
-
-    private void OnFullScreenClosed(object? sender, EventArgs eventArgs)
-    {
-        if (sender is not FullscreenPlayerWindow fullscreenWindow)
+        if (_fullScreenHostWindow is not { } hostWindow)
         {
             return;
         }
 
-        fullscreenWindow.ExitRequested -= OnFullScreenExitRequested;
-        fullscreenWindow.Closed -= OnFullScreenClosed;
-
-        var player = fullscreenWindow.ReleasePlayer();
-
-        if (player is not null)
+        _fullScreenHostWindow = null;
+        if (!hostWindow.ExitFullScreenPlayer(RecordingPlayer))
         {
-            PlayerHost.Content = player;
-            RestorePlayerDataContext();
+            return;
         }
 
-        _fullscreenWindow = null;
+        PlayerHost.Content = RecordingPlayer;
+        RestorePlayerDataContext();
     }
 
     private void RestorePlayerDataContext()
