@@ -10,7 +10,7 @@ using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
 namespace PullWatch;
 
-public partial class RecordingPlayerControl : UserControl
+public partial class RecordingPlayerControl : UserControl, IDisposable
 {
     private const string PlayIconGeometryKey = "PlayIconGeometry";
     private const string StopIconGeometryKey = "StopIconGeometry";
@@ -59,7 +59,9 @@ public partial class RecordingPlayerControl : UserControl
     private double _volume = FallbackUnmuteVolume;
     private int _playerLifetimeVersion;
     private int _sourceLoadVersion;
+    private Uri? _assignedSource;
     private string? _playbackErrorText;
+    private bool _isDisposed;
 
     public RecordingPlayerControl()
     {
@@ -115,10 +117,37 @@ public partial class RecordingPlayerControl : UserControl
         FullScreenButton.IsEnabled = false;
     }
 
+    public void SuspendPlayback()
+    {
+        _positionTimer.Stop();
+        _isPlaying = false;
+        UpdatePlayPauseButton();
+
+        if (_mediaPlayer is null || !_hasAssignedMedia || _isPriming)
+        {
+            return;
+        }
+
+        _isPrimedPaused = true;
+        _mediaPlayer.SetPause(true);
+    }
+
     public void DisposePlayback()
     {
+        Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
         StopPlayback();
         DisposePlayer();
+        VideoView.Dispose();
     }
 
     public bool TogglePlayback()
@@ -210,12 +239,17 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         if (!EnsurePlayer())
         {
             return;
         }
 
-        if (Source is not null && !_hasAssignedMedia)
+        if (Source is not null && (!_hasAssignedMedia || !Equals(_assignedSource, Source)))
         {
             ScheduleLoadSource(Source);
         }
@@ -223,6 +257,11 @@ public partial class RecordingPlayerControl : UserControl
 
     private void ScheduleLoadSource(Uri? source)
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         var loadVersion = ++_sourceLoadVersion;
 
         if (source is null)
@@ -280,6 +319,7 @@ public partial class RecordingPlayerControl : UserControl
             using var media = new VlcMedia(_libVlc!, source);
             _mediaPlayer!.Media = media;
             _hasAssignedMedia = true;
+            _assignedSource = source;
 
             if (!_mediaPlayer.Play())
             {
@@ -696,6 +736,11 @@ public partial class RecordingPlayerControl : UserControl
 
     private bool EnsurePlayer()
     {
+        if (_isDisposed)
+        {
+            return false;
+        }
+
         if (_mediaPlayer is not null)
         {
             return true;
@@ -745,11 +790,13 @@ public partial class RecordingPlayerControl : UserControl
         _libVlc?.Dispose();
         _libVlc = null;
         _hasAssignedMedia = false;
+        _assignedSource = null;
     }
 
     private void ReleaseMedia()
     {
         _hasAssignedMedia = false;
+        _assignedSource = null;
 
         if (_mediaPlayer is not null)
         {
@@ -760,11 +807,16 @@ public partial class RecordingPlayerControl : UserControl
     private void DispatchPlayerEvent(Action action)
     {
         var playerLifetimeVersion = _playerLifetimeVersion;
+        var sourceLoadVersion = _sourceLoadVersion;
 
         Dispatcher.InvokeAsync(
             () =>
             {
-                if (_mediaPlayer is null || playerLifetimeVersion != _playerLifetimeVersion)
+                if (
+                    _mediaPlayer is null
+                    || playerLifetimeVersion != _playerLifetimeVersion
+                    || sourceLoadVersion != _sourceLoadVersion
+                )
                 {
                     return;
                 }

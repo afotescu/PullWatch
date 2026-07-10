@@ -358,7 +358,7 @@
     </Border>
 
     <Grid Grid.Column="1">
-      <ContentControl Content="{Binding SelectedNavigationItem.Content}" />
+      <ContentControl x:Name="NavigationContent" />
 
       <ItemsControl
         Margin="18,18,18,0"

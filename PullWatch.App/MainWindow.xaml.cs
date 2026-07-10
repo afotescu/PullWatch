@@ -13,7 +13,11 @@ public partial class MainWindow : Window
     private readonly FfmpegEncoderTestService _encoderTestService;
     private readonly DispatcherTimer _durationTimer;
     private readonly ApplicationLifetimeCoordinator _lifetime;
+    private readonly Dictionary<object, FrameworkElement> _navigationViews = new(
+        ReferenceEqualityComparer.Instance
+    );
     private bool _placementSaved;
+    private bool _navigationViewsDisposed;
 
     internal MainWindow(
         ApplicationController controller,
@@ -46,6 +50,8 @@ public partial class MainWindow : Window
             showSettingsOnStartup
         );
         DataContext = _viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ShowSelectedNavigationContent();
         RestoreWindowPlacement(controller.Status.EffectiveSettings?.Ui.WindowPlacement);
         _durationTimer = new DispatcherTimer(
             TimeSpan.FromSeconds(1),
@@ -252,6 +258,7 @@ public partial class MainWindow : Window
     {
         if (!_lifetime.ShouldHideOnWindowClose)
         {
+            DisposeNavigationViews();
             _viewModel.DiscardPendingSettingsDraftsForExit();
             SaveWindowPlacement();
             return;
@@ -268,9 +275,63 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs eventArgs)
     {
+        DisposeNavigationViews();
         SaveWindowPlacement();
         _durationTimer.Stop();
         _viewModel.Dispose();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName == nameof(MainWindowViewModel.SelectedNavigationItem))
+        {
+            ShowSelectedNavigationContent();
+        }
+    }
+
+    private void ShowSelectedNavigationContent()
+    {
+        var content = _viewModel.SelectedNavigationItem.Content;
+        if (!_navigationViews.TryGetValue(content, out var view))
+        {
+            view = CreateNavigationView(content);
+            _navigationViews.Add(content, view);
+        }
+
+        NavigationContent.Content = view;
+    }
+
+    private FrameworkElement CreateNavigationView(object content)
+    {
+        var template = TryFindResource(new DataTemplateKey(content.GetType())) as DataTemplate;
+        if (template?.LoadContent() is not FrameworkElement view)
+        {
+            throw new InvalidOperationException(
+                $"No navigation view template is registered for {content.GetType().FullName}."
+            );
+        }
+
+        view.DataContext = content;
+        return view;
+    }
+
+    private void DisposeNavigationViews()
+    {
+        if (_navigationViewsDisposed)
+        {
+            return;
+        }
+
+        _navigationViewsDisposed = true;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        NavigationContent.Content = null;
+
+        foreach (var view in _navigationViews.Values.OfType<IDisposable>())
+        {
+            view.Dispose();
+        }
+
+        _navigationViews.Clear();
     }
 
     private void RequestShutdownForUpdate()

@@ -11,11 +11,12 @@ using WpfTextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 
 namespace PullWatch;
 
-public partial class RecordingsView : UserControl
+public partial class RecordingsView : UserControl, IDisposable
 {
     private FullscreenPlayerWindow? _fullscreenWindow;
     private Window? _keyboardWindow;
     private object _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
+    private bool _isDisposed;
 
     public RecordingsView()
     {
@@ -28,6 +29,11 @@ public partial class RecordingsView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         AttachWindowKeyHandler();
     }
 
@@ -35,6 +41,23 @@ public partial class RecordingsView : UserControl
     {
         DetachWindowKeyHandler();
         CloseFullScreenWindow();
+        RecordingPlayer.SuspendPlayback();
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        DetachWindowKeyHandler();
+        CloseFullScreenWindow();
+        RecordingPlayer.FullScreenRequested -= OnPlayerFullScreenRequested;
+        RecordingPlayer.ExitFullScreenRequested -= OnPlayerExitFullScreenRequested;
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
         RecordingPlayer.DisposePlayback();
     }
 
