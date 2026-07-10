@@ -253,6 +253,7 @@ public sealed class CombatLogEventHandler(
     )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+        LogEventMetadata(context);
         await _challengeModeLifecycle.HandleStartAsync(
             combatLogEvent.Name,
             context,
@@ -269,6 +270,12 @@ public sealed class CombatLogEventHandler(
     )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+
+        if (challengeEnd is not null)
+        {
+            LogEventMetadata(challengeEnd);
+        }
+
         await _challengeModeLifecycle.HandleEndAsync(
             combatLogEvent.Name,
             challengeEnd,
@@ -285,6 +292,7 @@ public sealed class CombatLogEventHandler(
     )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+        LogEventMetadata(context);
         var result = await recordingCoordinator.StartAutomaticAsync(context, cancellationToken);
         LogCommandResult(combatLogEvent.Name, result);
         LogEventHandled(combatLogEvent.Name, eventTimestamp);
@@ -301,6 +309,12 @@ public sealed class CombatLogEventHandler(
     )
     {
         LogRecordingEventReceived(combatLogEvent, eventTimestamp);
+
+        if (activityEnd is not null)
+        {
+            LogEventMetadata(activityEnd);
+        }
+
         var result = await recordingCoordinator.StopAutomaticAsync(
             owner,
             identity,
@@ -383,64 +397,61 @@ public sealed class CombatLogEventHandler(
 
         _previousRecordingEventTimestamp = eventTimestamp;
         logger.LogInformation("Combat log event: {CombatLogLine}", combatLogEvent.RawLine);
-        LogEventMetadata(combatLogEvent);
     }
 
-    private void LogEventMetadata(CombatLogEvent combatLogEvent)
+    private void LogEventMetadata(RecordingContext context)
     {
-        var arguments = combatLogEvent.Arguments;
-
-        if (combatLogEvent.Name == WowEvents.ChallengeModeStart && arguments.Count >= 5)
+        switch (context)
         {
-            logger.LogInformation(
-                "Challenge started: {DungeonName}; instance {InstanceId}, challenge mode {ChallengeModeId}, level {Level}, affixes {Affixes}",
-                arguments[0],
-                arguments[1],
-                arguments[2],
-                arguments[3],
-                arguments[4]
-            );
-            return;
+            case ChallengeRecordingContext challenge:
+                logger.LogInformation(
+                    "Challenge started: {DungeonName}; map {MapId}, challenge mode {ChallengeModeId}, level {KeystoneLevel}, affixes [{AffixIds}]",
+                    challenge.DungeonName,
+                    challenge.MapId,
+                    challenge.ChallengeModeId,
+                    challenge.KeystoneLevel,
+                    string.Join(',', challenge.AffixIds)
+                );
+                break;
+            case EncounterRecordingContext encounter:
+                logger.LogInformation(
+                    "Encounter started: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, instance {InstanceId}",
+                    encounter.EncounterName,
+                    encounter.EncounterId,
+                    encounter.DifficultyId,
+                    encounter.GroupSize,
+                    encounter.InstanceId
+                );
+                break;
         }
+    }
 
-        if (combatLogEvent.Name == WowEvents.EncounterStart && arguments.Count >= 5)
+    private void LogEventMetadata(RecordingActivityEnd activityEnd)
+    {
+        switch (activityEnd)
         {
-            logger.LogInformation(
-                "Encounter started: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, instance {InstanceId}",
-                arguments[1],
-                arguments[0],
-                arguments[2],
-                arguments[3],
-                arguments[4]
-            );
-            return;
-        }
-
-        if (combatLogEvent.Name == WowEvents.EncounterEnd && arguments.Count >= 6)
-        {
-            logger.LogInformation(
-                "Encounter ended: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, success {Success}, duration {DurationMilliseconds} ms",
-                arguments[1],
-                arguments[0],
-                arguments[2],
-                arguments[3],
-                arguments[4],
-                arguments[5]
-            );
-            return;
-        }
-
-        if (combatLogEvent.Name == WowEvents.ChallengeModeEnd && arguments.Count >= 6)
-        {
-            logger.LogInformation(
-                "Challenge ended: instance {InstanceId}, success {Success}, level {Level}, total time {TotalTimeMilliseconds} ms, on-time delta {OnTimeSeconds} s, mythic rating after run {MythicRatingAfterRun}",
-                arguments[0],
-                arguments[1],
-                arguments[2],
-                arguments[3],
-                arguments[4],
-                arguments[5]
-            );
+            case EncounterRecordingEnd encounter:
+                logger.LogInformation(
+                    "Encounter ended: {EncounterName}; encounter {EncounterId}, difficulty {DifficultyId}, group size {GroupSize}, outcome {Outcome}, duration {DurationMilliseconds} ms",
+                    encounter.EncounterName,
+                    encounter.EncounterId,
+                    encounter.DifficultyId,
+                    encounter.GroupSize,
+                    encounter.Outcome,
+                    encounter.DurationMilliseconds
+                );
+                break;
+            case ChallengeRecordingEnd challenge:
+                logger.LogInformation(
+                    "Challenge ended: map {MapId}, outcome {Outcome}, level {KeystoneLevel}, total time {TotalTimeMilliseconds} ms, on-time delta {OnTimeSeconds} s, mythic rating after run {MythicRatingAfterRun}",
+                    challenge.MapId,
+                    challenge.Outcome,
+                    challenge.KeystoneLevel,
+                    challenge.TotalTimeMilliseconds,
+                    challenge.OnTimeSeconds,
+                    challenge.MythicRatingAfterRun
+                );
+                break;
         }
     }
 }
