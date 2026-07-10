@@ -48,18 +48,14 @@ public sealed class ApplicationController : IAsyncDisposable
     private readonly Func<IWowProcessMonitor> _createWowProcessMonitor;
     private readonly IRecordingStorageInitializer _storageInitializer;
     private readonly RecordingCatalog? _recordingCatalog;
-    private readonly RecordingStorageRetentionService? _recordingStorageRetention;
+    private readonly RecordingStorageCoordinator _recordingStorageCoordinator;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ApplicationController> _logger;
     private readonly ApplicationStatusPublisher _statusPublisher;
     private readonly SemaphoreSlim _lifetimeLock = new(1, 1);
-    private readonly SemaphoreSlim _recordingStorageLock = new(1, 1);
-    private readonly CancellationTokenSource _recordingStorageCancellation = new();
     private RecordingCoordinator? _recordingCoordinator;
     private ApplicationSettingsService? _settingsService;
     private ApplicationMonitoringSupervisor? _monitoringSupervisor;
-    private RecordingStorageStatus _recordingStorageStatus = RecordingStorageStatus.Initial;
-    private int _recordingStorageOperationVersion;
     private bool _disposed;
     private int _disposeStarted;
 
@@ -107,7 +103,7 @@ public sealed class ApplicationController : IAsyncDisposable
         _recordingCatalog = recordingCatalog;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<ApplicationController>();
-        _recordingStorageRetention =
+        var storageRetention =
             recordingStorageRetention
             ?? (
                 recordingCatalog is null
@@ -117,6 +113,10 @@ public sealed class ApplicationController : IAsyncDisposable
                         loggerFactory.CreateLogger<RecordingStorageRetentionService>()
                     )
             );
+        _recordingStorageCoordinator = new RecordingStorageCoordinator(
+            storageRetention,
+            loggerFactory.CreateLogger<RecordingStorageCoordinator>()
+        );
         _statusPublisher = new ApplicationStatusPublisher(
             InitialStatus,
             loggerFactory.CreateLogger<ApplicationStatusPublisher>()
@@ -131,10 +131,13 @@ public sealed class ApplicationController : IAsyncDisposable
 
     public ApplicationStatus Status => _statusPublisher.Status;
 
-    public event Action<RecordingStorageStatus>? RecordingStorageStatusChanged;
+    public event Action<RecordingStorageStatus>? RecordingStorageStatusChanged
+    {
+        add => _recordingStorageCoordinator.StatusChanged += value;
+        remove => _recordingStorageCoordinator.StatusChanged -= value;
+    }
 
-    public RecordingStorageStatus RecordingStorageStatus =>
-        Volatile.Read(ref _recordingStorageStatus);
+    public RecordingStorageStatus RecordingStorageStatus => _recordingStorageCoordinator.Status;
 
     public bool StartedWithCreatedSettingsFile { get; private set; }
 
@@ -192,13 +195,7 @@ public sealed class ApplicationController : IAsyncDisposable
                     ),
                     status.WowProcess
                 ));
-                SetRecordingStorageStatus(
-                    RecordingStorageStatus.Initial with
-                    {
-                        MaxUsageBytes = settings.Storage.MaxUsageBytes,
-                    }
-                );
-                QueueRecordingStorageRefreshOrRetention(settings);
+                _recordingStorageCoordinator.Start(settings);
                 await monitoringSupervisor.StartAsync(cancellationToken);
             }
             catch
@@ -384,7 +381,7 @@ public sealed class ApplicationController : IAsyncDisposable
 
             if (StorageSettingsChanged(previousSettings, savedSettings))
             {
-                QueueRecordingStorageRefreshOrRetention(savedSettings);
+                _recordingStorageCoordinator.QueueRefreshOrRetention(savedSettings);
             }
 
             if (PathsEqual(previousSettings.WowLogsDirectory, savedSettings.WowLogsDirectory))
@@ -502,7 +499,7 @@ public sealed class ApplicationController : IAsyncDisposable
         }
 
         Volatile.Write(ref _disposed, true);
-        _recordingStorageCancellation.Cancel();
+        await _recordingStorageCoordinator.DisposeAsync();
         await _lifetimeLock.WaitAsync(CancellationToken.None);
 
         try
@@ -635,7 +632,7 @@ public sealed class ApplicationController : IAsyncDisposable
         }
 
         _statusPublisher.Set(InitialStatus);
-        SetRecordingStorageStatus(RecordingStorageStatus.Initial);
+        _recordingStorageCoordinator.ResetStatus();
     }
 
     private static bool PathsEqual(string? left, string? right)
@@ -701,153 +698,6 @@ public sealed class ApplicationController : IAsyncDisposable
         );
     }
 
-    private void QueueRecordingStorageRefreshOrRetention(PullWatchSettings settings)
-    {
-        var operationVersion = Interlocked.Increment(ref _recordingStorageOperationVersion);
-        _ = RunRecordingStorageOperationAsync(
-            settings,
-            settings.Storage.IsLimitEnabled,
-            operationVersion,
-            _recordingStorageCancellation.Token
-        );
-    }
-
-    private async Task RunRecordingStorageOperationAsync(
-        PullWatchSettings settings,
-        bool enforceLimit,
-        int operationVersion,
-        CancellationToken cancellationToken
-    )
-    {
-        if (_recordingStorageRetention is null)
-        {
-            if (operationVersion == Volatile.Read(ref _recordingStorageOperationVersion))
-            {
-                SetRecordingStorageStatus(
-                    RecordingStorageStatus.Initial with
-                    {
-                        MaxUsageBytes = settings.Storage.MaxUsageBytes,
-                    }
-                );
-            }
-
-            return;
-        }
-
-        var lockEntered = false;
-
-        try
-        {
-            await _recordingStorageLock.WaitAsync(cancellationToken);
-            lockEntered = true;
-
-            if (operationVersion != Volatile.Read(ref _recordingStorageOperationVersion))
-            {
-                return;
-            }
-
-            settings = _settingsService?.Current ?? settings;
-            enforceLimit = settings.Storage.IsLimitEnabled;
-            var currentStatus = RecordingStorageStatus;
-            SetRecordingStorageStatus(
-                currentStatus with
-                {
-                    MaxUsageBytes = settings.Storage.MaxUsageBytes,
-                    IsRefreshing = !enforceLimit,
-                    IsCleaning = enforceLimit,
-                    LastDeletedRecordingCount = 0,
-                    LastError = null,
-                }
-            );
-
-            if (enforceLimit)
-            {
-                var result = await _recordingStorageRetention.EnforceLimitAsync(
-                    settings,
-                    cancellationToken
-                );
-                SetRecordingStorageStatus(
-                    new RecordingStorageStatus(
-                        result.Usage.UsageBytes,
-                        settings.Storage.MaxUsageBytes,
-                        result.Usage.RecordingCount,
-                        IsRefreshing: false,
-                        IsCleaning: false,
-                        LastDeletedRecordingCount: result.DeletedCount,
-                        LastError: result.Errors.FirstOrDefault()
-                    )
-                );
-                return;
-            }
-
-            var usage = await _recordingStorageRetention.GetUsageAsync(settings, cancellationToken);
-            SetRecordingStorageStatus(
-                new RecordingStorageStatus(
-                    usage.UsageBytes,
-                    settings.Storage.MaxUsageBytes,
-                    usage.RecordingCount,
-                    IsRefreshing: false,
-                    IsCleaning: false,
-                    LastDeletedRecordingCount: 0,
-                    LastError: null
-                )
-            );
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // The application is shutting down.
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(exception, "Could not refresh managed recording storage usage");
-            SetRecordingStorageStatus(
-                this.RecordingStorageStatus with
-                {
-                    MaxUsageBytes = settings.Storage.MaxUsageBytes,
-                    IsRefreshing = false,
-                    IsCleaning = false,
-                    LastDeletedRecordingCount = 0,
-                    LastError = exception,
-                }
-            );
-        }
-        finally
-        {
-            if (lockEntered)
-            {
-                _recordingStorageLock.Release();
-            }
-        }
-    }
-
-    private void SetRecordingStorageStatus(RecordingStorageStatus status)
-    {
-        Volatile.Write(ref _recordingStorageStatus, status);
-        NotifyRecordingStorageStatusChanged(status);
-    }
-
-    private void NotifyRecordingStorageStatusChanged(RecordingStorageStatus status)
-    {
-        var handlers = RecordingStorageStatusChanged;
-
-        if (handlers is null)
-        {
-            return;
-        }
-
-        foreach (var handler in handlers.GetInvocationList().Cast<Action<RecordingStorageStatus>>())
-        {
-            try
-            {
-                handler(status);
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Recording storage status subscriber failed");
-            }
-        }
-    }
-
     private void OnRecordingStatusChanged(RecordingCoordinatorStatus status)
     {
         var previousSavedCount = Status.Recording.Statistics.SavedCount;
@@ -862,7 +712,7 @@ public sealed class ApplicationController : IAsyncDisposable
 
         if (settings is not null)
         {
-            QueueRecordingStorageRefreshOrRetention(settings);
+            _recordingStorageCoordinator.QueueRefreshOrRetention(settings);
         }
     }
 
