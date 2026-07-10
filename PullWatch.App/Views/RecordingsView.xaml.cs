@@ -35,7 +35,7 @@ public partial class RecordingsView : UserControl
     {
         DetachWindowKeyHandler();
         CloseFullScreenWindow();
-        RecordingPlayer.StopPlayback();
+        RecordingPlayer.DisposePlayback();
     }
 
     private void AttachWindowKeyHandler()

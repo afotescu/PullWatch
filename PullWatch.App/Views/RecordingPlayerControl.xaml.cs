@@ -4,6 +4,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using VlcInstance = LibVLCSharp.Shared.LibVLC;
+using VlcMedia = LibVLCSharp.Shared.Media;
+using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
 namespace PullWatch;
 
@@ -42,11 +45,19 @@ public partial class RecordingPlayerControl : UserControl
     );
 
     private readonly DispatcherTimer _positionTimer;
+    private VlcInstance? _libVlc;
+    private VlcMediaPlayer? _mediaPlayer;
+    private bool _hasAssignedMedia;
     private bool _hasMedia;
     private bool _isPlaying;
+    private bool _isPrimedPaused;
+    private volatile bool _isPriming;
     private bool _isSeeking;
+    private bool _isMuted;
     private bool _isUpdatingVolumeControls;
     private double _lastAudibleVolume;
+    private double _volume = FallbackUnmuteVolume;
+    private int _playerLifetimeVersion;
     private int _sourceLoadVersion;
     private string? _playbackErrorText;
 
@@ -68,7 +79,7 @@ public partial class RecordingPlayerControl : UserControl
             Thumb.DragCompletedEvent,
             new DragCompletedEventHandler(OnPlaybackThumbDragCompleted)
         );
-        _lastAudibleVolume = GetInitialAudibleVolume();
+        _lastAudibleVolume = _volume;
         UpdateVolumeControls();
         Loaded += OnLoaded;
     }
@@ -99,13 +110,20 @@ public partial class RecordingPlayerControl : UserControl
     {
         _sourceLoadVersion++;
         StopPlaybackCore();
-        MediaPlayer.Source = null;
+        ReleaseMedia();
+        ResetPlayerState(sourceAvailable: false);
         FullScreenButton.IsEnabled = false;
+    }
+
+    public void DisposePlayback()
+    {
+        StopPlayback();
+        DisposePlayer();
     }
 
     public bool TogglePlayback()
     {
-        if (MediaPlayer.Source is null || !_hasMedia)
+        if (!_hasAssignedMedia || !_hasMedia)
         {
             return false;
         }
@@ -148,8 +166,8 @@ public partial class RecordingPlayerControl : UserControl
             return false;
         }
 
-        var position = Clamp(MediaPlayer.Position + offset, TimeSpan.Zero, duration);
-        MediaPlayer.Position = position;
+        var position = Clamp(GetPosition() + offset, TimeSpan.Zero, duration);
+        SetPosition(position);
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
         UpdatePlaybackTimeText(position, duration);
 
@@ -158,7 +176,7 @@ public partial class RecordingPlayerControl : UserControl
 
     public bool AdjustVolume(double delta)
     {
-        SetVolume(MediaPlayer.Volume + delta, unmute: true);
+        SetVolume(_volume + delta, unmute: true);
 
         return true;
     }
@@ -192,7 +210,12 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
-        if (Source is not null && MediaPlayer.Source is null)
+        if (!EnsurePlayer())
+        {
+            return;
+        }
+
+        if (Source is not null && !_hasAssignedMedia)
         {
             ScheduleLoadSource(Source);
         }
@@ -235,28 +258,37 @@ public partial class RecordingPlayerControl : UserControl
 
     private bool IsReadyToLoadSource()
     {
-        return IsLoaded && PresentationSource.FromVisual(MediaPlayer) is not null;
+        return IsLoaded && PresentationSource.FromVisual(VideoView) is not null;
     }
 
     private void LoadSource(Uri? source)
     {
         StopPlaybackCore();
-        _hasMedia = false;
-        _isSeeking = false;
-        _playbackErrorText = null;
-        PlayPauseButton.IsEnabled = false;
-        FullScreenButton.IsEnabled = source is not null;
-        PlaybackSlider.IsEnabled = false;
-        PlaybackSlider.Maximum = 0;
-        PlaybackSlider.Value = 0;
-        UpdatePlaybackTimeText(TimeSpan.Zero, TimeSpan.Zero);
-        UpdatePlaceholderText();
-        PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Visible);
-        MediaPlayer.Source = source;
+        ReleaseMedia();
+        ResetPlayerState(source is not null);
 
-        if (source is not null)
+        if (source is null || !EnsurePlayer())
         {
-            MediaPlayer.Play();
+            return;
+        }
+
+        try
+        {
+            _isPriming = true;
+            ApplyPlayerAudioState();
+
+            using var media = new VlcMedia(_libVlc!, source);
+            _mediaPlayer!.Media = media;
+            _hasAssignedMedia = true;
+
+            if (!_mediaPlayer.Play())
+            {
+                throw new InvalidOperationException("VLC rejected the recording.");
+            }
+        }
+        catch (Exception exception)
+        {
+            ShowPlaybackError($"This recording could not be played: {exception.Message}");
         }
     }
 
@@ -302,36 +334,92 @@ public partial class RecordingPlayerControl : UserControl
         ToggleMute();
     }
 
-    private void OnPlayerMediaOpened(object sender, RoutedEventArgs eventArgs)
+    private void OnVlcPlaying(object? sender, EventArgs eventArgs)
     {
+        DispatchPlayerEvent(OnPlayerPlaying);
+    }
+
+    private void OnVlcTimeChanged(object? sender, EventArgs eventArgs)
+    {
+        if (_isPriming)
+        {
+            DispatchPlayerEvent(CompletePriming);
+        }
+    }
+
+    private void OnVlcVideoOutputChanged(object? sender, EventArgs eventArgs)
+    {
+        if (_isPriming)
+        {
+            DispatchPlayerEvent(CompletePriming);
+        }
+    }
+
+    private void OnVlcLengthChanged(object? sender, EventArgs eventArgs)
+    {
+        DispatchPlayerEvent(UpdateDurationFromPlayer);
+    }
+
+    private void OnVlcEndReached(object? sender, EventArgs eventArgs)
+    {
+        DispatchPlayerEvent(OnPlayerMediaEnded);
+    }
+
+    private void OnVlcEncounteredError(object? sender, EventArgs eventArgs)
+    {
+        DispatchPlayerEvent(() => ShowPlaybackError("This recording could not be played by VLC."));
+    }
+
+    private void OnPlayerPlaying()
+    {
+        if (!_hasAssignedMedia)
+        {
+            return;
+        }
+
         _hasMedia = true;
         PlayPauseButton.IsEnabled = true;
         FullScreenButton.IsEnabled = true;
+        UpdateDurationFromPlayer();
+
+        if (_isPriming || _isPrimedPaused)
+        {
+            return;
+        }
+
+        _isPlaying = true;
+        UpdatePlayPauseButton();
         PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
-
-        if (MediaPlayer.NaturalDuration.HasTimeSpan)
-        {
-            var duration = MediaPlayer.NaturalDuration.TimeSpan;
-            PlaybackSlider.Maximum = duration.TotalSeconds;
-            PlaybackSlider.IsEnabled = duration > TimeSpan.Zero;
-        }
-
-        if (_isPlaying)
-        {
-            MediaPlayer.Play();
-            _positionTimer.Start();
-        }
-        else
-        {
-            MediaPlayer.Pause();
-            MediaPlayer.Position = TimeSpan.Zero;
-        }
-
+        _positionTimer.Start();
         UpdatePositionFromPlayer();
     }
 
-    private void OnPlayerMediaEnded(object sender, RoutedEventArgs eventArgs)
+    private void CompletePriming()
     {
+        if (!_isPriming || _mediaPlayer is null || !_hasAssignedMedia)
+        {
+            return;
+        }
+
+        _isPriming = false;
+        _mediaPlayer.SetPause(true);
+        _mediaPlayer.Time = 0;
+        _hasMedia = true;
+        _isPlaying = false;
+        _isPrimedPaused = true;
+        PlayPauseButton.IsEnabled = true;
+        FullScreenButton.IsEnabled = true;
+        UpdatePlayPauseButton();
+        UpdateDurationFromPlayer();
+        UpdatePositionFromPlayer();
+        PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
+    }
+
+    private void OnPlayerMediaEnded()
+    {
+        _isPriming = false;
+        _isPrimedPaused = false;
+        ApplyPlayerAudioState();
         _positionTimer.Stop();
         _isPlaying = false;
         UpdatePlayPauseButton();
@@ -339,12 +427,11 @@ public partial class RecordingPlayerControl : UserControl
         UpdatePlaybackTimeText(GetDuration(), GetDuration());
     }
 
-    private void OnPlayerMediaFailed(object sender, ExceptionRoutedEventArgs eventArgs)
+    private void ShowPlaybackError(string message)
     {
         StopPlaybackCore();
         _hasMedia = false;
-        _playbackErrorText =
-            $"This recording could not be played: {eventArgs.ErrorException.Message}";
+        _playbackErrorText = message;
         PlayPauseButton.IsEnabled = false;
         FullScreenButton.IsEnabled = false;
         PlaybackSlider.IsEnabled = false;
@@ -421,7 +508,7 @@ public partial class RecordingPlayerControl : UserControl
         }
 
         var position = TimeSpan.FromSeconds(PlaybackSlider.Value);
-        MediaPlayer.Position = position;
+        SetPosition(position);
         UpdatePlaybackTimeText(position, GetDuration());
     }
 
@@ -429,22 +516,23 @@ public partial class RecordingPlayerControl : UserControl
     {
         if (IsEffectivelyMuted())
         {
-            MediaPlayer.Volume = _lastAudibleVolume;
-            MediaPlayer.IsMuted = false;
+            _volume = _lastAudibleVolume;
+            _isMuted = false;
         }
         else
         {
-            _lastAudibleVolume = MediaPlayer.Volume;
-            MediaPlayer.IsMuted = true;
+            _lastAudibleVolume = _volume;
+            _isMuted = true;
         }
 
+        ApplyPlayerAudioState();
         UpdateVolumeControls();
     }
 
     private void SetVolume(double volume, bool unmute)
     {
         var clampedVolume = Math.Clamp(volume, 0, 1);
-        MediaPlayer.Volume = clampedVolume;
+        _volume = clampedVolume;
 
         if (clampedVolume > 0)
         {
@@ -453,13 +541,14 @@ public partial class RecordingPlayerControl : UserControl
 
         if (unmute && clampedVolume > 0)
         {
-            MediaPlayer.IsMuted = false;
+            _isMuted = false;
         }
         else if (clampedVolume <= 0)
         {
-            MediaPlayer.IsMuted = true;
+            _isMuted = true;
         }
 
+        ApplyPlayerAudioState();
         UpdateVolumeControls();
     }
 
@@ -493,25 +582,47 @@ public partial class RecordingPlayerControl : UserControl
 
     private void UpdatePositionFromPlayer()
     {
-        var position = MediaPlayer.Position;
+        var position = GetPosition();
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
         UpdatePlaybackTimeText(position, GetDuration());
     }
 
     private void StopPlaybackCore()
     {
+        _isPriming = false;
+        _isPrimedPaused = false;
         _positionTimer.Stop();
         _isPlaying = false;
         UpdatePlayPauseButton();
-        if (MediaPlayer.Source is not null)
+        if (_mediaPlayer is not null && _hasAssignedMedia)
         {
-            MediaPlayer.Stop();
+            _mediaPlayer.Stop();
         }
+
+        ApplyPlayerAudioState();
     }
 
     private void StartPlayback()
     {
-        MediaPlayer.Play();
+        if (_mediaPlayer is null)
+        {
+            return;
+        }
+
+        var duration = GetDuration();
+        if (duration > TimeSpan.Zero && GetPosition() >= duration)
+        {
+            _mediaPlayer.Time = 0;
+        }
+
+        ApplyPlayerAudioState();
+        _isPrimedPaused = false;
+        if (!_mediaPlayer.Play())
+        {
+            ShowPlaybackError("This recording could not be played by VLC.");
+            return;
+        }
+
         _isPlaying = true;
         UpdatePlayPauseButton();
         _positionTimer.Start();
@@ -519,7 +630,7 @@ public partial class RecordingPlayerControl : UserControl
 
     private void PausePlayback()
     {
-        MediaPlayer.Pause();
+        _mediaPlayer?.SetPause(true);
         _positionTimer.Stop();
         _isPlaying = false;
         UpdatePlayPauseButton();
@@ -554,7 +665,7 @@ public partial class RecordingPlayerControl : UserControl
     private void UpdateVolumeControls()
     {
         _isUpdatingVolumeControls = true;
-        VolumeSlider.Value = Math.Round(MediaPlayer.Volume * VolumeSliderScale);
+        VolumeSlider.Value = Math.Round(_volume * VolumeSliderScale);
         VolumeSlider.ToolTip = $"{VolumeSlider.Value:0}% volume";
         _isUpdatingVolumeControls = false;
 
@@ -583,21 +694,152 @@ public partial class RecordingPlayerControl : UserControl
             $"{RecordingTimeFormatter.FormatPlaybackTime(position)} / {RecordingTimeFormatter.FormatPlaybackTime(duration)}";
     }
 
+    private bool EnsurePlayer()
+    {
+        if (_mediaPlayer is not null)
+        {
+            return true;
+        }
+
+        try
+        {
+            _libVlc = new VlcInstance();
+            _mediaPlayer = new VlcMediaPlayer(_libVlc);
+            _playerLifetimeVersion++;
+            _mediaPlayer.Playing += OnVlcPlaying;
+            _mediaPlayer.TimeChanged += OnVlcTimeChanged;
+            _mediaPlayer.Vout += OnVlcVideoOutputChanged;
+            _mediaPlayer.LengthChanged += OnVlcLengthChanged;
+            _mediaPlayer.EndReached += OnVlcEndReached;
+            _mediaPlayer.EncounteredError += OnVlcEncounteredError;
+            VideoView.MediaPlayer = _mediaPlayer;
+            ApplyPlayerAudioState();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            DisposePlayer();
+            ShowPlaybackError($"VLC could not be initialized: {exception.Message}");
+            return false;
+        }
+    }
+
+    private void DisposePlayer()
+    {
+        _playerLifetimeVersion++;
+        var mediaPlayer = _mediaPlayer;
+        _mediaPlayer = null;
+
+        if (mediaPlayer is not null)
+        {
+            mediaPlayer.Playing -= OnVlcPlaying;
+            mediaPlayer.TimeChanged -= OnVlcTimeChanged;
+            mediaPlayer.Vout -= OnVlcVideoOutputChanged;
+            mediaPlayer.LengthChanged -= OnVlcLengthChanged;
+            mediaPlayer.EndReached -= OnVlcEndReached;
+            mediaPlayer.EncounteredError -= OnVlcEncounteredError;
+        }
+
+        VideoView.MediaPlayer = null;
+        mediaPlayer?.Dispose();
+        _libVlc?.Dispose();
+        _libVlc = null;
+        _hasAssignedMedia = false;
+    }
+
+    private void ReleaseMedia()
+    {
+        _hasAssignedMedia = false;
+
+        if (_mediaPlayer is not null)
+        {
+            _mediaPlayer.Media = null;
+        }
+    }
+
+    private void DispatchPlayerEvent(Action action)
+    {
+        var playerLifetimeVersion = _playerLifetimeVersion;
+
+        Dispatcher.InvokeAsync(
+            () =>
+            {
+                if (_mediaPlayer is null || playerLifetimeVersion != _playerLifetimeVersion)
+                {
+                    return;
+                }
+
+                action();
+            },
+            DispatcherPriority.Background
+        );
+    }
+
+    private void ResetPlayerState(bool sourceAvailable)
+    {
+        _hasMedia = false;
+        _isPriming = false;
+        _isPrimedPaused = false;
+        _isSeeking = false;
+        _playbackErrorText = null;
+        PlayPauseButton.IsEnabled = false;
+        FullScreenButton.IsEnabled = sourceAvailable;
+        PlaybackSlider.IsEnabled = false;
+        PlaybackSlider.Maximum = 0;
+        PlaybackSlider.Value = 0;
+        UpdatePlaybackTimeText(TimeSpan.Zero, TimeSpan.Zero);
+        UpdatePlaceholderText();
+        PlayerPlaceholder.SetCurrentValue(VisibilityProperty, Visibility.Visible);
+    }
+
+    private void UpdateDurationFromPlayer()
+    {
+        var duration = GetDuration();
+        PlaybackSlider.Maximum = duration.TotalSeconds;
+        PlaybackSlider.IsEnabled = _hasMedia && duration > TimeSpan.Zero;
+    }
+
+    private void ApplyPlayerAudioState()
+    {
+        if (_mediaPlayer is null)
+        {
+            return;
+        }
+
+        if (_isPriming)
+        {
+            _mediaPlayer.Volume = 0;
+            _mediaPlayer.Mute = true;
+            return;
+        }
+
+        _mediaPlayer.Volume = (int)Math.Round(_volume * VolumeSliderScale);
+        _mediaPlayer.Mute = IsEffectivelyMuted();
+    }
+
+    private TimeSpan GetPosition()
+    {
+        var time = _mediaPlayer?.Time ?? -1;
+        return time > 0 ? TimeSpan.FromMilliseconds(time) : TimeSpan.Zero;
+    }
+
+    private void SetPosition(TimeSpan position)
+    {
+        if (_mediaPlayer is not null)
+        {
+            _mediaPlayer.Time = (long)Math.Round(Math.Max(0, position.TotalMilliseconds));
+        }
+    }
+
     private TimeSpan GetDuration()
     {
-        return MediaPlayer.NaturalDuration.HasTimeSpan
-            ? MediaPlayer.NaturalDuration.TimeSpan
-            : TimeSpan.Zero;
+        var length = _mediaPlayer?.Length ?? -1;
+        return length > 0 ? TimeSpan.FromMilliseconds(length) : TimeSpan.Zero;
     }
 
     private bool IsEffectivelyMuted()
     {
-        return MediaPlayer.IsMuted || MediaPlayer.Volume <= 0;
-    }
-
-    private double GetInitialAudibleVolume()
-    {
-        return MediaPlayer.Volume > 0 ? MediaPlayer.Volume : FallbackUnmuteVolume;
+        return _isMuted || _volume <= 0;
     }
 
     private static TimeSpan Clamp(TimeSpan value, TimeSpan minimum, TimeSpan maximum)

@@ -225,7 +225,7 @@ $readmePath = Join-Path $publishPath "README.txt"
 @"
 PullWatch release build
 
-Run PullWatch.exe. Keep the ffmpeg folder next to PullWatch.exe.
+Run PullWatch.exe. Keep the ffmpeg and libvlc folders next to PullWatch.exe.
 
 Screen recording requires:
 - Windows x64
