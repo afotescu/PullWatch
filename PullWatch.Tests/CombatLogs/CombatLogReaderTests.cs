@@ -407,6 +407,51 @@ public sealed class CombatLogReaderTests
     }
 
     [Fact]
+    public async Task CoalescesSuccessfulReadStatusDuringBurst()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "WoWCombatLog-current.txt");
+        await File.WriteAllTextAsync(path, "", cancellationToken);
+        const int eventCount = 500;
+        var processedEventCount = 0;
+        var successfulReadStatuses = new ConcurrentQueue<CombatLogReaderStatus>();
+        using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
+        var reader = CreateReader(
+            directory.Path,
+            successfulReadStatusInterval: TimeSpan.FromMinutes(1)
+        );
+        reader.StatusChanged += status =>
+        {
+            if (status.LastSuccessfulReadTime is not null)
+            {
+                successfulReadStatuses.Enqueue(status);
+            }
+        };
+
+        var readTask = reader.ReadAsync(
+            (_, _) =>
+            {
+                Interlocked.Increment(ref processedEventCount);
+                return Task.CompletedTask;
+            },
+            readerCancellation.Token
+        );
+        await WaitForStateAsync(reader, CombatLogReaderState.ReadingCombatLog);
+        var burst = string.Concat(Enumerable.Repeat(FirstLine + Environment.NewLine, eventCount));
+        await File.AppendAllTextAsync(path, burst, cancellationToken);
+        await WaitForAsync(() => Volatile.Read(ref processedEventCount) == eventCount);
+
+        Assert.Single(successfulReadStatuses);
+        Assert.NotNull(reader.Status.LastSuccessfulReadTime);
+
+        readerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => readTask);
+    }
+
+    [Fact]
     public async Task DoesNotRetryIOExceptionFromEventHandler()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -534,7 +579,8 @@ public sealed class CombatLogReaderTests
         string logsDirectory,
         Func<bool>? canDiscoverCombatLog = null,
         TimeSpan? discoveryInterval = null,
-        DateTimeOffset? wowProcessStartedAtUtc = null
+        DateTimeOffset? wowProcessStartedAtUtc = null,
+        TimeSpan? successfulReadStatusInterval = null
     )
     {
         return new CombatLogReader(
@@ -544,7 +590,8 @@ public sealed class CombatLogReaderTests
             TimeSpan.FromMilliseconds(40),
             canDiscoverCombatLog,
             discoveryInterval ?? TimeSpan.FromMilliseconds(10),
-            wowProcessStartedAtUtc
+            wowProcessStartedAtUtc,
+            successfulReadStatusInterval
         );
     }
 

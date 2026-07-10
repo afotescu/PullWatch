@@ -11,6 +11,7 @@ internal sealed class CombatLogReader : ICombatLogMonitor
     private static readonly TimeSpan DefaultDiscoveryInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultMaximumRetryDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DefaultSessionStartTolerance = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DefaultSuccessfulReadStatusInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(30);
 
     private readonly string _logsDirectory;
@@ -20,6 +21,7 @@ internal sealed class CombatLogReader : ICombatLogMonitor
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _discoveryInterval;
     private readonly TimeSpan _maximumRetryDelay;
+    private readonly TimeSpan _successfulReadStatusInterval;
     private CombatLogReaderStatus _status = new(
         CombatLogReaderState.WaitingForLogsDirectory,
         null,
@@ -29,7 +31,9 @@ internal sealed class CombatLogReader : ICombatLogMonitor
     private DateTimeOffset _lastErrorLogTime = DateTimeOffset.MinValue;
     private string? _lastLoggedErrorMessage;
     private long _lastDiscoveryTimestamp;
+    private long _lastSuccessfulReadStatusTimestamp;
     private bool _hasPublishedState;
+    private bool _hasPublishedSuccessfulReadStatus;
     private bool _hasLoggedSessionFilteredFiles;
 
     public CombatLogReader(
@@ -39,7 +43,8 @@ internal sealed class CombatLogReader : ICombatLogMonitor
         TimeSpan? maximumRetryDelay = null,
         Func<bool>? canDiscoverCombatLog = null,
         TimeSpan? discoveryInterval = null,
-        DateTimeOffset? wowProcessStartedAtUtc = null
+        DateTimeOffset? wowProcessStartedAtUtc = null,
+        TimeSpan? successfulReadStatusInterval = null
     )
     {
         _logsDirectory = logsDirectory;
@@ -49,6 +54,8 @@ internal sealed class CombatLogReader : ICombatLogMonitor
         _pollInterval = pollInterval ?? DefaultPollInterval;
         _discoveryInterval = discoveryInterval ?? DefaultDiscoveryInterval;
         _maximumRetryDelay = maximumRetryDelay ?? DefaultMaximumRetryDelay;
+        _successfulReadStatusInterval =
+            successfulReadStatusInterval ?? DefaultSuccessfulReadStatusInterval;
     }
 
     public event Action<CombatLogReaderStatus>? StatusChanged;
@@ -393,15 +400,33 @@ internal sealed class CombatLogReader : ICombatLogMonitor
     private void PublishSuccessfulRead(string path)
     {
         var current = Status;
-        SetStatus(
-            current with
-            {
-                State = CombatLogReaderState.ReadingCombatLog,
-                CurrentPath = path,
-                LastSuccessfulReadTime = DateTimeOffset.UtcNow,
-                LastFileSystemError = null,
-            }
-        );
+        var status = current with
+        {
+            State = CombatLogReaderState.ReadingCombatLog,
+            CurrentPath = path,
+            LastSuccessfulReadTime = DateTimeOffset.UtcNow,
+            LastFileSystemError = null,
+        };
+        var statusTimestamp = Stopwatch.GetTimestamp();
+        var hasMeaningfulChange =
+            current.State != status.State
+            || !PathComparer.Equals(current.CurrentPath, status.CurrentPath)
+            || current.LastFileSystemError is not null;
+        var shouldPublish =
+            hasMeaningfulChange
+            || !_hasPublishedSuccessfulReadStatus
+            || Stopwatch.GetElapsedTime(_lastSuccessfulReadStatusTimestamp, statusTimestamp)
+                >= _successfulReadStatusInterval;
+
+        if (!shouldPublish)
+        {
+            Volatile.Write(ref _status, status);
+            return;
+        }
+
+        _hasPublishedSuccessfulReadStatus = true;
+        _lastSuccessfulReadStatusTimestamp = statusTimestamp;
+        SetStatus(status);
     }
 
     private void PublishReadableStatus(FileCandidate candidate)
