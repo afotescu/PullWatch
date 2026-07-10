@@ -79,8 +79,6 @@ public sealed record EncoderCalibrationSettings
     public string? FfmpegPath { get; init; }
     public string? FfmpegVersion { get; init; }
     public string? FfmpegSha256 { get; init; }
-    public string? FfprobePath { get; init; }
-    public string? FfprobeVersion { get; init; }
     public IReadOnlyList<EncoderCalibrationResult> Results { get; init; } = [];
 }
 

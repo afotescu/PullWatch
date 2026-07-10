@@ -56,8 +56,6 @@ public sealed class SettingsStoreTests
                 FfmpegPath = @"C:\ffmpeg\bin\ffmpeg.exe",
                 FfmpegVersion = "ffmpeg version test",
                 FfmpegSha256 = "ABC123",
-                FfprobePath = @"C:\ffmpeg\bin\ffprobe.exe",
-                FfprobeVersion = "ffprobe version test",
                 Results =
                 [
                     new EncoderCalibrationResult
@@ -126,7 +124,16 @@ public sealed class SettingsStoreTests
         var path = Path.Combine(directory.Path, "settings.json");
         await File.WriteAllTextAsync(
             path,
-            """{ "Version": 1, "FutureSetting": true }""",
+            """
+            {
+              "Version": 1,
+              "FutureSetting": true,
+              "EncoderCalibration": {
+                "FfprobePath": "C:\\ffmpeg\\bin\\ffprobe.exe",
+                "FfprobeVersion": "ffprobe version test"
+              }
+            }
+            """,
             cancellationToken
         );
         var store = new SettingsStore(path);
