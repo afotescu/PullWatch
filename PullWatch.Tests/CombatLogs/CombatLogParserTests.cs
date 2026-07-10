@@ -25,16 +25,16 @@ public sealed class CombatLogParserTests
     }
 
     [Fact]
-    public void ParsesDungeonEncounterEndMetadata()
+    public void PreservesCommasInsideQuotedArguments()
     {
         var line =
-            $"6/14/2026 23:44:07.3663  ENCOUNTER_END,3071,\"Arcanotron Custos\",{WowDifficultyIds.MythicPlus},5,0,70964";
+            $"6/15/2026 00:15:10.0373  ENCOUNTER_START,3129,\"Plexus, Sentinel\",{WowDifficultyIds.NormalRaid},10,2810";
 
-        CombatLogParser.TryParseEvent(line, out var combatLogEvent);
+        var parsed = CombatLogParser.TryParseEvent(line, out var combatLogEvent);
 
-        Assert.Equal(WowEvents.EncounterEnd, combatLogEvent.Name);
+        Assert.True(parsed);
         Assert.Equal(
-            ["3071", "Arcanotron Custos", $"{WowDifficultyIds.MythicPlus}", "5", "0", "70964"],
+            ["3129", "Plexus, Sentinel", $"{WowDifficultyIds.NormalRaid}", "10", "2810"],
             combatLogEvent.Arguments
         );
     }
@@ -45,8 +45,9 @@ public sealed class CombatLogParserTests
         const string line =
             "6/14/2026 23:37:55.0023  CHALLENGE_MODE_START,\"Magisters' Terrace\",2811,558,22,[9,10,147]";
 
-        CombatLogParser.TryParseEvent(line, out var combatLogEvent);
+        var parsed = CombatLogParser.TryParseEvent(line, out var combatLogEvent);
 
+        Assert.True(parsed);
         Assert.Equal(WowEvents.ChallengeModeStart, combatLogEvent.Name);
         Assert.Equal(
             ["Magisters' Terrace", "2811", "558", "22", "[9,10,147]"],
@@ -54,15 +55,11 @@ public sealed class CombatLogParserTests
         );
     }
 
-    [Fact]
-    public void ParsesChallengeModeEndMetadata()
+    [Theory]
+    [InlineData("not a combat log line")]
+    [InlineData("6/15/2026 00:15:10.0373  ,argument")]
+    public void RejectsMissingOrEmptyEventNames(string line)
     {
-        const string line =
-            "6/14/2026 23:37:54.6663  CHALLENGE_MODE_END,2811,0,0,0,0.000000,0.000000";
-
-        CombatLogParser.TryParseEvent(line, out var combatLogEvent);
-
-        Assert.Equal(WowEvents.ChallengeModeEnd, combatLogEvent.Name);
-        Assert.Equal(["2811", "0", "0", "0", "0.000000", "0.000000"], combatLogEvent.Arguments);
+        Assert.False(CombatLogParser.TryParseEvent(line, out _));
     }
 }

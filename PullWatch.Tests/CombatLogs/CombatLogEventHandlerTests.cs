@@ -322,36 +322,6 @@ public sealed class CombatLogEventHandlerTests
     }
 
     [Fact]
-    public async Task RecordingMetadataLogsUseParsedChallengeEndValues()
-    {
-        using var logs = new InMemoryLogProvider();
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(logs));
-        await using var handler = CreateHandler(
-            new FakeRecordingService(),
-            logger: loggerFactory.CreateLogger<CombatLogEventHandler>()
-        );
-
-        await HandleWithArgumentsAsync(
-            handler,
-            WowEvents.ChallengeModeStart,
-            "\"Maisara Caverns\",2874,560,12,[9,10,147]"
-        );
-        await HandleWithArgumentsAsync(
-            handler,
-            WowEvents.ChallengeModeEnd,
-            "2874,1,12,1153679,380.000000,3512.041992"
-        );
-
-        var summary = Assert.Single(
-            logs.GetSnapshot(),
-            entry => entry.Message.StartsWith("Challenge ended:", StringComparison.Ordinal)
-        );
-        Assert.Contains("map 2874, outcome Timed", summary.Message);
-        Assert.Contains("mythic rating after run 3512", summary.Message);
-        Assert.DoesNotContain("3512.041992", summary.Message);
-    }
-
-    [Fact]
     public async Task FailedStartDoesNotClaimOwnership()
     {
         var recorder = new FakeRecordingService

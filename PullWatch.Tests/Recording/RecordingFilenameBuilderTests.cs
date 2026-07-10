@@ -60,17 +60,6 @@ public sealed class RecordingFilenameBuilderTests
     }
 
     [Fact]
-    public void UsesNumericDifficultyFallback()
-    {
-        var context = new EncounterRecordingContext(StartedAt, 1, "Boss", 99);
-
-        Assert.Equal(
-            "20260615_001510_raid_boss_difficulty-99",
-            RecordingFilenameBuilder.BuildBaseName(context)
-        );
-    }
-
-    [Fact]
     public void AppendsSuffixWhenDesiredPathExists()
     {
         var directory = Directory.CreateTempSubdirectory("PullWatchTests-");

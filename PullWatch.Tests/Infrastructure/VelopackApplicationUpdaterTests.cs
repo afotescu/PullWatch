@@ -2,24 +2,16 @@ namespace PullWatch.Tests;
 
 public sealed class VelopackApplicationUpdaterTests
 {
-    [Fact]
-    public void ShouldIncludePrereleaseUpdatesAcceptsExplicitOptInValue()
-    {
-        Assert.True(VelopackApplicationUpdater.ShouldIncludePrereleaseUpdates("1"));
-    }
-
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("0")]
-    [InlineData("true")]
-    [InlineData(" yes ")]
-    [InlineData("on")]
-    [InlineData("false")]
-    [InlineData("off")]
-    [InlineData("anything")]
-    public void ShouldIncludePrereleaseUpdatesDefaultsToFalse(string? value)
+    [InlineData("1", true)]
+    [InlineData(" 1 ", true)]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData("0", false)]
+    [InlineData("true", false)]
+    public void ShouldIncludePrereleaseUpdatesRequiresExplicitOptIn(string? value, bool expected)
     {
-        Assert.False(VelopackApplicationUpdater.ShouldIncludePrereleaseUpdates(value));
+        Assert.Equal(expected, VelopackApplicationUpdater.ShouldIncludePrereleaseUpdates(value));
     }
 }

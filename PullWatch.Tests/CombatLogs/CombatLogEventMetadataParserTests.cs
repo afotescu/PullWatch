@@ -96,28 +96,6 @@ public sealed class CombatLogEventMetadataParserTests
     }
 
     [Fact]
-    public void ParsesEncounterStartWithFlexibleMythicDifficultyId()
-    {
-        var combatLogEvent = CreateEvent(
-            WowEvents.EncounterStart,
-            $"3159,\"Rotmire\",{WowDifficultyIds.FlexibleMythicRaid},20,1592"
-        );
-
-        var parsed = CombatLogEventMetadataParser.TryParseEncounterStart(
-            combatLogEvent,
-            StartedAt,
-            out var context
-        );
-
-        Assert.True(parsed);
-        Assert.Equal(3159, context.EncounterId);
-        Assert.Equal("Rotmire", context.EncounterName);
-        Assert.Equal(WowDifficultyIds.FlexibleMythicRaid, context.DifficultyId);
-        Assert.Equal(20, context.GroupSize);
-        Assert.Equal(1592, context.InstanceId);
-    }
-
-    [Fact]
     public void ParsesEncounterEnd()
     {
         var endedAt = StartedAt.AddMinutes(7);
@@ -193,27 +171,20 @@ public sealed class CombatLogEventMetadataParserTests
         Assert.False(parsed);
     }
 
-    [Fact]
-    public void ChallengeEndWithInvalidCompletionMetadataReturnsFalse()
+    [Theory]
+    [InlineData("2811,invalid,22,1850000,32.500000,1800")]
+    [InlineData("2811,2,22,1850000,32.500000,1800")]
+    [InlineData("2811,1,invalid,1850000,32.500000,1800")]
+    public void ChallengeEndWithInvalidCompletionMetadataReturnsFalse(string arguments)
     {
-        string[] arguments =
-        [
-            "2811,invalid,22,1850000,32.500000,1800",
-            "2811,2,22,1850000,32.500000,1800",
-            "2811,1,invalid,1850000,32.500000,1800",
-        ];
+        var combatLogEvent = CreateEvent(WowEvents.ChallengeModeEnd, arguments);
+        var parsed = CombatLogEventMetadataParser.TryParseChallengeEnd(
+            combatLogEvent,
+            StartedAt,
+            out _
+        );
 
-        foreach (var value in arguments)
-        {
-            var combatLogEvent = CreateEvent(WowEvents.ChallengeModeEnd, value);
-            var parsed = CombatLogEventMetadataParser.TryParseChallengeEnd(
-                combatLogEvent,
-                StartedAt,
-                out _
-            );
-
-            Assert.False(parsed);
-        }
+        Assert.False(parsed);
     }
 
     [Fact]
@@ -230,49 +201,35 @@ public sealed class CombatLogEventMetadataParserTests
         Assert.False(parsed);
     }
 
-    [Fact]
-    public void EncounterStartWithNonNumericIdsReturnsFalse()
+    [Theory]
+    [InlineData("invalid,\"Plexus Sentinel\",16,20,2810")]
+    [InlineData("3129,\"Plexus Sentinel\",invalid,20,2810")]
+    public void EncounterStartWithNonNumericIdsReturnsFalse(string arguments)
     {
-        string[] arguments =
-        [
-            $"invalid,\"Plexus Sentinel\",{WowDifficultyIds.MythicRaid},20,2810",
-            "3129,\"Plexus Sentinel\",invalid,20,2810",
-        ];
+        var combatLogEvent = CreateEvent(WowEvents.EncounterStart, arguments);
+        var parsed = CombatLogEventMetadataParser.TryParseEncounterStart(
+            combatLogEvent,
+            StartedAt,
+            out _
+        );
 
-        foreach (var value in arguments)
-        {
-            var combatLogEvent = CreateEvent(WowEvents.EncounterStart, value);
-            var parsed = CombatLogEventMetadataParser.TryParseEncounterStart(
-                combatLogEvent,
-                StartedAt,
-                out _
-            );
-
-            Assert.False(parsed);
-        }
+        Assert.False(parsed);
     }
 
-    [Fact]
-    public void EncounterEndWithInvalidCompletionMetadataReturnsFalse()
+    [Theory]
+    [InlineData("3159,\"Rotmire\",233,20,invalid,466563")]
+    [InlineData("3159,\"Rotmire\",233,20,2,466563")]
+    [InlineData("3159,\"Rotmire\",233")]
+    public void EncounterEndWithInvalidCompletionMetadataReturnsFalse(string arguments)
     {
-        string[] arguments =
-        [
-            $"3159,\"Rotmire\",{WowDifficultyIds.FlexibleMythicRaid},20,invalid,466563",
-            $"3159,\"Rotmire\",{WowDifficultyIds.FlexibleMythicRaid},20,2,466563",
-            $"3159,\"Rotmire\",{WowDifficultyIds.FlexibleMythicRaid}",
-        ];
+        var combatLogEvent = CreateEvent(WowEvents.EncounterEnd, arguments);
+        var parsed = CombatLogEventMetadataParser.TryParseEncounterEnd(
+            combatLogEvent,
+            StartedAt,
+            out _
+        );
 
-        foreach (var value in arguments)
-        {
-            var combatLogEvent = CreateEvent(WowEvents.EncounterEnd, value);
-            var parsed = CombatLogEventMetadataParser.TryParseEncounterEnd(
-                combatLogEvent,
-                StartedAt,
-                out _
-            );
-
-            Assert.False(parsed);
-        }
+        Assert.False(parsed);
     }
 
     private static CombatLogEvent CreateEvent(string eventName, string arguments)

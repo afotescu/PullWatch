@@ -272,12 +272,22 @@ public sealed class CombatLogReaderTests
         using var directory = new TemporaryDirectory();
         var events = new ConcurrentQueue<CombatLogEvent>();
         var canDiscoverCombatLog = 1;
+        var pausedDiscoveryChecks = 0;
         using var readerCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken
         );
         var reader = CreateReader(
             directory.Path,
-            () => Volatile.Read(ref canDiscoverCombatLog) == 1
+            () =>
+            {
+                if (Volatile.Read(ref canDiscoverCombatLog) == 1)
+                {
+                    return true;
+                }
+
+                Interlocked.Increment(ref pausedDiscoveryChecks);
+                return false;
+            }
         );
 
         var readTask = reader.ReadAsync(
@@ -291,12 +301,16 @@ public sealed class CombatLogReaderTests
         await WaitForStateAsync(reader, CombatLogReaderState.WaitingForCombatLog);
 
         Volatile.Write(ref canDiscoverCombatLog, 0);
+        await WaitForAsync(() => Volatile.Read(ref pausedDiscoveryChecks) > 0);
         await File.WriteAllTextAsync(
             Path.Combine(directory.Path, "WoWCombatLog-new.txt"),
             FirstLine + Environment.NewLine,
             cancellationToken
         );
-        await Task.Delay(150, cancellationToken);
+        var checksAfterFileCreation = Volatile.Read(ref pausedDiscoveryChecks);
+        await WaitForAsync(() =>
+            Volatile.Read(ref pausedDiscoveryChecks) > checksAfterFileCreation
+        );
 
         Assert.Empty(events);
         Assert.Equal(CombatLogReaderState.WaitingForCombatLog, reader.Status.State);
