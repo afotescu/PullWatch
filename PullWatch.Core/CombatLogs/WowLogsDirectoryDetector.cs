@@ -1,6 +1,6 @@
 namespace PullWatch;
 
-public static class WowLogsDirectoryDetector
+internal static class WowLogsDirectoryDetector
 {
     private static readonly string[] RelativeCandidates =
     [

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
-public sealed class CombatLogEventHandler(
+internal sealed class CombatLogEventHandler(
     RecordingCoordinator recordingCoordinator,
     SettingsProvider settingsProvider,
     ILogger<CombatLogEventHandler> logger,

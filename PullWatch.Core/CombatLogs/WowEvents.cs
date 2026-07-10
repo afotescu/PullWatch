@@ -1,6 +1,6 @@
 ﻿namespace PullWatch;
 
-public static class WowEvents
+internal static class WowEvents
 {
     // Mythic+
     public const string ChallengeModeStart = "CHALLENGE_MODE_START";

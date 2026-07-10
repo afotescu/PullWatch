@@ -1,6 +1,6 @@
 namespace PullWatch;
 
-public sealed class CombatLogEvent(
+internal sealed class CombatLogEvent(
     string name,
     int argumentsStart,
     string rawLine,

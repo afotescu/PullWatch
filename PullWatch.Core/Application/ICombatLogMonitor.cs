@@ -1,6 +1,6 @@
 namespace PullWatch;
 
-public interface ICombatLogMonitor
+internal interface ICombatLogMonitor
 {
     event Action<CombatLogReaderStatus>? StatusChanged;
 

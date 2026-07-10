@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
-public sealed class CombatLogReader : ICombatLogMonitor
+internal sealed class CombatLogReader : ICombatLogMonitor
 {
     private const string CombatLogPattern = "WoWCombatLog-*";
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(100);
