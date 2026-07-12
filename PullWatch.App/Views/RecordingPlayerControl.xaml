@@ -48,15 +48,21 @@
             Background="{StaticResource PlayerInputSurfaceBrush}"
             MouseLeftButtonDown="OnVideoSurfaceMouseLeftButtonDown"
           >
-            <TextBlock
-              x:Name="PlayerPlaceholder"
-              HorizontalAlignment="Center"
-              VerticalAlignment="Center"
-              FontSize="14"
+            <Border
+              x:Name="PlayerPreviewCover"
+              Panel.ZIndex="1"
+              Background="{StaticResource PlayerSurfaceBrush}"
               IsHitTestVisible="False"
-              Style="{StaticResource SecondaryTextStyle}"
-              TextAlignment="Center"
-            />
+            >
+              <TextBlock
+                x:Name="PlayerPlaceholder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="14"
+                Style="{StaticResource SecondaryTextStyle}"
+                TextAlignment="Center"
+              />
+            </Border>
           </Grid>
         </vlc:VideoView>
       </Grid>
