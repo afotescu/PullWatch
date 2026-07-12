@@ -25,8 +25,9 @@ target yet.
 
 ## Download
 
-Download the latest Windows x64 installer from the
-[GitHub Releases page](https://github.com/afotescu/PullWatch/releases/latest).
+[**Download the latest Windows x64 installer**](https://github.com/afotescu/PullWatch/releases/latest/download/PullWatch.Desktop-win-Setup.exe).
+
+[View release notes and other assets](https://github.com/afotescu/PullWatch/releases/latest).
 
 Release builds are currently unsigned, so Windows SmartScreen may show a warning
 for new downloads.

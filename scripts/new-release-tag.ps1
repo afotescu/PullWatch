@@ -1,6 +1,7 @@
 param(
     [string]$Remote = "origin",
-    [switch]$SkipFetch
+    [switch]$SkipFetch,
+    [switch]$PrepareReleaseNotes
 )
 
 $ErrorActionPreference = "Stop"
@@ -229,13 +230,14 @@ try {
     Invoke-Git rev-parse --is-inside-work-tree | Out-Null
 
     $dirtyLines = Invoke-GitOutput status --porcelain
-    if ($dirtyLines.Count -gt 0) {
+    if (!$PrepareReleaseNotes -and $dirtyLines.Count -gt 0) {
         Write-Host "Working tree changes:"
         $dirtyLines | ForEach-Object { Write-Host "  $_" }
         throw "Working tree must be clean before creating a release tag."
     }
 
-    if (!$SkipFetch -and (Read-YesNo "Fetch tags from $Remote first?" $true)) {
+    if (!$SkipFetch) {
+        Write-Host "Fetching tags from $Remote..."
         Invoke-Git fetch --tags --prune-tags $Remote
     }
 
@@ -261,6 +263,84 @@ try {
     $tag = Select-ReleaseTag $tags $latestStable $latestPrerelease
     if ($tags -contains $tag) {
         throw "Tag already exists locally: $tag"
+    }
+
+    if ($PrepareReleaseNotes) {
+        $templatePath = ".github/release-notes/TEMPLATE.md"
+        $releaseNotesPath = ".github/release-notes/$tag.md"
+        if (!(Test-Path -LiteralPath $templatePath -PathType Leaf)) {
+            throw "Release notes template not found: $templatePath"
+        }
+
+        if (Test-Path -LiteralPath $releaseNotesPath) {
+            throw "Release notes already exist: $releaseNotesPath"
+        }
+
+        if ($tag -notmatch '^v(\d+\.\d+\.\d+)') {
+            throw "Unable to determine the release version from tag: $tag"
+        }
+
+        $targetVersion = [version]$Matches[1]
+        $previousStableTag = $stableTags |
+            Where-Object { $_.Version -lt $targetVersion } |
+            Select-Object -Last 1
+
+        $commitFormat = "--format=%h%x09%s"
+        if ($previousStableTag) {
+            $commitRange = "$($previousStableTag.Tag)..HEAD"
+            $commits = @(Invoke-GitOutput log --reverse $commitFormat $commitRange)
+            $rangeDescription = "Commits since ``$($previousStableTag.Tag)`` through ``HEAD``:"
+        } else {
+            $commits = @(Invoke-GitOutput log --reverse $commitFormat HEAD)
+            $rangeDescription = "Commits through ``HEAD``:"
+        }
+
+        $commitReferenceLines = [System.Collections.Generic.List[string]]::new()
+        $commitReferenceLines.Add("## Commit reference")
+        $commitReferenceLines.Add("")
+        $commitReferenceLines.Add("> Remove this section before creating the tag. It is only a drafting aid.")
+        $commitReferenceLines.Add("")
+        $commitReferenceLines.Add($rangeDescription)
+        $commitReferenceLines.Add("")
+        if ($commits.Count -eq 0) {
+            $commitReferenceLines.Add("- No commits found in this range.")
+        } else {
+            foreach ($commit in $commits) {
+                $parts = $commit -split "`t", 2
+                $commitReferenceLines.Add("- ``$($parts[0])`` $($parts[1])")
+            }
+        }
+
+        $newLine = [Environment]::NewLine
+        $templateContent = (Get-Content -LiteralPath $templatePath -Raw).TrimEnd()
+        $commitReference = $commitReferenceLines -join $newLine
+        $releaseNotes = "$templateContent$newLine$newLine$commitReference$newLine"
+        Set-Content -LiteralPath $releaseNotesPath -Value $releaseNotes -Encoding utf8 -NoNewline
+        Write-Host ""
+        Write-Host "Created release notes draft: $releaseNotesPath"
+        Write-Host "Replace the template content, remove its instruction comment and commit reference section, then commit the file before creating $tag."
+        return
+    }
+
+    $releaseNotesPath = ".github/release-notes/$tag.md"
+    $notesInHead = @(Invoke-GitOutput ls-tree --name-only HEAD -- $releaseNotesPath)
+    if ($tag -match '^v\d+\.\d+\.\d+$' -and $notesInHead.Count -eq 0) {
+        throw "Stable release $tag requires curated notes at $releaseNotesPath. Run scripts/prepare-release-notes.ps1, write the user-facing notes, commit the file, and rerun this script."
+    }
+
+    if ($notesInHead.Count -gt 0) {
+        $releaseNotes = Get-Content -LiteralPath $releaseNotesPath -Raw
+        if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
+            throw "Release notes must not be empty: $releaseNotesPath"
+        }
+
+        if ($releaseNotes.Contains("release-notes-template:")) {
+            throw "Replace the template instructions before creating ${tag}: $releaseNotesPath"
+        }
+
+        if ($releaseNotes -match '(?m)^## Commit reference\r?$') {
+            throw "Remove the commit reference section before creating ${tag}: $releaseNotesPath"
+        }
     }
 
     Write-Host ""

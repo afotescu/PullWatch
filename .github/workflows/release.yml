@@ -88,6 +88,41 @@ jobs:
           ref: ${{ steps.release-tag.outputs.tag }}
           fetch-depth: 0
 
+      - name: Validate release notes
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release-tag.outputs.prerelease }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          $releaseNotesPath = ".github/release-notes/$tag.md"
+          $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:RELEASE_PRERELEASE,
+            "true"
+          )
+
+          if (!(Test-Path -LiteralPath $releaseNotesPath -PathType Leaf)) {
+            if (!$prerelease) {
+              throw "Stable release $tag requires curated notes at $releaseNotesPath"
+            }
+
+            Write-Host "No curated notes found for prerelease $tag; GitHub will generate them."
+            exit 0
+          }
+
+          $releaseNotes = Get-Content -LiteralPath $releaseNotesPath -Raw
+          if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
+            throw "Release notes must not be empty: $releaseNotesPath"
+          }
+
+          if ($releaseNotes.Contains("release-notes-template:")) {
+            throw "Replace the template instructions before releasing ${tag}: $releaseNotesPath"
+          }
+
+          if ($releaseNotes -match '(?m)^## Commit reference\r?$') {
+            throw "Remove the commit reference section before releasing ${tag}: $releaseNotesPath"
+          }
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -150,16 +185,72 @@ jobs:
         run: |
           $tag = $env:RELEASE_TAG
           $releaseDir = "${{ steps.package.outputs.release_dir }}"
-          $releaseFiles = @(
-            Get-ChildItem -LiteralPath $releaseDir -File |
-              Sort-Object Name |
-              ForEach-Object { $_.FullName }
-          )
-          $title = "PullWatch $tag"
+          $installerName = "PullWatch.Desktop-win-Setup.exe"
+          $releaseNotesPath = ".github/release-notes/$tag.md"
           $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
             $env:RELEASE_PRERELEASE,
             "true"
           )
+          $releaseFiles = @(
+            Get-ChildItem -LiteralPath $releaseDir -File |
+              Sort-Object Name |
+              ForEach-Object {
+                if ($_.Name -eq $installerName) {
+                  "$($_.FullName)#Download PullWatch for Windows x64 (recommended)"
+                } else {
+                  $_.FullName
+                }
+              }
+          )
+          $title = "PullWatch $tag"
+          $downloadUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/download/$tag/$installerName"
+          $downloadNotes = @"
+          ## Download PullWatch
+
+          [**⬇ Download PullWatch for Windows (64-bit)**]($downloadUrl)
+
+          This is the installer most users should choose. Other files are updater metadata, checksums, or source archives.
+
+          > PullWatch is currently unsigned, so Windows SmartScreen may show a warning.
+          "@
+          $releaseNoteSections = @($downloadNotes.Trim())
+
+          if (Test-Path -LiteralPath $releaseNotesPath -PathType Leaf) {
+            $curatedNotes = (Get-Content -LiteralPath $releaseNotesPath -Raw).Trim()
+            $releaseNoteSections += $curatedNotes
+          } elseif (!$prerelease) {
+            throw "Stable release $tag requires curated notes at $releaseNotesPath"
+          }
+
+          if (!$prerelease) {
+            $tagNames = @(git tag --list)
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to list tags while building release notes for $tag"
+            }
+
+            $currentVersion = [version]$tag.Substring(1)
+            $stableTags = foreach ($tagName in $tagNames) {
+              if ($tagName -match '^v(\d+\.\d+\.\d+)$') {
+                $version = [version]$Matches[1]
+                if ($version -lt $currentVersion) {
+                  [pscustomobject]@{
+                    Tag = $tagName
+                    Version = $version
+                  }
+                }
+              }
+            }
+            $previousStableTag = $stableTags |
+              Sort-Object Version |
+              Select-Object -Last 1
+
+            if ($previousStableTag) {
+              $compareUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/compare/$($previousStableTag.Tag)...$tag"
+              $releaseNoteSections += "**Full changelog:** [$($previousStableTag.Tag)...$tag]($compareUrl)"
+            }
+          }
+
+          $releaseNotes = $releaseNoteSections -join "`n`n"
 
           if ($releaseFiles.Count -eq 0) {
             throw "No Velopack release files found in $releaseDir"
@@ -180,9 +271,14 @@ jobs:
           $createArguments += @(
             "--title",
             $title,
-            "--generate-notes",
+            "--notes",
+            $releaseNotes,
             "--verify-tag"
           )
+
+          if ($prerelease) {
+            $createArguments += "--generate-notes"
+          }
 
           if ($prerelease) {
             $createArguments += "--prerelease"
