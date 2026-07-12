@@ -1,5 +1,6 @@
 using Velopack;
 using Velopack.Exceptions;
+using Velopack.Locators;
 using Velopack.Sources;
 
 namespace PullWatch;
@@ -64,6 +65,16 @@ internal sealed class VelopackApplicationUpdater : IApplicationUpdater
 
     public IApplicationUpdate? PendingUpdate =>
         _manager.UpdatePendingRestart is { } update ? new PendingVelopackUpdate(update) : null;
+
+    public IApplicationUpdate? GetCurrentRelease(SemanticVersion restartedVersion)
+    {
+        var currentVersion = _manager.CurrentVersion;
+        var localRelease = VelopackLocator.Current.GetLatestLocalFullPackage();
+
+        return IsCurrentRestartedRelease(restartedVersion, currentVersion, localRelease?.Version)
+            ? new CurrentVelopackRelease(localRelease!)
+            : null;
+    }
 
     public async Task<IApplicationUpdate?> CheckForUpdatesAsync(CancellationToken cancellationToken)
     {
@@ -173,6 +184,15 @@ internal sealed class VelopackApplicationUpdater : IApplicationUpdater
         public string? ReleaseNotesMarkdown => TargetRelease.NotesMarkdown;
     }
 
+    private sealed class CurrentVelopackRelease(VelopackAsset release) : IApplicationUpdate
+    {
+        public string Version => release.Version.ToString();
+
+        public long SizeBytes => release.Size;
+
+        public string? ReleaseNotesMarkdown => release.NotesMarkdown;
+    }
+
     private static long EstimateDownloadSize(UpdateInfo updateInfo)
     {
         return updateInfo.DeltasToTarget.Length > 0
@@ -183,6 +203,17 @@ internal sealed class VelopackApplicationUpdater : IApplicationUpdater
     internal static bool ShouldIncludePrereleaseUpdates(string? value)
     {
         return value?.Trim() == "1";
+    }
+
+    internal static bool IsCurrentRestartedRelease(
+        SemanticVersion? restartedVersion,
+        SemanticVersion? currentVersion,
+        SemanticVersion? localReleaseVersion
+    )
+    {
+        return restartedVersion is not null
+            && restartedVersion == currentVersion
+            && restartedVersion == localReleaseVersion;
     }
 
     private static UpdateManager CreateUpdateManager(

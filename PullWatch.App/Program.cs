@@ -7,9 +7,10 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        VelopackApp.Build().Run();
+        SemanticVersion? restartedVersion = null;
+        VelopackApp.Build().OnRestarted(version => restartedVersion = version).Run();
 
-        App app = new();
+        App app = new() { RestartedVersion = restartedVersion };
         app.InitializeComponent();
         app.Run();
     }

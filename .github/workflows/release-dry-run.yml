@@ -112,11 +112,21 @@ jobs:
         env:
           DRY_RUN_VERSION: ${{ steps.dry-run-version.outputs.version }}
         run: |
-          ./scripts/package-velopack-win-x64.ps1 `
-            -PublishPath $env:PUBLISH_DIR `
-            -ReleaseDir $env:VELOPACK_RELEASE_DIR `
-            -Version $env:DRY_RUN_VERSION `
-            -ChecksumFileName "PullWatch-dry-run-$($env:DRY_RUN_VERSION)-win-x64.sha256"
+          $packageArguments = @{
+            PublishPath = $env:PUBLISH_DIR
+            ReleaseDir = $env:VELOPACK_RELEASE_DIR
+            Version = $env:DRY_RUN_VERSION
+            ChecksumFileName = "PullWatch-dry-run-$($env:DRY_RUN_VERSION)-win-x64.sha256"
+          }
+          $releaseNotesPath = ".github/release-notes/v$($env:DRY_RUN_VERSION).md"
+          if (Test-Path -LiteralPath $releaseNotesPath -PathType Leaf) {
+            $packageArguments.ReleaseNotesPath = $releaseNotesPath
+            Write-Host "Including release notes from $releaseNotesPath"
+          } else {
+            Write-Host "No matching release notes found at $releaseNotesPath; packaging without them."
+          }
+
+          ./scripts/package-velopack-win-x64.ps1 @packageArguments
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
 

@@ -122,6 +122,12 @@ public partial class MainWindow : Window
         await RunEncoderCalibrationAsync(environment, cancellationToken);
     }
 
+    internal void ShowWhatsNew(WhatsNewViewModel viewModel)
+    {
+        var window = new WhatsNewWindow(viewModel) { Owner = this };
+        window.ShowDialog();
+    }
+
     private async Task TestVideoEncodingFromSettingsAsync()
     {
         var environment = await FfmpegToolPaths.ResolveEnvironmentAsync(CancellationToken.None);

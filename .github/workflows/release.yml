@@ -158,11 +158,18 @@ jobs:
           RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          ./scripts/package-velopack-win-x64.ps1 `
-            -PublishPath $env:PUBLISH_DIR `
-            -ReleaseDir $env:VELOPACK_RELEASE_DIR `
-            -Version $env:RELEASE_VERSION `
-            -ChecksumFileName "PullWatch-$($env:RELEASE_TAG)-win-x64.sha256"
+          $packageArguments = @{
+            PublishPath = $env:PUBLISH_DIR
+            ReleaseDir = $env:VELOPACK_RELEASE_DIR
+            Version = $env:RELEASE_VERSION
+            ChecksumFileName = "PullWatch-$($env:RELEASE_TAG)-win-x64.sha256"
+          }
+          $releaseNotesPath = ".github/release-notes/$($env:RELEASE_TAG).md"
+          if (Test-Path -LiteralPath $releaseNotesPath -PathType Leaf) {
+            $packageArguments.ReleaseNotesPath = $releaseNotesPath
+          }
+
+          ./scripts/package-velopack-win-x64.ps1 @packageArguments
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
 

@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.Extensions.Logging;
+using Velopack;
 
 namespace PullWatch;
 
@@ -18,6 +19,8 @@ public partial class App : Application
     private TrayIconManager? _trayIcon;
     private MainWindow? _mainWindow;
     private int _upgradeShutdownStarted;
+
+    internal SemanticVersion? RestartedVersion { get; init; }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -101,6 +104,7 @@ public partial class App : Application
                 applicationUpdater,
                 _controller.StartedWithCreatedSettingsFile
             );
+            var whatsNewViewModel = CreateWhatsNewViewModel(applicationUpdater, logger);
             _trayIcon = new TrayIconManager(
                 _controller,
                 ShowAndActivateMainWindow,
@@ -108,9 +112,17 @@ public partial class App : Application
                 _loggerFactory.CreateLogger<TrayIconManager>()
             );
 
-            if (!ShouldStartMinimizedToTray(e.Args, _controller.Status.EffectiveSettings))
+            if (
+                whatsNewViewModel is not null
+                || !ShouldStartMinimizedToTray(e.Args, _controller.Status.EffectiveSettings)
+            )
             {
                 _mainWindow.Show();
+            }
+
+            if (whatsNewViewModel is not null)
+            {
+                _mainWindow.ShowWhatsNew(whatsNewViewModel);
             }
 
             await _mainWindow.PromptForEncoderCalibrationIfNeededAsync(CancellationToken.None);
@@ -177,6 +189,30 @@ public partial class App : Application
                 StringComparer.OrdinalIgnoreCase
             )
             && settings?.Startup.StartMinimizedToTray == true;
+    }
+
+    private WhatsNewViewModel? CreateWhatsNewViewModel(
+        VelopackApplicationUpdater applicationUpdater,
+        ILogger logger
+    )
+    {
+        if (RestartedVersion is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var release = applicationUpdater.GetCurrentRelease(RestartedVersion);
+            return release is null
+                ? null
+                : WhatsNewViewModel.Create(release.Version, release.ReleaseNotesMarkdown);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Could not load release notes for the installed update.");
+            return null;
+        }
     }
 
     private static SingleInstanceLaunchRequest CreateLaunchRequest()

@@ -15,7 +15,8 @@ param(
     [string]$PackTitle = "PullWatch",
     [string]$MainExe = "PullWatch.exe",
     [string]$IconPath = "PullWatch.App/Assets/favicon.ico",
-    [string]$Runtime = "win-x64"
+    [string]$Runtime = "win-x64",
+    [string]$ReleaseNotesPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,7 +80,32 @@ if ([string]::IsNullOrWhiteSpace($ChecksumFileName) -or
 $publishPath = Resolve-ArtifactPath $PublishPath "PublishPath"
 $releaseDir = Resolve-ArtifactPath $ReleaseDir "ReleaseDir"
 $resolvedIconPath = Resolve-RepoPath $IconPath
+$resolvedReleaseNotesPath = $null
 $vpkPath = Join-Path $repoRoot ".tools/vpk.exe"
+
+if ($PSBoundParameters.ContainsKey("ReleaseNotesPath")) {
+    if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
+        throw "ReleaseNotesPath must not be empty when provided."
+    }
+
+    $resolvedReleaseNotesPath = Resolve-RepoPath $ReleaseNotesPath
+    if (!(Test-Path -LiteralPath $resolvedReleaseNotesPath -PathType Leaf)) {
+        throw "Release notes file does not exist: $resolvedReleaseNotesPath"
+    }
+
+    $releaseNotes = Get-Content -LiteralPath $resolvedReleaseNotesPath -Raw
+    if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
+        throw "Release notes must not be empty: $resolvedReleaseNotesPath"
+    }
+
+    if ($releaseNotes.Contains("release-notes-template:")) {
+        throw "Replace the template instructions before packaging: $resolvedReleaseNotesPath"
+    }
+
+    if ($releaseNotes -match '(?m)^## Commit reference\r?$') {
+        throw "Remove the commit reference section before packaging: $resolvedReleaseNotesPath"
+    }
+}
 
 if (!(Test-Path -LiteralPath $publishPath)) {
     throw "Publish path does not exist: $publishPath"
@@ -121,6 +147,13 @@ $vpkArguments = @(
     $Runtime,
     "--noPortable"
 )
+
+if ($null -ne $resolvedReleaseNotesPath) {
+    $vpkArguments += @(
+        "--releaseNotes",
+        $resolvedReleaseNotesPath
+    )
+}
 
 & $vpkPath @vpkArguments
 Assert-NativeCommandSucceeded "Velopack pack failed."
