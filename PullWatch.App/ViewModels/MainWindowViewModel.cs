@@ -78,7 +78,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             recordingDialogs.ConfirmPermanentDelete,
             OpenRecordingsFolderAsync,
             SaveSelectedRecordingCategoryAsync,
-            Notifications
+            Notifications,
+            SavePlaybackAudioStateAsync
         );
         Settings = new SettingsViewModel(
             controller.Status,
@@ -190,6 +191,27 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             when (exception is InvalidOperationException or ObjectDisposedException)
         {
             // The visual preference can safely remain in-memory during shutdown.
+        }
+    }
+
+    private async Task<bool> SavePlaybackAudioStateAsync(int volumePercent, bool isMuted)
+    {
+        try
+        {
+            var result = await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
+                {
+                    PlaybackVolumePercent = volumePercent,
+                    IsPlaybackMuted = isMuted,
+                }
+            );
+            return result.WasPersisted;
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // The playback preference can safely remain in-memory during shutdown.
+            return false;
         }
     }
 

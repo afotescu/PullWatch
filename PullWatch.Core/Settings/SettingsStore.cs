@@ -183,6 +183,8 @@ public sealed class SettingsStore
         public bool SidebarCollapsed { get; init; }
         public RecordingListCategory SelectedRecordingCategory { get; init; } =
             RecordingListCategory.ChallengeMode;
+        public int PlaybackVolumePercent { get; init; } = UiSettings.DefaultPlaybackVolumePercent;
+        public bool IsPlaybackMuted { get; init; }
 
         public UiSettings ToSettings()
         {
@@ -193,6 +195,8 @@ public sealed class SettingsStore
                     ?? throw new JsonException("Window placement settings are required."),
                 SidebarCollapsed = SidebarCollapsed,
                 SelectedRecordingCategory = SelectedRecordingCategory,
+                PlaybackVolumePercent = PlaybackVolumePercent,
+                IsPlaybackMuted = IsPlaybackMuted,
             };
         }
     }

@@ -78,6 +78,8 @@ public sealed class SettingsStoreTests
             {
                 SidebarCollapsed = true,
                 SelectedRecordingCategory = RecordingListCategory.Manual,
+                PlaybackVolumePercent = 35,
+                IsPlaybackMuted = true,
             },
         };
 
@@ -97,6 +99,36 @@ public sealed class SettingsStoreTests
             actual
         );
         Assert.Equal(settings.EncoderCalibration.Results, actual.EncoderCalibration.Results);
+    }
+
+    [Fact]
+    public async Task LegacyUiSettingsUseDefaultPlaybackAudioState()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "Version": 1,
+              "Ui": {
+                "SidebarCollapsed": true
+              }
+            }
+            """,
+            cancellationToken
+        );
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(
+            UiSettings.DefaultPlaybackVolumePercent,
+            result.Settings!.Ui.PlaybackVolumePercent
+        );
+        Assert.False(result.Settings.Ui.IsPlaybackMuted);
     }
 
     [Fact]

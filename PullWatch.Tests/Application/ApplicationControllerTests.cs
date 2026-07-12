@@ -922,6 +922,10 @@ public sealed class ApplicationControllerTests
             ui => ui with { SidebarCollapsed = true },
             TestContext.Current.CancellationToken
         );
+        var playbackAudioResult = await controller.UpdateUiSettingsAsync(
+            ui => ui with { PlaybackVolumePercent = 35, IsPlaybackMuted = true },
+            TestContext.Current.CancellationToken
+        );
         var placementResult = await controller.UpdateUiSettingsAsync(
             ui => ui with { WindowPlacement = placement },
             TestContext.Current.CancellationToken
@@ -932,6 +936,7 @@ public sealed class ApplicationControllerTests
 
         Assert.Equal(SettingsSaveStatus.Saved, categoryResult.Status);
         Assert.Equal(SettingsSaveStatus.Saved, sidebarResult.Status);
+        Assert.Equal(SettingsSaveStatus.Saved, playbackAudioResult.Status);
         Assert.Equal(SettingsSaveStatus.Saved, placementResult.Status);
         Assert.Equal(SettingsLoadStatus.Loaded, persisted.Status);
         Assert.Equal(
@@ -939,6 +944,8 @@ public sealed class ApplicationControllerTests
             persisted.Settings!.Ui.SelectedRecordingCategory
         );
         Assert.True(persisted.Settings.Ui.SidebarCollapsed);
+        Assert.Equal(35, persisted.Settings.Ui.PlaybackVolumePercent);
+        Assert.True(persisted.Settings.Ui.IsPlaybackMuted);
         Assert.Equal(placement, persisted.Settings.Ui.WindowPlacement);
         Assert.Equal(persisted.Settings.Ui, controller.Status.EffectiveSettings!.Ui);
     }

@@ -49,6 +49,11 @@ public static class SettingsValidator
             );
         }
 
+        if (settings.Ui.PlaybackVolumePercent is < 0 or > 100)
+        {
+            errors.Add("Playback volume must be between 0 and 100 percent.");
+        }
+
         if (settings.RecordingFilters.MythicPlus.MinimumKeystoneLevel < 0)
         {
             errors.Add("Minimum Mythic+ keystone level cannot be negative.");
@@ -94,6 +99,11 @@ public static class SettingsValidator
                         StartMinimizedToTray =
                             settings.Startup.StartWithWindows
                             && settings.Startup.StartMinimizedToTray,
+                    },
+                    Ui = settings.Ui with
+                    {
+                        IsPlaybackMuted =
+                            settings.Ui.IsPlaybackMuted || settings.Ui.PlaybackVolumePercent == 0,
                     },
                     Storage = settings.Storage.IsLimitEnabled
                         ? settings.Storage with

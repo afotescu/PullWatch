@@ -11,6 +11,13 @@ using VlcState = LibVLCSharp.Shared.VLCState;
 
 namespace PullWatch;
 
+internal sealed class PlaybackAudioStateChangedEventArgs(int volumePercent, bool isMuted)
+    : EventArgs
+{
+    public int VolumePercent { get; } = volumePercent;
+    public bool IsMuted { get; } = isMuted;
+}
+
 public partial class RecordingPlayerControl : UserControl, IDisposable
 {
     private const string PlayIconGeometryKey = "PlayIconGeometry";
@@ -65,6 +72,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     private bool _isPrimingSeekPending;
     private bool _isSeeking;
     private bool _isMuted;
+    private bool _isAdjustingVolume;
     private bool _isUpdatingVolumeControls;
     private double _lastAudibleVolume;
     private double _volume = FallbackUnmuteVolume;
@@ -101,6 +109,14 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
             Thumb.DragCompletedEvent,
             new DragCompletedEventHandler(OnPlaybackThumbDragCompleted)
         );
+        VolumeSlider.AddHandler(
+            Thumb.DragStartedEvent,
+            new DragStartedEventHandler(OnVolumeThumbDragStarted)
+        );
+        VolumeSlider.AddHandler(
+            Thumb.DragCompletedEvent,
+            new DragCompletedEventHandler(OnVolumeThumbDragCompleted)
+        );
         _lastAudibleVolume = _volume;
         UpdateVolumeControls();
         Loaded += OnLoaded;
@@ -109,6 +125,8 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     public event EventHandler? FullScreenRequested;
 
     public event EventHandler? ExitFullScreenRequested;
+
+    internal event EventHandler<PlaybackAudioStateChangedEventArgs>? PlaybackAudioStateChanged;
 
     public Uri? Source
     {
@@ -126,6 +144,25 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     {
         get => (bool)GetValue(IsFullScreenProperty);
         set => SetValue(IsFullScreenProperty, value);
+    }
+
+    internal void ApplyPlaybackAudioState(int volumePercent, bool isMuted)
+    {
+        _isAdjustingVolume = false;
+        _volume = Math.Clamp(volumePercent, 0, 100) / VolumeSliderScale;
+
+        if (_volume > 0)
+        {
+            _lastAudibleVolume = _volume;
+        }
+        else if (_lastAudibleVolume <= 0)
+        {
+            _lastAudibleVolume = FallbackUnmuteVolume;
+        }
+
+        _isMuted = isMuted || _volume <= 0;
+        ApplyPlayerAudioState();
+        UpdateVolumeControls();
     }
 
     public void StopPlayback()
@@ -213,6 +250,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     public bool AdjustVolume(double delta)
     {
         SetVolume(_volume + delta, unmute: true);
+        RaisePlaybackAudioStateChanged();
 
         return true;
     }
@@ -641,6 +679,17 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         }
     }
 
+    private void OnVolumeThumbDragStarted(object sender, DragStartedEventArgs eventArgs)
+    {
+        _isAdjustingVolume = true;
+    }
+
+    private void OnVolumeThumbDragCompleted(object sender, DragCompletedEventArgs eventArgs)
+    {
+        _isAdjustingVolume = false;
+        RaisePlaybackAudioStateChanged();
+    }
+
     private void OnVolumeSliderValueChanged(
         object sender,
         RoutedPropertyChangedEventArgs<double> eventArgs
@@ -652,6 +701,11 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         }
 
         SetVolume(eventArgs.NewValue / VolumeSliderScale, unmute: eventArgs.NewValue > 0);
+
+        if (!_isAdjustingVolume)
+        {
+            RaisePlaybackAudioStateChanged();
+        }
     }
 
     private void SeekToSliderValue()
@@ -681,6 +735,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
         ApplyPlayerAudioState();
         UpdateVolumeControls();
+        RaisePlaybackAudioStateChanged();
     }
 
     private bool ToggleMuteFromKeyboard()
@@ -741,6 +796,17 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
         ApplyPlayerAudioState();
         UpdateVolumeControls();
+    }
+
+    private void RaisePlaybackAudioStateChanged()
+    {
+        PlaybackAudioStateChanged?.Invoke(
+            this,
+            new PlaybackAudioStateChangedEventArgs(
+                (int)Math.Round(_volume * VolumeSliderScale),
+                IsEffectivelyMuted()
+            )
+        );
     }
 
     private void SeekToPoint(System.Windows.Point point)

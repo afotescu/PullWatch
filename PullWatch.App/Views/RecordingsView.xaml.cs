@@ -25,6 +25,7 @@ public partial class RecordingsView : UserControl, IDisposable
         InitializeComponent();
         RecordingPlayer.FullScreenRequested += OnPlayerFullScreenRequested;
         RecordingPlayer.ExitFullScreenRequested += OnPlayerExitFullScreenRequested;
+        RecordingPlayer.PlaybackAudioStateChanged += OnPlaybackAudioStateChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -34,6 +35,14 @@ public partial class RecordingsView : UserControl, IDisposable
         if (_isDisposed)
         {
             return;
+        }
+
+        if (DataContext is RecordingsViewModel viewModel)
+        {
+            RecordingPlayer.ApplyPlaybackAudioState(
+                viewModel.PlaybackVolumePercent,
+                viewModel.IsPlaybackMuted
+            );
         }
 
         AttachWindowKeyHandler();
@@ -64,9 +73,24 @@ public partial class RecordingsView : UserControl, IDisposable
         CloseFullScreen();
         RecordingPlayer.FullScreenRequested -= OnPlayerFullScreenRequested;
         RecordingPlayer.ExitFullScreenRequested -= OnPlayerExitFullScreenRequested;
+        RecordingPlayer.PlaybackAudioStateChanged -= OnPlaybackAudioStateChanged;
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
         RecordingPlayer.DisposePlayback();
+    }
+
+    private async void OnPlaybackAudioStateChanged(
+        object? sender,
+        PlaybackAudioStateChangedEventArgs eventArgs
+    )
+    {
+        if (DataContext is RecordingsViewModel viewModel)
+        {
+            await viewModel.UpdatePlaybackAudioStateAsync(
+                eventArgs.VolumePercent,
+                eventArgs.IsMuted
+            );
+        }
     }
 
     private void AttachWindowKeyHandler()

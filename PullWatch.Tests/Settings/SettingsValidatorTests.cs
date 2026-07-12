@@ -180,6 +180,34 @@ public sealed class SettingsValidatorTests
     }
 
     [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void RejectsPlaybackVolumeOutsidePercentageRange(int volumePercent)
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Ui = new UiSettings { PlaybackVolumePercent = volumePercent } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Playback volume must be between 0 and 100 percent.", result.Errors);
+    }
+
+    [Fact]
+    public void ZeroPlaybackVolumeIsNormalizedToMuted()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Ui = new UiSettings { PlaybackVolumePercent = 0, IsPlaybackMuted = false },
+            }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.True(result.Settings!.Ui.IsPlaybackMuted);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public void RejectsNonpositiveLastEnabledRecordingStorageLimit(long lastEnabledMaxUsageBytes)
