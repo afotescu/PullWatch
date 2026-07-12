@@ -199,33 +199,15 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
             Key.Right => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds)),
             Key.Up => AdjustVolume(VolumeStep),
             Key.Down => AdjustVolume(-VolumeStep),
+            Key.M => ToggleMuteFromKeyboard(),
+            Key.F or Key.F11 => ToggleFullScreenFromKeyboard(),
             _ => false,
         };
     }
 
     public bool SeekBy(TimeSpan offset)
     {
-        if (!_hasMedia)
-        {
-            return false;
-        }
-
-        var duration = GetDuration();
-        if (duration <= TimeSpan.Zero)
-        {
-            return false;
-        }
-
-        var position = Clamp(
-            (_pendingPlaybackStartPosition ?? GetPosition()) + offset,
-            TimeSpan.Zero,
-            duration
-        );
-        SetPosition(position);
-        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
-        UpdatePlaybackTimeText(position, duration);
-
-        return true;
+        return SeekTo((_pendingPlaybackStartPosition ?? GetPosition()) + offset);
     }
 
     public bool AdjustVolume(double delta)
@@ -369,7 +351,14 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
     private void OnVideoSurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
     {
-        if (eventArgs.ChangedButton != MouseButton.Left || eventArgs.ClickCount != 2)
+        if (eventArgs.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        Focus();
+
+        if (eventArgs.ClickCount != 2)
         {
             return;
         }
@@ -605,6 +594,25 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         _isSeeking = true;
     }
 
+    private void OnPlaybackSliderPreviewKeyDown(object sender, KeyEventArgs eventArgs)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None)
+        {
+            return;
+        }
+
+        eventArgs.Handled = eventArgs.Key switch
+        {
+            Key.Left or Key.Down => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds)),
+            Key.Right or Key.Up => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds)),
+            Key.PageDown => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds * 2)),
+            Key.PageUp => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds * 2)),
+            Key.Home => SeekTo(TimeSpan.Zero),
+            Key.End => SeekTo(GetDuration()),
+            _ => false,
+        };
+    }
+
     private void OnPlaybackSliderPreviewMouseUp(object sender, MouseButtonEventArgs eventArgs)
     {
         SeekToSliderValue();
@@ -673,6 +681,43 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
         ApplyPlayerAudioState();
         UpdateVolumeControls();
+    }
+
+    private bool ToggleMuteFromKeyboard()
+    {
+        ToggleMute();
+        return true;
+    }
+
+    private bool ToggleFullScreenFromKeyboard()
+    {
+        if (!FullScreenButton.IsEnabled)
+        {
+            return false;
+        }
+
+        RequestFullScreenToggle();
+        return true;
+    }
+
+    private bool SeekTo(TimeSpan requestedPosition)
+    {
+        if (!_hasMedia)
+        {
+            return false;
+        }
+
+        var duration = GetDuration();
+        if (duration <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        var position = Clamp(requestedPosition, TimeSpan.Zero, duration);
+        SetPosition(position);
+        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
+        UpdatePlaybackTimeText(position, duration);
+        return true;
     }
 
     private void SetVolume(double volume, bool unmute)

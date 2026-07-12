@@ -52,6 +52,47 @@ Closing the PullWatch window keeps the app running in the system tray. Use
 - Diagnostics view with combat-log, WoW process, recorder state, effective
   settings, and recent application logs.
 
+## Keyboard Shortcuts
+
+These are PullWatch-specific shortcuts. Standard Windows keyboard behavior such
+as `Tab` navigation, `Enter` on focused buttons, and dialog cancellation is not
+repeated here.
+
+### Recording Player
+
+| Shortcut | Scope | Action |
+| --- | --- | --- |
+| `Space` | Anywhere in the Recordings view while media is ready, except text-entry and combo-box input | Play or pause |
+| `Left` / `Right` | Player focused or fullscreen, unless a slider is focused | Seek backward or forward 5 seconds |
+| `Up` / `Down` | Player focused or fullscreen, unless a slider is focused | Raise or lower volume by 10 percentage points |
+| `M` | Player focused or fullscreen | Mute or unmute |
+| `F` / `F11` | Player focused or fullscreen | Enter or exit fullscreen |
+| `Escape` | Fullscreen | Exit fullscreen |
+| `Alt+F4` | Fullscreen | Exit fullscreen instead of closing PullWatch |
+
+`Space` is reserved for playback in the Recordings view even when a list or
+button has focus. Use `Enter` to activate a focused button. Playback and slider
+shortcuts do not run while `Ctrl`, `Shift`, or `Alt` is held. `Escape` and
+`Alt+F4` remain available to leave fullscreen.
+
+When the playback timeline itself has keyboard focus, it provides additional
+seeking controls:
+
+| Shortcut | Action |
+| --- | --- |
+| `Left` / `Down` | Seek backward 5 seconds |
+| `Right` / `Up` | Seek forward 5 seconds |
+| `Page Down` / `Page Up` | Seek backward or forward 10 seconds |
+| `Home` / `End` | Seek to the beginning or end |
+
+The volume slider retains the standard Windows slider keyboard controls.
+
+### Settings
+
+| Shortcut | Scope | Action |
+| --- | --- | --- |
+| `Enter` | Editing the WoW logs or recordings directory path | Validate and save the edited path |
+
 ## Requirements
 
 - Windows x64
