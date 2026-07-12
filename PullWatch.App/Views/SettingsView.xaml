@@ -29,10 +29,7 @@
               IsChecked="{Binding IsRecordingStorageLimitEnabled}"
               Content="Automatically delete oldest recordings when storage exceeds"
             />
-            <StackPanel
-              Margin="25,10,0,0"
-              Orientation="Horizontal"
-            >
+            <StackPanel Margin="25,10,0,0" Orientation="Horizontal">
               <TextBox
                 Width="100"
                 InputScope="Number"
