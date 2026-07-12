@@ -100,6 +100,67 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
+    public async Task RoundTripsLastEnabledStorageLimitWhileLimitIsDisabled()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        var store = new SettingsStore(path);
+        var lastEnabledMaxUsageBytes = 40L * 1024 * 1024 * 1024;
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = lastEnabledMaxUsageBytes,
+            },
+        };
+
+        await store.SaveAsync(settings, cancellationToken);
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(
+            RecordingStorageSettings.UnlimitedBytes,
+            result.Settings!.Storage.MaxUsageBytes
+        );
+        Assert.Equal(lastEnabledMaxUsageBytes, result.Settings.Storage.LastEnabledMaxUsageBytes);
+    }
+
+    [Fact]
+    public async Task LegacyDisabledStorageLimitUsesDefaultLastEnabledLimit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "Version": 1,
+              "Storage": {
+                "MaxUsageBytes": 0
+              }
+            }
+            """,
+            cancellationToken
+        );
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(
+            RecordingStorageSettings.UnlimitedBytes,
+            result.Settings!.Storage.MaxUsageBytes
+        );
+        Assert.Equal(
+            RecordingStorageSettings.DefaultMaxUsageBytes,
+            result.Settings.Storage.LastEnabledMaxUsageBytes
+        );
+    }
+
+    [Fact]
     public async Task MalformedFileIsRejectedAndLeftUntouched()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

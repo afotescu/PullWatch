@@ -31,12 +31,12 @@
             />
             <StackPanel
               Margin="25,10,0,0"
-              IsEnabled="{Binding CanConfigureRecordingStorageLimit}"
               Orientation="Horizontal"
             >
               <TextBox
                 Width="100"
                 InputScope="Number"
+                IsEnabled="{Binding CanConfigureRecordingStorageLimit}"
                 local:TextBoxInput.AcceptsNonNegativeIntegerOnly="True"
                 local:TextBoxInput.FallbackTextWhenEmpty="1"
                 Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"

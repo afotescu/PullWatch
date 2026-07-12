@@ -188,20 +188,22 @@ public partial class MainWindow : Window
         var selectedProfile = VideoProfileSelectionPolicy.SelectBestPassingProfile(
             calibrationResults
         );
-        var saveResult = await _controller.SaveSettingsAsync(
-            settings with
-            {
-                Video = settings.Video with { SelectedProfile = selectedProfile },
-                EncoderCalibration = new EncoderCalibrationSettings
+        var calibration = new EncoderCalibrationSettings
+        {
+            Version = EncoderCalibrationSettings.CurrentVersion,
+            TestedAt = DateTimeOffset.UtcNow,
+            FfmpegPath = environment.FfmpegPath,
+            FfmpegVersion = environment.FfmpegVersion,
+            FfmpegSha256 = environment.FfmpegSha256,
+            Results = calibrationResults,
+        };
+        var saveResult = await _controller.UpdateSettingsAsync(
+            currentSettings =>
+                currentSettings with
                 {
-                    Version = EncoderCalibrationSettings.CurrentVersion,
-                    TestedAt = DateTimeOffset.UtcNow,
-                    FfmpegPath = environment.FfmpegPath,
-                    FfmpegVersion = environment.FfmpegVersion,
-                    FfmpegSha256 = environment.FfmpegSha256,
-                    Results = calibrationResults,
+                    Video = currentSettings.Video with { SelectedProfile = selectedProfile },
+                    EncoderCalibration = calibration,
                 },
-            },
             cancellationToken
         );
 
@@ -472,12 +474,10 @@ public partial class MainWindow : Window
             Height = restoreBounds.Height,
             IsMaximized = WindowState == WindowState.Maximized,
         };
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
             Task.Run(() =>
-                    _controller.SaveUiSettingsAsync(currentUi with { WindowPlacement = placement })
+                    _controller.UpdateUiSettingsAsync(ui => ui with { WindowPlacement = placement })
                 )
                 .GetAwaiter()
                 .GetResult();

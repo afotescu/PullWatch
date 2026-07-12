@@ -153,6 +153,7 @@ public sealed record RecordingStorageSettings
     public const long DefaultMaxUsageBytes = 25L * 1024 * 1024 * 1024;
 
     public long MaxUsageBytes { get; init; } = DefaultMaxUsageBytes;
+    public long LastEnabledMaxUsageBytes { get; init; } = DefaultMaxUsageBytes;
 
     public bool IsLimitEnabled => MaxUsageBytes > UnlimitedBytes;
 }

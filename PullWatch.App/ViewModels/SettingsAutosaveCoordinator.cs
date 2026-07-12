@@ -7,6 +7,8 @@ internal enum SettingsSaveScope
     WowLogsDirectory = 1,
     RecordingsDirectory = 2,
     StartupShortcut = 4,
+    Storage = 8,
+    VideoProfile = 16,
 }
 
 internal sealed record SettingsAutosaveOutcome(
@@ -21,7 +23,16 @@ internal sealed record SettingsAutosaveOutcome(
 internal sealed class SettingsAutosaveCoordinator
 {
     private readonly Func<PullWatchSettings, SettingsSaveScope, PullWatchSettings> _serialize;
-    private readonly Func<PullWatchSettings, Task<SettingsSaveResult>> _save;
+    private readonly Func<
+        PullWatchSettings,
+        PullWatchSettings,
+        SettingsSaveScope,
+        PullWatchSettings
+    > _apply;
+    private readonly Func<
+        Func<PullWatchSettings, PullWatchSettings>,
+        Task<SettingsSaveResult>
+    > _save;
     private readonly Func<SettingsAutosaveOutcome, Task> _handleResult;
     private readonly Func<bool> _canSave;
     private readonly object _sync = new();
@@ -34,13 +45,15 @@ internal sealed class SettingsAutosaveCoordinator
         PullWatchSettings savedSettings,
         Func<bool> canSave,
         Func<PullWatchSettings, SettingsSaveScope, PullWatchSettings> serialize,
-        Func<PullWatchSettings, Task<SettingsSaveResult>> save,
+        Func<PullWatchSettings, PullWatchSettings, SettingsSaveScope, PullWatchSettings> apply,
+        Func<Func<PullWatchSettings, PullWatchSettings>, Task<SettingsSaveResult>> save,
         Func<SettingsAutosaveOutcome, Task> handleResult
     )
     {
         _savedSettings = savedSettings;
         _canSave = canSave;
         _serialize = serialize;
+        _apply = apply;
         _save = save;
         _handleResult = handleResult;
     }
@@ -64,6 +77,22 @@ internal sealed class SettingsAutosaveCoordinator
             {
                 return _pendingSave is not null || _autosaveTask is { IsCompleted: false };
             }
+        }
+    }
+
+    public bool HasPendingSaveFor(SettingsSaveScope scope)
+    {
+        lock (_sync)
+        {
+            return _pendingSave is { } pendingSave && Includes(pendingSave, scope);
+        }
+    }
+
+    public bool HasRetryFor(SettingsSaveScope scope)
+    {
+        lock (_sync)
+        {
+            return Includes(_retryOnNextSave, scope);
         }
     }
 
@@ -145,7 +174,9 @@ internal sealed class SettingsAutosaveCoordinator
 
             try
             {
-                saveResult = await _save(attemptedSettings);
+                saveResult = await _save(currentSettings =>
+                    _apply(currentSettings, attemptedSettings, scope)
+                );
 
                 if (saveResult.WasPersisted)
                 {

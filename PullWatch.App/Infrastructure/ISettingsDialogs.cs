@@ -7,12 +7,18 @@ public enum PendingRecordingStorageLimitChangeAction
     Cancel,
 }
 
+public sealed record PendingRecordingStorageLimitChange(
+    bool CurrentIsEnabled,
+    int CurrentGigabytes,
+    bool PendingIsEnabled,
+    int PendingGigabytes
+);
+
 public interface ISettingsDialogs
 {
     string? PickFolder(string title, string? initialDirectory);
 
     PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
-        int currentGigabytes,
-        int pendingGigabytes
+        PendingRecordingStorageLimitChange change
     );
 }

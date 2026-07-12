@@ -662,6 +662,69 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task CalibrationSettingsMutationPreservesInterveningVideoQualityChange()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
+        );
+        var settingsAtCalibrationStart = controller.Status.EffectiveSettings!;
+        var environment = ApplicationControllerTestBuilder.DefaultEncoderCalibrationEnvironment;
+        var selectedProfile = new VideoProfileSelection
+        {
+            Codec = VideoCodec.H265,
+            Provider = VideoEncoderProvider.NvidiaNvenc,
+        };
+        var calibration = new EncoderCalibrationSettings
+        {
+            Version = EncoderCalibrationSettings.CurrentVersion,
+            FfmpegPath = environment.FfmpegPath,
+            FfmpegVersion = environment.FfmpegVersion,
+            FfmpegSha256 = environment.FfmpegSha256,
+            Results =
+            [
+                new EncoderCalibrationResult
+                {
+                    Codec = selectedProfile.Codec,
+                    Provider = selectedProfile.Provider,
+                    EncoderName = "hevc_nvenc",
+                    Passed = true,
+                },
+            ],
+        };
+
+        var qualityResult = await controller.UpdateSettingsAsync(
+            currentSettings =>
+                currentSettings with
+                {
+                    Video = currentSettings.Video with { Quality = VideoQuality.High },
+                },
+            TestContext.Current.CancellationToken
+        );
+        var calibrationResult = await controller.UpdateSettingsAsync(
+            currentSettings =>
+                currentSettings with
+                {
+                    Video = currentSettings.Video with { SelectedProfile = selectedProfile },
+                    EncoderCalibration = calibration,
+                },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(VideoQuality.Balanced, settingsAtCalibrationStart.Video.Quality);
+        Assert.Equal(SettingsSaveStatus.Saved, qualityResult.Status);
+        Assert.Equal(SettingsSaveStatus.Saved, calibrationResult.Status);
+        Assert.Equal(VideoQuality.High, calibrationResult.Settings!.Video.Quality);
+        Assert.Equal(selectedProfile, calibrationResult.Settings.Video.SelectedProfile);
+        Assert.Equal(calibration, calibrationResult.Settings.EncoderCalibration);
+        Assert.Equal(calibrationResult.Settings, controller.Status.EffectiveSettings);
+    }
+
+    [Fact]
     public async Task CalibrationSaveClearsPreviousVideoEncodingSetupFailure()
     {
         using var directory = new TemporaryDirectory();
@@ -829,6 +892,55 @@ public sealed class ApplicationControllerTests
         Assert.Equal(SettingsSaveStatus.Saved, result.Status);
         Assert.Equal(ui, controller.Status.EffectiveSettings!.Ui);
         Assert.Equal(ui, persisted.Settings!.Ui);
+    }
+
+    [Fact]
+    public async Task IndependentUiSettingsMutationsPreserveSiblingValues()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var controller = await CreateControllerAsync(
+            directory.Path,
+            null,
+            new FakeRecordingService(),
+            _ => new FakeCombatLogMonitor(),
+            UnavailableWowMonitor
+        );
+        var placement = new WindowPlacementSettings
+        {
+            Left = 25,
+            Top = 50,
+            Width = 1200,
+            Height = 800,
+            IsMaximized = true,
+        };
+
+        var categoryResult = await controller.UpdateUiSettingsAsync(
+            ui => ui with { SelectedRecordingCategory = RecordingListCategory.Manual },
+            TestContext.Current.CancellationToken
+        );
+        var sidebarResult = await controller.UpdateUiSettingsAsync(
+            ui => ui with { SidebarCollapsed = true },
+            TestContext.Current.CancellationToken
+        );
+        var placementResult = await controller.UpdateUiSettingsAsync(
+            ui => ui with { WindowPlacement = placement },
+            TestContext.Current.CancellationToken
+        );
+        var persisted = await new SettingsStore(
+            Path.Combine(directory.Path, "settings.json")
+        ).LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(SettingsSaveStatus.Saved, categoryResult.Status);
+        Assert.Equal(SettingsSaveStatus.Saved, sidebarResult.Status);
+        Assert.Equal(SettingsSaveStatus.Saved, placementResult.Status);
+        Assert.Equal(SettingsLoadStatus.Loaded, persisted.Status);
+        Assert.Equal(
+            RecordingListCategory.Manual,
+            persisted.Settings!.Ui.SelectedRecordingCategory
+        );
+        Assert.True(persisted.Settings.Ui.SidebarCollapsed);
+        Assert.Equal(placement, persisted.Settings.Ui.WindowPlacement);
+        Assert.Equal(persisted.Settings.Ui, controller.Status.EffectiveSettings!.Ui);
     }
 
     [Fact]

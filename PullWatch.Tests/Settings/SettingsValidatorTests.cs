@@ -179,6 +179,45 @@ public sealed class SettingsValidatorTests
         Assert.Contains("Recording storage limit cannot be negative.", result.Errors);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void RejectsNonpositiveLastEnabledRecordingStorageLimit(long lastEnabledMaxUsageBytes)
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Storage = new RecordingStorageSettings
+                {
+                    LastEnabledMaxUsageBytes = lastEnabledMaxUsageBytes,
+                },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Last enabled recording storage limit must be positive.", result.Errors);
+    }
+
+    [Fact]
+    public void ActiveRecordingStorageLimitBecomesLastEnabledLimit()
+    {
+        var maxUsageBytes = 40L * 1024 * 1024 * 1024;
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Storage = new RecordingStorageSettings
+                {
+                    MaxUsageBytes = maxUsageBytes,
+                    LastEnabledMaxUsageBytes = 10L * 1024 * 1024 * 1024,
+                },
+            }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.Equal(maxUsageBytes, result.Settings!.Storage.LastEnabledMaxUsageBytes);
+    }
+
     [Fact]
     public void ClearsStartMinimizedToTrayWhenWindowsStartupIsDisabled()
     {

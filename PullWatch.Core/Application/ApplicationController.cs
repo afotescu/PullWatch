@@ -353,8 +353,33 @@ public sealed class ApplicationController : IAsyncDisposable
         return SaveSettingsAsync(settings, CancellationToken.None);
     }
 
-    public async Task<SettingsSaveResult> SaveSettingsAsync(
+    public Task<SettingsSaveResult> SaveSettingsAsync(
         PullWatchSettings settings,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return UpdateSettingsCoreAsync(_ => settings, cancellationToken);
+    }
+
+    public Task<SettingsSaveResult> UpdateSettingsAsync(
+        Func<PullWatchSettings, PullWatchSettings> updateSettings
+    )
+    {
+        return UpdateSettingsAsync(updateSettings, CancellationToken.None);
+    }
+
+    public Task<SettingsSaveResult> UpdateSettingsAsync(
+        Func<PullWatchSettings, PullWatchSettings> updateSettings,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(updateSettings);
+        return UpdateSettingsCoreAsync(updateSettings, cancellationToken);
+    }
+
+    private async Task<SettingsSaveResult> UpdateSettingsCoreAsync(
+        Func<PullWatchSettings, PullWatchSettings> updateSettings,
         CancellationToken cancellationToken
     )
     {
@@ -378,6 +403,8 @@ public sealed class ApplicationController : IAsyncDisposable
             }
 
             var previousSettings = settingsService.Current;
+            var settings = updateSettings(previousSettings);
+            ArgumentNullException.ThrowIfNull(settings);
             var result = await settingsService.SaveAsync(settings, cancellationToken);
 
             if (!result.WasPersisted)
@@ -453,12 +480,26 @@ public sealed class ApplicationController : IAsyncDisposable
         return SaveUiSettingsAsync(uiSettings, CancellationToken.None);
     }
 
-    public async Task<SettingsSaveResult> SaveUiSettingsAsync(
+    public Task<SettingsSaveResult> SaveUiSettingsAsync(
         UiSettings uiSettings,
         CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(uiSettings);
+        return UpdateUiSettingsAsync(_ => uiSettings, cancellationToken);
+    }
+
+    public Task<SettingsSaveResult> UpdateUiSettingsAsync(Func<UiSettings, UiSettings> updateUi)
+    {
+        return UpdateUiSettingsAsync(updateUi, CancellationToken.None);
+    }
+
+    public async Task<SettingsSaveResult> UpdateUiSettingsAsync(
+        Func<UiSettings, UiSettings> updateUi,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(updateUi);
 
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         await _lifetimeLock.WaitAsync(cancellationToken);
@@ -472,6 +513,8 @@ public sealed class ApplicationController : IAsyncDisposable
                 ?? throw new InvalidOperationException(
                     "The application controller has not been started."
                 );
+            var uiSettings = updateUi(settingsService.Current.Ui);
+            ArgumentNullException.ThrowIfNull(uiSettings);
             var result = await settingsService.SaveAsync(
                 settingsService.Current with
                 {

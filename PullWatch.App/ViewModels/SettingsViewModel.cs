@@ -27,10 +27,36 @@ public sealed partial class SettingsViewModel : ObservableObject
     private CancellationTokenSource? _settingsSuccessNotificationCancellation;
     private SettingsNotificationKind? _activeSettingsNotificationKind;
     private bool _isLoading;
+    private bool _isAppliedRecordingStorageLimitEnabled;
 
     public SettingsViewModel(
         ApplicationStatus initialStatus,
         Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings,
+        ISettingsDialogs dialogs,
+        Func<VideoCaptureSize>? getEstimateCaptureSize = null,
+        Func<Task>? testVideoEncoding = null,
+        IWindowsStartupShortcut? windowsStartupShortcut = null,
+        RecordingStorageStatus? initialRecordingStorageStatus = null,
+        NotificationCenterViewModel? notifications = null,
+        IUiDispatcher? notificationDispatcher = null,
+        TimeSpan? settingsSuccessNotificationDuration = null
+    )
+        : this(
+            initialStatus,
+            CreateSettingsUpdater(initialStatus, saveSettings),
+            dialogs,
+            getEstimateCaptureSize,
+            testVideoEncoding,
+            windowsStartupShortcut,
+            initialRecordingStorageStatus,
+            notifications,
+            notificationDispatcher,
+            settingsSuccessNotificationDuration
+        ) { }
+
+    internal SettingsViewModel(
+        ApplicationStatus initialStatus,
+        Func<Func<PullWatchSettings, PullWatchSettings>, Task<SettingsSaveResult>> updateSettings,
         ISettingsDialogs dialogs,
         Func<VideoCaptureSize>? getEstimateCaptureSize = null,
         Func<Task>? testVideoEncoding = null,
@@ -59,7 +85,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             savedSettings,
             () => IsEditingEnabled,
             BuildSettings,
-            saveSettings,
+            ApplySettingsChanges,
+            updateSettings,
             HandleAutosaveResultAsync
         );
         CommitWowLogsDirectoryCommand = new AsyncRelayCommand(
@@ -116,17 +143,28 @@ public sealed partial class SettingsViewModel : ObservableObject
         get;
         set
         {
-            if (SetEditableProperty(ref field, value))
+            if (!SetProperty(ref field, value))
             {
-                OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
-
-                if (!value)
-                {
-                    RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
-                }
-
-                NotifyRecordingStorageLimitApplyStateChanged();
+                return;
             }
+
+            OnPropertyChanged(nameof(CanConfigureRecordingStorageLimit));
+
+            if (_isLoading)
+            {
+                NotifyRecordingStorageLimitApplyStateChanged();
+                return;
+            }
+
+            ClearTransientSuccessStatus();
+
+            if (!IsEditingEnabled)
+            {
+                ApplyLockedStatus();
+            }
+
+            SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: false);
+            NotifyRecordingStorageLimitApplyStateChanged();
         }
     }
 
@@ -134,10 +172,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         IsEditingEnabled && IsRecordingStorageLimitEnabled;
 
     public bool HasPendingRecordingStorageLimitChange =>
-        RecordingStorageLimitInputGigabytes != RecordingStorageLimitGigabytes;
+        IsRecordingStorageLimitEnabled != _isAppliedRecordingStorageLimitEnabled
+        || RecordingStorageLimitInputGigabytes != RecordingStorageLimitGigabytes;
 
     public bool CanApplyRecordingStorageLimit =>
-        CanConfigureRecordingStorageLimit && HasPendingRecordingStorageLimitChange;
+        IsEditingEnabled && HasPendingRecordingStorageLimitChange;
 
     public int RecordingStorageLimitGigabytes
     {
@@ -150,7 +189,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 RecordingStoragePresenter.MaximumLimitGigabytes
             );
 
-            if (SetEditableProperty(ref field, limitGigabytes))
+            if (SetProperty(ref field, limitGigabytes))
             {
                 NotifyRecordingStorageLimitApplyStateChanged();
             }
@@ -181,6 +220,8 @@ public sealed partial class SettingsViewModel : ObservableObject
                 {
                     ApplyLockedStatus();
                 }
+
+                SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: false);
             }
 
             NotifyRecordingStorageLimitApplyStateChanged();
@@ -189,33 +230,33 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public string RecordingStorageUsageText =>
         _recordingStoragePresenter.GetUsageText(
-            IsRecordingStorageLimitEnabled,
+            _isAppliedRecordingStorageLimitEnabled,
             GetConfiguredRecordingStorageLimitBytes()
         );
 
     public string RecordingStorageStatusText =>
         _recordingStoragePresenter.GetStatusText(
-            IsRecordingStorageLimitEnabled,
+            _isAppliedRecordingStorageLimitEnabled,
             GetConfiguredRecordingStorageLimitBytes()
         );
 
     public double RecordingStorageUsagePercent =>
         _recordingStoragePresenter.GetUsagePercent(GetConfiguredRecordingStorageLimitBytes());
 
-    public bool IsRecordingStorageProgressVisible => IsRecordingStorageLimitEnabled;
+    public bool IsRecordingStorageProgressVisible => _isAppliedRecordingStorageLimitEnabled;
 
     public bool IsRecordingStorageUsageIndeterminate =>
-        _recordingStoragePresenter.IsUsageIndeterminate(IsRecordingStorageLimitEnabled);
+        _recordingStoragePresenter.IsUsageIndeterminate(_isAppliedRecordingStorageLimitEnabled);
 
     public bool IsRecordingStorageOverLimit =>
         _recordingStoragePresenter.IsOverLimit(
-            IsRecordingStorageLimitEnabled,
+            _isAppliedRecordingStorageLimitEnabled,
             GetConfiguredRecordingStorageLimitBytes()
         );
 
     public bool IsRecordingStorageNearLimit =>
         _recordingStoragePresenter.IsNearLimit(
-            IsRecordingStorageLimitEnabled,
+            _isAppliedRecordingStorageLimitEnabled,
             GetConfiguredRecordingStorageLimitBytes()
         );
 
@@ -572,8 +613,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         return _dialogs.ConfirmPendingRecordingStorageLimitChange(
-            RecordingStorageLimitGigabytes,
-            RecordingStorageLimitInputGigabytes
+            new PendingRecordingStorageLimitChange(
+                _isAppliedRecordingStorageLimitEnabled,
+                RecordingStorageLimitGigabytes,
+                IsRecordingStorageLimitEnabled,
+                RecordingStorageLimitInputGigabytes
+            )
         ) switch
         {
             PendingRecordingStorageLimitChangeAction.Apply =>
@@ -597,12 +642,14 @@ public sealed partial class SettingsViewModel : ObservableObject
             return false;
         }
 
-        RecordingStorageLimitGigabytes = RecordingStorageLimitInputGigabytes;
+        SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: false);
+        _ = QueueAutosaveAsync(SettingsSaveScope.Storage);
         return true;
     }
 
     public bool DiscardPendingRecordingStorageLimitChange()
     {
+        IsRecordingStorageLimitEnabled = _isAppliedRecordingStorageLimitEnabled;
         RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
         return true;
     }
@@ -744,7 +791,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             },
             Video = savedSettings.Video with
             {
-                SelectedProfile = SelectedVideoProfile,
+                SelectedProfile = SettingsAutosaveCoordinator.Includes(
+                    saveScope,
+                    SettingsSaveScope.VideoProfile
+                )
+                    ? SelectedVideoProfile
+                    : savedSettings.Video.SelectedProfile,
                 Quality = SelectedVideoQuality,
                 FrameRate = SelectedFrameRate,
                 Scaling = SelectedVideoScaling,
@@ -761,12 +813,64 @@ public sealed partial class SettingsViewModel : ObservableObject
                 StartWithWindows = StartWithWindows,
                 StartMinimizedToTray = StartWithWindows && StartMinimizedToTray,
             },
-            Storage = savedSettings.Storage with
+            Storage = SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.Storage)
+                ? savedSettings.Storage with
+                {
+                    MaxUsageBytes = IsRecordingStorageLimitEnabled
+                        ? RecordingStoragePresenter.GigabytesToBytes(
+                            RecordingStorageLimitInputGigabytes
+                        )
+                        : RecordingStorageSettings.UnlimitedBytes,
+                    LastEnabledMaxUsageBytes = RecordingStoragePresenter.GigabytesToBytes(
+                        RecordingStorageLimitInputGigabytes
+                    ),
+                }
+                : savedSettings.Storage,
+        };
+    }
+
+    private static PullWatchSettings ApplySettingsChanges(
+        PullWatchSettings currentSettings,
+        PullWatchSettings attemptedSettings,
+        SettingsSaveScope saveScope
+    )
+    {
+        return currentSettings with
+        {
+            WowLogsDirectory = SettingsAutosaveCoordinator.Includes(
+                saveScope,
+                SettingsSaveScope.WowLogsDirectory
+            )
+                ? attemptedSettings.WowLogsDirectory
+                : currentSettings.WowLogsDirectory,
+            RecordingsDirectory = SettingsAutosaveCoordinator.Includes(
+                saveScope,
+                SettingsSaveScope.RecordingsDirectory
+            )
+                ? attemptedSettings.RecordingsDirectory
+                : currentSettings.RecordingsDirectory,
+            RecordMythicPlus = attemptedSettings.RecordMythicPlus,
+            RecordRaidEncounters = attemptedSettings.RecordRaidEncounters,
+            RecordingFilters = attemptedSettings.RecordingFilters,
+            Video = currentSettings.Video with
             {
-                MaxUsageBytes = IsRecordingStorageLimitEnabled
-                    ? RecordingStoragePresenter.GigabytesToBytes(RecordingStorageLimitGigabytes)
-                    : RecordingStorageSettings.UnlimitedBytes,
+                SelectedProfile = SettingsAutosaveCoordinator.Includes(
+                    saveScope,
+                    SettingsSaveScope.VideoProfile
+                )
+                    ? attemptedSettings.Video.SelectedProfile
+                    : currentSettings.Video.SelectedProfile,
+                Quality = attemptedSettings.Video.Quality,
+                FrameRate = attemptedSettings.Video.FrameRate,
+                Scaling = attemptedSettings.Video.Scaling,
+                CaptureCursor = attemptedSettings.Video.CaptureCursor,
+                ShowCaptureBorder = attemptedSettings.Video.ShowCaptureBorder,
             },
+            Audio = attemptedSettings.Audio,
+            Startup = attemptedSettings.Startup,
+            Storage = SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.Storage)
+                ? attemptedSettings.Storage
+                : currentSettings.Storage,
         };
     }
 
@@ -779,6 +883,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         if (outcome.WasSkipped)
         {
+            MarkIncludedNonPathSettingsForRetry(outcome.Scope, outcome.AttemptedSettings);
             ApplyLockedStatus();
             return;
         }
@@ -799,7 +904,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 return;
             }
 
-            ApplySaveSuccess(result, outcome.Scope);
+            ApplySaveSuccess(result, outcome.Scope, outcome.AttemptedSettings);
 
             if (outcome.ShouldSyncStartupShortcut)
             {
@@ -812,7 +917,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private void ApplySaveSuccess(SettingsSaveResult result, SettingsSaveScope saveScope)
+    private void ApplySaveSuccess(
+        SettingsSaveResult result,
+        SettingsSaveScope saveScope,
+        PullWatchSettings attemptedSettings
+    )
     {
         var savedSettings = result.Settings!;
 
@@ -824,7 +933,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             IsWowLogsDirectoryPending = false;
             SetRetryOnNextAutosave(SettingsSaveScope.WowLogsDirectory, shouldRetry: false);
             SetLoadedValue(() => WowLogsDirectory = savedSettings.WowLogsDirectory);
-            WowLogsDirectoryError = null;
         }
 
         if (
@@ -835,8 +943,25 @@ public sealed partial class SettingsViewModel : ObservableObject
             IsRecordingsDirectoryPending = false;
             SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: false);
             SetLoadedValue(() => RecordingsDirectory = savedSettings.RecordingsDirectory);
+        }
+
+        if (PathsMatchSaved(WowLogsDirectory, savedSettings.WowLogsDirectory))
+        {
+            WowLogsDirectoryError = null;
+        }
+
+        if (PathsMatchSaved(RecordingsDirectory, savedSettings.RecordingsDirectory))
+        {
             RecordingsDirectoryError = null;
         }
+
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.Storage))
+        {
+            ReconcileRecordingStorageAfterSave(savedSettings, attemptedSettings);
+        }
+
+        ReconcileVideoProfileAfterSave(savedSettings, attemptedSettings);
+        ClearIncludedNonPathRetries(saveScope);
 
         if (HasPathErrors())
         {
@@ -856,6 +981,66 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         SaveMessage =
             IsWowLogsDirectoryPending || IsRecordingsDirectoryPending ? null : SettingsSavedMessage;
+    }
+
+    private void ReconcileRecordingStorageAfterSave(
+        PullWatchSettings savedSettings,
+        PullWatchSettings attemptedSettings
+    )
+    {
+        var savedLimitGigabytes = RecordingStoragePresenter.BytesToGigabytes(
+            savedSettings.Storage.IsLimitEnabled
+                ? savedSettings.Storage.MaxUsageBytes
+                : savedSettings.Storage.LastEnabledMaxUsageBytes
+        );
+        var attemptedLimitGigabytes = RecordingStoragePresenter.BytesToGigabytes(
+            attemptedSettings.Storage.LastEnabledMaxUsageBytes
+        );
+        var draftMatchesAttempt =
+            IsRecordingStorageLimitEnabled == attemptedSettings.Storage.IsLimitEnabled
+            && RecordingStorageLimitInputGigabytes == attemptedLimitGigabytes;
+
+        SetLoadedValue(() =>
+        {
+            _isAppliedRecordingStorageLimitEnabled = savedSettings.Storage.IsLimitEnabled;
+            RecordingStorageLimitGigabytes = savedLimitGigabytes;
+
+            if (draftMatchesAttempt)
+            {
+                IsRecordingStorageLimitEnabled = _isAppliedRecordingStorageLimitEnabled;
+                RecordingStorageLimitInputGigabytes = savedLimitGigabytes;
+            }
+        });
+
+        NotifyRecordingStorageLimitApplyStateChanged();
+        NotifyRecordingStorageUsageChanged();
+    }
+
+    private void ReconcileVideoProfileAfterSave(
+        PullWatchSettings savedSettings,
+        PullWatchSettings attemptedSettings
+    )
+    {
+        OnPropertyChanged(nameof(VideoProfileOptions));
+        OnPropertyChanged(nameof(HasVideoProfileOptions));
+        OnPropertyChanged(nameof(CanChooseVideoProfile));
+
+        if (
+            _autosave.HasPendingSaveFor(SettingsSaveScope.VideoProfile)
+            || SelectedVideoProfile != attemptedSettings.Video.SelectedProfile
+        )
+        {
+            return;
+        }
+
+        SetLoadedValue(() =>
+        {
+            SelectedVideoProfile =
+                savedSettings.Video.SelectedProfile is { } selectedProfile
+                && IsSelectableVideoProfile(selectedProfile)
+                    ? selectedProfile
+                    : null;
+        });
     }
 
     private void UpdateSettingsNotification()
@@ -1036,6 +1221,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         if (result.Status == SettingsSaveStatus.RecordingActive)
         {
+            MarkIncludedNonPathSettingsForRetry(saveScope, attemptedSettings);
             ApplyLockedStatus();
             return;
         }
@@ -1045,11 +1231,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (result.Status == SettingsSaveStatus.PersistenceFailed)
         {
             MarkIncludedPathsForRetry(saveScope, attemptedSettings);
+            MarkIncludedNonPathSettingsForRetry(saveScope, attemptedSettings);
             SaveMessage = $"Could not save settings: {result.Error?.Message}";
             return;
         }
 
         ClearIncludedPathRetries(saveScope);
+        MarkIncludedNonPathSettingsForRetry(saveScope, attemptedSettings);
         SaveMessage = FixHighlightedSettingsMessage;
 
         foreach (var error in result.ValidationErrors)
@@ -1078,6 +1266,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         IsSaveError = true;
         MarkIncludedPathsForRetry(saveScope, attemptedSettings);
+        MarkIncludedNonPathSettingsForRetry(saveScope, attemptedSettings);
         SaveMessage = $"Could not save settings: {exception.Message}";
     }
 
@@ -1087,10 +1276,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             WowLogsDirectory = settings.WowLogsDirectory;
             RecordingsDirectory = settings.RecordingsDirectory;
-            IsRecordingStorageLimitEnabled = settings.Storage.IsLimitEnabled;
+            _isAppliedRecordingStorageLimitEnabled = settings.Storage.IsLimitEnabled;
+            IsRecordingStorageLimitEnabled = _isAppliedRecordingStorageLimitEnabled;
             RecordingStorageLimitGigabytes = settings.Storage.IsLimitEnabled
                 ? RecordingStoragePresenter.BytesToGigabytes(settings.Storage.MaxUsageBytes)
-                : RecordingStoragePresenter.DefaultLimitGigabytes;
+                : RecordingStoragePresenter.BytesToGigabytes(
+                    settings.Storage.LastEnabledMaxUsageBytes
+                );
             RecordingStorageLimitInputGigabytes = RecordingStorageLimitGigabytes;
             RecordMythicPlus = settings.RecordMythicPlus;
             MinimumMythicPlusKeystoneLevel = settings
@@ -1157,7 +1349,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
             else
             {
-                _ = QueueAutosaveAsync(SettingsSaveScope.None);
+                _ = QueueAutosaveAsync(GetSaveScope(propertyName));
             }
         }
 
@@ -1196,6 +1388,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         return false;
+    }
+
+    private static SettingsSaveScope GetSaveScope(string? propertyName)
+    {
+        return propertyName == nameof(SelectedVideoProfile)
+            ? SettingsSaveScope.VideoProfile
+            : SettingsSaveScope.None;
     }
 
     private bool IsSelectableVideoProfile(VideoProfileSelection profile)
@@ -1257,6 +1456,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         return IsWowLogsDirectoryPending
             || IsRecordingsDirectoryPending
             || HasPendingRecordingStorageLimitChange
+            || _autosave.HasRetryFor(SettingsSaveScope.VideoProfile)
             || _autosave.HasPendingSave;
     }
 
@@ -1313,6 +1513,46 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.RecordingsDirectory))
         {
             SetRetryOnNextAutosave(SettingsSaveScope.RecordingsDirectory, shouldRetry: false);
+        }
+    }
+
+    private void MarkIncludedNonPathSettingsForRetry(
+        SettingsSaveScope saveScope,
+        PullWatchSettings? attemptedSettings
+    )
+    {
+        if (
+            SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.Storage)
+            && attemptedSettings is not null
+            && RecordingStorageDraftMatches(attemptedSettings.Storage)
+        )
+        {
+            SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: true);
+        }
+
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.VideoProfile))
+        {
+            SetRetryOnNextAutosave(SettingsSaveScope.VideoProfile, shouldRetry: true);
+        }
+    }
+
+    private bool RecordingStorageDraftMatches(RecordingStorageSettings storage)
+    {
+        return IsRecordingStorageLimitEnabled == storage.IsLimitEnabled
+            && RecordingStorageLimitInputGigabytes
+                == RecordingStoragePresenter.BytesToGigabytes(storage.LastEnabledMaxUsageBytes);
+    }
+
+    private void ClearIncludedNonPathRetries(SettingsSaveScope saveScope)
+    {
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.Storage))
+        {
+            SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: false);
+        }
+
+        if (SettingsAutosaveCoordinator.Includes(saveScope, SettingsSaveScope.VideoProfile))
+        {
+            SetRetryOnNextAutosave(SettingsSaveScope.VideoProfile, shouldRetry: false);
         }
     }
 
@@ -1407,9 +1647,34 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private long GetConfiguredRecordingStorageLimitBytes()
     {
-        return IsRecordingStorageLimitEnabled
+        return _isAppliedRecordingStorageLimitEnabled
             ? RecordingStoragePresenter.GigabytesToBytes(RecordingStorageLimitGigabytes)
             : RecordingStorageSettings.UnlimitedBytes;
+    }
+
+    private static Func<
+        Func<PullWatchSettings, PullWatchSettings>,
+        Task<SettingsSaveResult>
+    > CreateSettingsUpdater(
+        ApplicationStatus initialStatus,
+        Func<PullWatchSettings, Task<SettingsSaveResult>> saveSettings
+    )
+    {
+        ArgumentNullException.ThrowIfNull(saveSettings);
+
+        var currentSettings = initialStatus.EffectiveSettings ?? new PullWatchSettings();
+
+        return async updateSettings =>
+        {
+            var result = await saveSettings(updateSettings(currentSettings));
+
+            if (result.WasPersisted)
+            {
+                currentSettings = result.Settings!;
+            }
+
+            return result;
+        };
     }
 
     private static Task TestVideoEncodingUnavailableAsync()

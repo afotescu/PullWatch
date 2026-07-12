@@ -82,7 +82,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         );
         Settings = new SettingsViewModel(
             controller.Status,
-            controller.SaveSettingsAsync,
+            controller.UpdateSettingsAsync,
             settingsDialogs,
             testVideoEncoding: testVideoEncoding,
             windowsStartupShortcut: windowsStartupShortcut,
@@ -177,12 +177,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task SaveSelectedRecordingCategoryAsync(RecordingListCategory category)
     {
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
-            await _controller.SaveUiSettingsAsync(
-                currentUi with
+            await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
                 {
                     SelectedRecordingCategory = category,
                 }
@@ -200,12 +198,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         IsSidebarCollapsed = !IsSidebarCollapsed;
 
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
-            await _controller.SaveUiSettingsAsync(
-                currentUi with
+            await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
                 {
                     SidebarCollapsed = IsSidebarCollapsed,
                 }

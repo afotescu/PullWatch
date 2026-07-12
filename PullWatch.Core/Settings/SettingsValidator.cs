@@ -59,6 +59,11 @@ public static class SettingsValidator
             errors.Add("Recording storage limit cannot be negative.");
         }
 
+        if (settings.Storage.LastEnabledMaxUsageBytes <= RecordingStorageSettings.UnlimitedBytes)
+        {
+            errors.Add("Last enabled recording storage limit must be positive.");
+        }
+
         foreach (var result in settings.EncoderCalibration.Results)
         {
             ValidateVideoProfile(
@@ -90,6 +95,12 @@ public static class SettingsValidator
                             settings.Startup.StartWithWindows
                             && settings.Startup.StartMinimizedToTray,
                     },
+                    Storage = settings.Storage.IsLimitEnabled
+                        ? settings.Storage with
+                        {
+                            LastEnabledMaxUsageBytes = settings.Storage.MaxUsageBytes,
+                        }
+                        : settings.Storage,
                 },
                 errors
             )
