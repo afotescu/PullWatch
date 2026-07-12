@@ -237,10 +237,11 @@ start event.
 Closing the PullWatch window hides it to the system tray. Use Exit from the tray
 icon menu to fully quit the app.
 
-See LICENSE.txt and PRIVACY.md in this folder for license and privacy details.
+See LICENSE.txt, libvlc\COPYING.LIB, and PRIVACY.md in this folder for license and privacy details.
 "@ | Set-Content -LiteralPath $readmePath -Encoding UTF8
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $publishPath "LICENSE.txt")
+Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE.LibVLC.txt") -Destination (Join-Path $publishPath "libvlc/COPYING.LIB")
 Copy-Item -LiteralPath (Join-Path $repoRoot "PRIVACY.md") -Destination (Join-Path $publishPath "PRIVACY.md")
 
 $totalBytes = (Get-ChildItem -LiteralPath $publishPath -Recurse -File | Measure-Object -Property Length -Sum).Sum
