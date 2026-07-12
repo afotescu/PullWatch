@@ -272,6 +272,7 @@ public partial class MainWindow : Window
         }
 
         eventArgs.Cancel = true;
+        SuspendNavigationPlayback();
         Hide();
     }
 
@@ -402,6 +403,14 @@ public partial class MainWindow : Window
         }
 
         _navigationViews.Clear();
+    }
+
+    private void SuspendNavigationPlayback()
+    {
+        foreach (var view in _navigationViews.Values.OfType<RecordingsView>())
+        {
+            view.SuspendPlayback();
+        }
     }
 
     private void RequestShutdownForUpdate()

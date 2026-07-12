@@ -40,6 +40,11 @@ public partial class RecordingsView : UserControl, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs eventArgs)
     {
         DetachWindowKeyHandler();
+        SuspendPlayback();
+    }
+
+    internal void SuspendPlayback()
+    {
         CloseFullScreen();
         RecordingPlayer.SuspendPlayback();
     }

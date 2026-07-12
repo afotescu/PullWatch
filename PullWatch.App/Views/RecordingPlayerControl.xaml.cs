@@ -56,6 +56,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     private bool _hasAssignedMedia;
     private bool _hasMedia;
     private bool _hasPlaybackEnded;
+    private TimeSpan? _pendingPlaybackStartPosition;
     private bool _isPlaying;
     private bool _isPlaybackRequested;
     private bool _isPrimedPaused;
@@ -215,7 +216,11 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
             return false;
         }
 
-        var position = Clamp(GetPosition() + offset, TimeSpan.Zero, duration);
+        var position = Clamp(
+            (_pendingPlaybackStartPosition ?? GetPosition()) + offset,
+            TimeSpan.Zero,
+            duration
+        );
         SetPosition(position);
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
         UpdatePlaybackTimeText(position, duration);
@@ -455,13 +460,18 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
             return;
         }
 
+        var appliedPendingPosition = ApplyPendingPlaybackStartPosition();
+
         PlayPauseButton.IsEnabled = true;
         FullScreenButton.IsEnabled = true;
         _isPlaying = true;
         UpdatePlayPauseButton();
         PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
         _positionTimer.Start();
-        UpdatePositionFromPlayer();
+        if (!appliedPendingPosition)
+        {
+            UpdatePositionFromPlayer();
+        }
     }
 
     private void RequestPrimingPause()
@@ -553,6 +563,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         ResetPrimingState();
         _isPrimedPaused = false;
         _hasPlaybackEnded = true;
+        _pendingPlaybackStartPosition = null;
         _isPlaybackRequested = false;
         ApplyPlayerAudioState();
         _positionTimer.Stop();
@@ -727,6 +738,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         ResetPrimingState();
         _isPrimedPaused = false;
         _hasPlaybackEnded = false;
+        _pendingPlaybackStartPosition = null;
         _isPlaybackRequested = false;
         _positionTimer.Stop();
         _isPlaying = false;
@@ -749,9 +761,19 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         var duration = GetDuration();
         if (_hasPlaybackEnded || (duration > TimeSpan.Zero && GetPosition() >= duration))
         {
+            var playbackStartPosition = Clamp(
+                _pendingPlaybackStartPosition ?? TimeSpan.Zero,
+                TimeSpan.Zero,
+                duration
+            );
             _mediaPlayer.Stop();
-            PlaybackSlider.Value = PlaybackSlider.Minimum;
-            UpdatePlaybackTimeText(TimeSpan.Zero, duration);
+            _pendingPlaybackStartPosition =
+                playbackStartPosition > TimeSpan.Zero ? playbackStartPosition : null;
+            PlaybackSlider.Value = Math.Min(
+                PlaybackSlider.Maximum,
+                playbackStartPosition.TotalSeconds
+            );
+            UpdatePlaybackTimeText(playbackStartPosition, duration);
         }
 
         _hasPlaybackEnded = false;
@@ -935,6 +957,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     {
         _hasMedia = false;
         _hasPlaybackEnded = false;
+        _pendingPlaybackStartPosition = null;
         ResetPrimingState();
         _isPlaybackRequested = false;
         _isPrimedPaused = false;
@@ -996,12 +1019,33 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
         if (_mediaPlayer is not null)
         {
             var positionMilliseconds = (long)Math.Round(Math.Max(0, position.TotalMilliseconds));
-            _mediaPlayer.Time = positionMilliseconds;
-
             var duration = GetDuration();
-            _hasPlaybackEnded =
-                duration > TimeSpan.Zero && positionMilliseconds >= duration.TotalMilliseconds;
+
+            if (_hasPlaybackEnded || _pendingPlaybackStartPosition is not null)
+            {
+                _pendingPlaybackStartPosition =
+                    duration > TimeSpan.Zero && positionMilliseconds >= duration.TotalMilliseconds
+                        ? TimeSpan.Zero
+                        : TimeSpan.FromMilliseconds(positionMilliseconds);
+                return;
+            }
+
+            _mediaPlayer.Time = positionMilliseconds;
         }
+    }
+
+    private bool ApplyPendingPlaybackStartPosition()
+    {
+        if (_mediaPlayer is null || _pendingPlaybackStartPosition is not { } position)
+        {
+            return false;
+        }
+
+        _pendingPlaybackStartPosition = null;
+        _mediaPlayer.Time = (long)Math.Round(position.TotalMilliseconds);
+        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
+        UpdatePlaybackTimeText(position, GetDuration());
+        return true;
     }
 
     private TimeSpan GetDuration()
