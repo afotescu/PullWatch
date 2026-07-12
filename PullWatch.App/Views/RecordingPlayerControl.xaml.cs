@@ -71,6 +71,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     private bool _isPrimingPauseRequested;
     private bool _isPrimingSeekPending;
     private bool _isSeeking;
+    private int _surfacePressClickCount;
     private bool _isMuted;
     private bool _isAdjustingVolume;
     private bool _isUpdatingVolumeControls;
@@ -176,6 +177,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
     public void SuspendPlayback()
     {
+        CancelPendingSurfaceInteraction();
         _positionTimer.Stop();
         _isPlaybackRequested = false;
         _isPlaying = false;
@@ -307,6 +309,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
             return;
         }
 
+        CancelPendingSurfaceInteraction();
         var loadVersion = ++_sourceLoadVersion;
 
         if (source is null)
@@ -396,18 +399,38 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
         Focus();
 
-        if (eventArgs.ClickCount != 2)
+        _surfacePressClickCount = eventArgs.ClickCount;
+    }
+
+    private void OnVideoSurfaceMouseLeftButtonUp(object sender, MouseButtonEventArgs eventArgs)
+    {
+        if (eventArgs.ChangedButton != MouseButton.Left)
         {
             return;
         }
 
-        if (!FullScreenButton.IsEnabled)
+        var clickCount = _surfacePressClickCount;
+        _surfacePressClickCount = 0;
+
+        if (clickCount == 0)
         {
             return;
         }
 
-        eventArgs.Handled = true;
-        RequestFullScreenToggle();
+        var handled = PlayPauseButton.IsEnabled && TogglePlayback();
+
+        if (clickCount == 2 && FullScreenButton.IsEnabled)
+        {
+            handled = true;
+            RequestFullScreenToggle();
+        }
+
+        eventArgs.Handled = handled;
+    }
+
+    private void OnVideoSurfaceMouseLeave(object sender, MouseEventArgs eventArgs)
+    {
+        _surfacePressClickCount = 0;
     }
 
     private void RequestFullScreenToggle()
@@ -1066,6 +1089,7 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
 
     private void ResetPlayerState(bool sourceAvailable)
     {
+        CancelPendingSurfaceInteraction();
         _hasMedia = false;
         _hasPlaybackEnded = false;
         _pendingPlaybackStartPosition = null;
@@ -1168,6 +1192,11 @@ public partial class RecordingPlayerControl : UserControl, IDisposable
     private bool IsEffectivelyMuted()
     {
         return _isMuted || _volume <= 0;
+    }
+
+    private void CancelPendingSurfaceInteraction()
+    {
+        _surfacePressClickCount = 0;
     }
 
     private static TimeSpan Clamp(TimeSpan value, TimeSpan minimum, TimeSpan maximum)

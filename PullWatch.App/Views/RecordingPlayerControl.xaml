@@ -50,6 +50,8 @@
           <Grid
             Background="{StaticResource PlayerInputSurfaceBrush}"
             MouseLeftButtonDown="OnVideoSurfaceMouseLeftButtonDown"
+            MouseLeftButtonUp="OnVideoSurfaceMouseLeftButtonUp"
+            MouseLeave="OnVideoSurfaceMouseLeave"
           >
             <Border
               x:Name="PlayerPreviewCover"
