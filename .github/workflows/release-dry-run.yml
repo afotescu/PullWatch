@@ -120,9 +120,13 @@ jobs:
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
 
+      - name: Add VideoLAN source assets
+        run: ./scripts/add-videolan-source-assets.ps1 -ReleaseDir ${{ steps.package.outputs.release_dir }}
+
       - name: Upload dry-run artifact
         uses: actions/upload-artifact@v7
         with:
           name: PullWatch-${{ steps.dry-run-version.outputs.version }}-dry-run-win-x64
           path: ${{ steps.package.outputs.release_dir }}/*
           if-no-files-found: error
+          retention-days: 1

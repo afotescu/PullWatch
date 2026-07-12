@@ -212,6 +212,9 @@ and the LibVLC runtime under the `libvlc` folder next to `PullWatch.exe`.
 PullWatch uses the bundled `ffmpeg.exe` before falling back to a machine-level
 FFmpeg install.
 
+Each GitHub Release also includes the pinned VLC, LibVLCSharp, and LibVLC NuGet
+packaging source archives used by the bundled playback runtime.
+
 ## Key Dependencies
 
 - [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
