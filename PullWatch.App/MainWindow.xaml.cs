@@ -13,7 +13,16 @@ public partial class MainWindow : Window
     private readonly FfmpegEncoderTestService _encoderTestService;
     private readonly DispatcherTimer _durationTimer;
     private readonly ApplicationLifetimeCoordinator _lifetime;
+    private readonly Dictionary<object, FrameworkElement> _navigationViews = new(
+        ReferenceEqualityComparer.Instance
+    );
+    private Action? _fullScreenExitRequested;
+    private Rect _windowBoundsBeforeFullScreen;
+    private ResizeMode _resizeModeBeforeFullScreen;
+    private WindowState _windowStateBeforeFullScreen;
+    private WindowStyle _windowStyleBeforeFullScreen;
     private bool _placementSaved;
+    private bool _navigationViewsDisposed;
 
     internal MainWindow(
         ApplicationController controller,
@@ -46,6 +55,8 @@ public partial class MainWindow : Window
             showSettingsOnStartup
         );
         DataContext = _viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ShowSelectedNavigationContent();
         RestoreWindowPlacement(controller.Status.EffectiveSettings?.Ui.WindowPlacement);
         _durationTimer = new DispatcherTimer(
             TimeSpan.FromSeconds(1),
@@ -177,20 +188,22 @@ public partial class MainWindow : Window
         var selectedProfile = VideoProfileSelectionPolicy.SelectBestPassingProfile(
             calibrationResults
         );
-        var saveResult = await _controller.SaveSettingsAsync(
-            settings with
-            {
-                Video = settings.Video with { SelectedProfile = selectedProfile },
-                EncoderCalibration = new EncoderCalibrationSettings
+        var calibration = new EncoderCalibrationSettings
+        {
+            Version = EncoderCalibrationSettings.CurrentVersion,
+            TestedAt = DateTimeOffset.UtcNow,
+            FfmpegPath = environment.FfmpegPath,
+            FfmpegVersion = environment.FfmpegVersion,
+            FfmpegSha256 = environment.FfmpegSha256,
+            Results = calibrationResults,
+        };
+        var saveResult = await _controller.UpdateSettingsAsync(
+            currentSettings =>
+                currentSettings with
                 {
-                    Version = EncoderCalibrationSettings.CurrentVersion,
-                    TestedAt = DateTimeOffset.UtcNow,
-                    FfmpegPath = environment.FfmpegPath,
-                    FfmpegVersion = environment.FfmpegVersion,
-                    FfmpegSha256 = environment.FfmpegSha256,
-                    Results = calibrationResults,
+                    Video = currentSettings.Video with { SelectedProfile = selectedProfile },
+                    EncoderCalibration = calibration,
                 },
-            },
             cancellationToken
         );
 
@@ -250,14 +263,18 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs eventArgs)
     {
+        RequestFullScreenExit();
+
         if (!_lifetime.ShouldHideOnWindowClose)
         {
+            DisposeNavigationViews();
             _viewModel.DiscardPendingSettingsDraftsForExit();
             SaveWindowPlacement();
             return;
         }
 
         eventArgs.Cancel = true;
+        SuspendNavigationPlayback();
         Hide();
     }
 
@@ -268,9 +285,134 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs eventArgs)
     {
+        DisposeNavigationViews();
         SaveWindowPlacement();
         _durationTimer.Stop();
         _viewModel.Dispose();
+    }
+
+    internal bool EnterFullScreenPlayer(RecordingPlayerControl player, Action exitRequested)
+    {
+        if (_fullScreenExitRequested is not null || FullScreenPlayerHost.Content is not null)
+        {
+            return false;
+        }
+
+        _windowBoundsBeforeFullScreen =
+            WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        _resizeModeBeforeFullScreen = ResizeMode;
+        _windowStateBeforeFullScreen = WindowState;
+        _windowStyleBeforeFullScreen = WindowStyle;
+        _fullScreenExitRequested = exitRequested;
+
+        FullScreenLayer.Visibility = Visibility.Visible;
+        WindowState = WindowState.Normal;
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        WindowState = WindowState.Maximized;
+
+        FullScreenPlayerHost.Content = player;
+        player.IsFullScreen = true;
+        Activate();
+        return true;
+    }
+
+    internal bool ExitFullScreenPlayer(RecordingPlayerControl player)
+    {
+        if (!ReferenceEquals(FullScreenPlayerHost.Content, player))
+        {
+            return false;
+        }
+
+        FullScreenPlayerHost.Content = null;
+        player.IsFullScreen = false;
+        _fullScreenExitRequested = null;
+        RestoreWindowAfterFullScreen();
+        FullScreenLayer.Visibility = Visibility.Collapsed;
+        return true;
+    }
+
+    private void RequestFullScreenExit()
+    {
+        _fullScreenExitRequested?.Invoke();
+    }
+
+    private void RestoreWindowAfterFullScreen()
+    {
+        WindowState = WindowState.Normal;
+        WindowStyle = _windowStyleBeforeFullScreen;
+        ResizeMode = _resizeModeBeforeFullScreen;
+        Left = _windowBoundsBeforeFullScreen.Left;
+        Top = _windowBoundsBeforeFullScreen.Top;
+        Width = _windowBoundsBeforeFullScreen.Width;
+        Height = _windowBoundsBeforeFullScreen.Height;
+
+        if (_windowStateBeforeFullScreen == WindowState.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName == nameof(MainWindowViewModel.SelectedNavigationItem))
+        {
+            ShowSelectedNavigationContent();
+        }
+    }
+
+    private void ShowSelectedNavigationContent()
+    {
+        var content = _viewModel.SelectedNavigationItem.Content;
+        if (!_navigationViews.TryGetValue(content, out var view))
+        {
+            view = CreateNavigationView(content);
+            _navigationViews.Add(content, view);
+        }
+
+        NavigationContent.Content = view;
+    }
+
+    private FrameworkElement CreateNavigationView(object content)
+    {
+        var template = TryFindResource(new DataTemplateKey(content.GetType())) as DataTemplate;
+        if (template?.LoadContent() is not FrameworkElement view)
+        {
+            throw new InvalidOperationException(
+                $"No navigation view template is registered for {content.GetType().FullName}."
+            );
+        }
+
+        view.DataContext = content;
+        return view;
+    }
+
+    private void DisposeNavigationViews()
+    {
+        if (_navigationViewsDisposed)
+        {
+            return;
+        }
+
+        _navigationViewsDisposed = true;
+        RequestFullScreenExit();
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        NavigationContent.Content = null;
+
+        foreach (var view in _navigationViews.Values.OfType<IDisposable>())
+        {
+            view.Dispose();
+        }
+
+        _navigationViews.Clear();
+    }
+
+    private void SuspendNavigationPlayback()
+    {
+        foreach (var view in _navigationViews.Values.OfType<RecordingsView>())
+        {
+            view.SuspendPlayback();
+        }
     }
 
     private void RequestShutdownForUpdate()
@@ -332,12 +474,10 @@ public partial class MainWindow : Window
             Height = restoreBounds.Height,
             IsMaximized = WindowState == WindowState.Maximized,
         };
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
             Task.Run(() =>
-                    _controller.SaveUiSettingsAsync(currentUi with { WindowPlacement = placement })
+                    _controller.UpdateUiSettingsAsync(ui => ui with { WindowPlacement = placement })
                 )
                 .GetAwaiter()
                 .GetResult();

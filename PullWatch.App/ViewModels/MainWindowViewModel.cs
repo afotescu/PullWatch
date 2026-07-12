@@ -78,11 +78,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             recordingDialogs.ConfirmPermanentDelete,
             OpenRecordingsFolderAsync,
             SaveSelectedRecordingCategoryAsync,
-            Notifications
+            Notifications,
+            SavePlaybackAudioStateAsync
         );
         Settings = new SettingsViewModel(
             controller.Status,
-            controller.SaveSettingsAsync,
+            controller.UpdateSettingsAsync,
             settingsDialogs,
             testVideoEncoding: testVideoEncoding,
             windowsStartupShortcut: windowsStartupShortcut,
@@ -177,12 +178,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task SaveSelectedRecordingCategoryAsync(RecordingListCategory category)
     {
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
-            await _controller.SaveUiSettingsAsync(
-                currentUi with
+            await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
                 {
                     SelectedRecordingCategory = category,
                 }
@@ -195,17 +194,36 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task<bool> SavePlaybackAudioStateAsync(int volumePercent, bool isMuted)
+    {
+        try
+        {
+            var result = await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
+                {
+                    PlaybackVolumePercent = volumePercent,
+                    IsPlaybackMuted = isMuted,
+                }
+            );
+            return result.WasPersisted;
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // The playback preference can safely remain in-memory during shutdown.
+            return false;
+        }
+    }
+
     [RelayCommand]
     private async Task ToggleSidebarAsync()
     {
         IsSidebarCollapsed = !IsSidebarCollapsed;
 
-        var currentUi = _controller.Status.EffectiveSettings?.Ui ?? new UiSettings();
-
         try
         {
-            await _controller.SaveUiSettingsAsync(
-                currentUi with
+            await _controller.UpdateUiSettingsAsync(ui =>
+                ui with
                 {
                     SidebarCollapsed = IsSidebarCollapsed,
                 }

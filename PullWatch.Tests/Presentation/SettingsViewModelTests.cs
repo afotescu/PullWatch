@@ -121,6 +121,75 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task FailedVideoProfileSelectionSurvivesAuthoritativeUiUpdateUntilRetry()
+    {
+        var originalProfile = Profile(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc);
+        var pendingProfile = Profile(VideoCodec.H264, VideoEncoderProvider.AmdAmf);
+        var authoritativeSettings = new PullWatchSettings
+        {
+            Video = new VideoSettings { SelectedProfile = originalProfile },
+            EncoderCalibration = new EncoderCalibrationSettings
+            {
+                Results =
+                [
+                    CalibrationResult(
+                        originalProfile.Codec,
+                        originalProfile.Provider,
+                        passed: true
+                    ),
+                    CalibrationResult(pendingProfile.Codec, pendingProfile.Provider, passed: true),
+                ],
+            },
+        };
+        var attemptedSaves = new List<PullWatchSettings>();
+        var viewModel = CreateViewModelWithUpdater(
+            Status(RecordingCoordinatorState.Idle, authoritativeSettings),
+            updateSettings =>
+            {
+                var attemptedSettings = updateSettings(authoritativeSettings);
+                attemptedSaves.Add(attemptedSettings);
+
+                if (attemptedSaves.Count == 1)
+                {
+                    return Task.FromResult(
+                        new SettingsSaveResult(
+                            SettingsSaveStatus.PersistenceFailed,
+                            null,
+                            [],
+                            new IOException("Settings file is temporarily unavailable.")
+                        )
+                    );
+                }
+
+                authoritativeSettings = attemptedSettings;
+                return Saved(authoritativeSettings);
+            }
+        );
+
+        viewModel.SelectedVideoProfile = pendingProfile;
+
+        await WaitForAsync(() => attemptedSaves.Count == 1 && viewModel.IsSaveError);
+        await Task.Yield();
+
+        authoritativeSettings = authoritativeSettings with
+        {
+            Ui = authoritativeSettings.Ui with { SidebarCollapsed = true },
+        };
+        viewModel.ApplyStatus(Status(RecordingCoordinatorState.Idle, authoritativeSettings));
+
+        Assert.Equal(pendingProfile, viewModel.SelectedVideoProfile);
+
+        viewModel.RecordMythicPlus = false;
+
+        await WaitForAsync(() => attemptedSaves.Count == 2);
+
+        Assert.Equal(pendingProfile, authoritativeSettings.Video.SelectedProfile);
+        Assert.True(authoritativeSettings.Ui.SidebarCollapsed);
+        Assert.False(authoritativeSettings.RecordMythicPlus);
+        Assert.Equal(pendingProfile, viewModel.SelectedVideoProfile);
+    }
+
+    [Fact]
     public async Task TestVideoEncodingCommandRunsConfiguredAction()
     {
         var testStarted = new TaskCompletionSource(
@@ -294,14 +363,377 @@ public sealed class SettingsViewModelTests
 
         viewModel.IsRecordingStorageLimitEnabled = false;
 
+        Assert.Single(saves);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.True(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
         await WaitForAsync(() =>
             saves.Any(save => save.Storage.MaxUsageBytes == RecordingStorageSettings.UnlimitedBytes)
+            && !viewModel.HasPendingRecordingStorageLimitChange
         );
 
         Assert.Equal(
             "Managed recordings storage: 10 GB / Unlimited",
             viewModel.RecordingStorageUsageText
         );
+    }
+
+    [Fact]
+    public void DisabledRecordingStorageLimitLoadsLastEnabledValue()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+
+        var viewModel = CreateViewModel(Status(RecordingCoordinatorState.Idle, settings));
+
+        Assert.False(viewModel.IsRecordingStorageLimitEnabled);
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Equal(30, viewModel.RecordingStorageLimitInputGigabytes);
+        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
+    public async Task EnablingRecordingStorageLimitWaitsForApplyAndUnrelatedSaveKeepsItDisabled()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var authoritativeSettings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var saves = new List<PullWatchSettings>();
+        var viewModel = CreateViewModelWithUpdater(
+            Status(RecordingCoordinatorState.Idle, authoritativeSettings),
+            updateSettings =>
+            {
+                authoritativeSettings = updateSettings(authoritativeSettings);
+                saves.Add(authoritativeSettings);
+                return Saved(authoritativeSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = true;
+
+        Assert.Empty(saves);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.True(viewModel.CanApplyRecordingStorageLimit);
+
+        viewModel.RecordMythicPlus = false;
+
+        await WaitForAsync(() => saves.Count == 1);
+
+        Assert.Equal(RecordingStorageSettings.UnlimitedBytes, saves[0].Storage.MaxUsageBytes);
+        Assert.Equal(30 * bytesPerGigabyte, saves[0].Storage.LastEnabledMaxUsageBytes);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
+    public async Task ApplyingReenabledRecordingStorageLimitSavesRememberedValue()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            savedSettings =>
+            {
+                saves.Add(savedSettings);
+                return Saved(savedSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = true;
+
+        Assert.Empty(saves);
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() =>
+            saves.Count == 1 && !viewModel.HasPendingRecordingStorageLimitChange
+        );
+
+        Assert.Equal(30 * bytesPerGigabyte, saves[0].Storage.MaxUsageBytes);
+        Assert.Equal(30 * bytesPerGigabyte, saves[0].Storage.LastEnabledMaxUsageBytes);
+        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
+    public async Task FailedRecordingStorageApplyRemainsPendingAndCanBeRetried()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saveCount = 0;
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            savedSettings =>
+            {
+                saveCount++;
+                return saveCount == 1
+                    ? Task.FromResult(
+                        new SettingsSaveResult(
+                            SettingsSaveStatus.Invalid,
+                            null,
+                            ["Recordings directory is not writable."]
+                        )
+                    )
+                    : Saved(savedSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = true;
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() => saveCount == 1 && viewModel.IsSaveError);
+
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.True(viewModel.ApplyRecordingStorageLimitCommand.CanExecute(null));
+        Assert.Equal("Recordings directory is not writable.", viewModel.RecordingsDirectoryError);
+        Assert.Equal(
+            "Managed recordings storage: Calculating / Unlimited",
+            viewModel.RecordingStorageUsageText
+        );
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() =>
+            saveCount == 2 && !viewModel.HasPendingRecordingStorageLimitChange
+        );
+
+        Assert.True(viewModel.IsRecordingStorageLimitEnabled);
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
+        Assert.Null(viewModel.RecordingsDirectoryError);
+        Assert.False(viewModel.IsSaveError);
+        Assert.Equal("Settings saved.", viewModel.SaveMessage);
+    }
+
+    [Fact]
+    public async Task EditingStorageDraftAfterFailedApplyDoesNotRetryWithoutAnotherApply()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var attemptedSaves = new List<PullWatchSettings>();
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            savedSettings =>
+            {
+                attemptedSaves.Add(savedSettings);
+                return attemptedSaves.Count == 1
+                    ? Task.FromResult(
+                        new SettingsSaveResult(
+                            SettingsSaveStatus.Invalid,
+                            null,
+                            ["Recordings directory is not writable."]
+                        )
+                    )
+                    : Saved(savedSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = true;
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() => attemptedSaves.Count == 1 && viewModel.IsSaveError);
+
+        viewModel.RecordingStorageLimitInputGigabytes = 10;
+        viewModel.RecordMythicPlus = false;
+
+        await WaitForAsync(() => attemptedSaves.Count == 2);
+
+        Assert.Equal(30 * bytesPerGigabyte, attemptedSaves[0].Storage.MaxUsageBytes);
+        Assert.Equal(
+            RecordingStorageSettings.UnlimitedBytes,
+            attemptedSaves[1].Storage.MaxUsageBytes
+        );
+        Assert.Equal(30 * bytesPerGigabyte, attemptedSaves[1].Storage.LastEnabledMaxUsageBytes);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.Equal(10, viewModel.RecordingStorageLimitInputGigabytes);
+    }
+
+    [Fact]
+    public async Task EditingStorageDraftDuringFailedApplyDoesNotRestoreAutomaticRetry()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var firstSave = new TaskCompletionSource<SettingsSaveResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var attemptedSaves = new List<PullWatchSettings>();
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = RecordingStorageSettings.UnlimitedBytes,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            savedSettings =>
+            {
+                attemptedSaves.Add(savedSettings);
+                return attemptedSaves.Count == 1 ? firstSave.Task : Saved(savedSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = true;
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() => attemptedSaves.Count == 1);
+
+        viewModel.RecordingStorageLimitInputGigabytes = 10;
+        firstSave.SetResult(
+            new SettingsSaveResult(
+                SettingsSaveStatus.Invalid,
+                null,
+                ["Recordings directory is not writable."]
+            )
+        );
+
+        await WaitForAsync(() => viewModel.IsSaveError);
+
+        viewModel.RecordMythicPlus = false;
+
+        await WaitForAsync(() => attemptedSaves.Count == 2);
+
+        Assert.Equal(
+            RecordingStorageSettings.UnlimitedBytes,
+            attemptedSaves[1].Storage.MaxUsageBytes
+        );
+        Assert.Equal(30 * bytesPerGigabyte, attemptedSaves[1].Storage.LastEnabledMaxUsageBytes);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.Equal(10, viewModel.RecordingStorageLimitInputGigabytes);
+    }
+
+    [Fact]
+    public async Task DisablingRecordingStorageLimitRemembersEnabledValue()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var settings = new PullWatchSettings
+        {
+            Storage = new RecordingStorageSettings
+            {
+                MaxUsageBytes = 30 * bytesPerGigabyte,
+                LastEnabledMaxUsageBytes = 30 * bytesPerGigabyte,
+            },
+        };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle, settings),
+            savedSettings =>
+            {
+                saves.Add(savedSettings);
+                return Saved(savedSettings);
+            }
+        );
+
+        viewModel.IsRecordingStorageLimitEnabled = false;
+
+        Assert.Empty(saves);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() =>
+            saves.Count == 1 && !viewModel.HasPendingRecordingStorageLimitChange
+        );
+
+        Assert.Equal(RecordingStorageSettings.UnlimitedBytes, saves[0].Storage.MaxUsageBytes);
+        Assert.Equal(30 * bytesPerGigabyte, saves[0].Storage.LastEnabledMaxUsageBytes);
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
+        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+    }
+
+    [Fact]
+    public async Task ExternalCalibrationAndUiSettingsSurviveStorageApplyAndLaterUnrelatedSave()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var authoritativeSettings = new PullWatchSettings();
+        var saves = new List<PullWatchSettings>();
+        var externalProfile = Profile(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc);
+        var externalCalibration = new EncoderCalibrationSettings
+        {
+            Version = EncoderCalibrationSettings.CurrentVersion,
+            Results =
+            [
+                CalibrationResult(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc, passed: true),
+            ],
+        };
+        var viewModel = CreateViewModelWithUpdater(
+            Status(RecordingCoordinatorState.Idle, authoritativeSettings),
+            updateSettings =>
+            {
+                authoritativeSettings = updateSettings(authoritativeSettings);
+                saves.Add(authoritativeSettings);
+                return Saved(authoritativeSettings);
+            }
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 30;
+        authoritativeSettings = authoritativeSettings with
+        {
+            Video = authoritativeSettings.Video with { SelectedProfile = externalProfile },
+            EncoderCalibration = externalCalibration,
+            Ui = authoritativeSettings.Ui with
+            {
+                SidebarCollapsed = true,
+                SelectedRecordingCategory = RecordingListCategory.Manual,
+            },
+        };
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() =>
+            saves.Count == 1 && viewModel.SelectedVideoProfile == externalProfile
+        );
+
+        Assert.Equal(30 * bytesPerGigabyte, saves[0].Storage.MaxUsageBytes);
+        Assert.Equal(externalProfile, saves[0].Video.SelectedProfile);
+        Assert.Equal(externalCalibration, saves[0].EncoderCalibration);
+        Assert.True(saves[0].Ui.SidebarCollapsed);
+        Assert.Equal(RecordingListCategory.Manual, saves[0].Ui.SelectedRecordingCategory);
+        Assert.Equal(externalProfile, viewModel.SelectedVideoProfile);
+
+        viewModel.RecordMythicPlus = false;
+
+        await WaitForAsync(() => saves.Count == 2);
+
+        Assert.False(saves[1].RecordMythicPlus);
+        Assert.Equal(externalProfile, saves[1].Video.SelectedProfile);
+        Assert.Equal(externalCalibration, saves[1].EncoderCalibration);
+        Assert.True(saves[1].Ui.SidebarCollapsed);
+        Assert.Equal(RecordingListCategory.Manual, saves[1].Ui.SelectedRecordingCategory);
     }
 
     [Fact]
@@ -329,12 +761,15 @@ public sealed class SettingsViewModelTests
         var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
 
         Assert.True(canLeaveSettings);
-        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
-        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
-        Assert.False(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.Equal(
+            [new PendingRecordingStorageLimitChange(true, 25, true, 30)],
+            dialogs.PendingRecordingStorageLimitChangeRequests
+        );
         await WaitForAsync(() =>
             saves.Any(save => save.Storage.MaxUsageBytes == 30 * bytesPerGigabyte)
+            && !viewModel.HasPendingRecordingStorageLimitChange
         );
+        Assert.Equal(30, viewModel.RecordingStorageLimitGigabytes);
     }
 
     [Fact]
@@ -361,7 +796,10 @@ public sealed class SettingsViewModelTests
         var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
 
         Assert.True(canLeaveSettings);
-        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
+        Assert.Equal(
+            [new PendingRecordingStorageLimitChange(true, 25, true, 30)],
+            dialogs.PendingRecordingStorageLimitChangeRequests
+        );
         Assert.Empty(saves);
         Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
         Assert.Equal(25, viewModel.RecordingStorageLimitInputGigabytes);
@@ -392,7 +830,10 @@ public sealed class SettingsViewModelTests
         var canLeaveSettings = viewModel.ConfirmPendingRecordingStorageLimitChangeForNavigation();
 
         Assert.False(canLeaveSettings);
-        Assert.Equal([(25, 30)], dialogs.PendingRecordingStorageLimitChangeRequests);
+        Assert.Equal(
+            [new PendingRecordingStorageLimitChange(true, 25, true, 30)],
+            dialogs.PendingRecordingStorageLimitChangeRequests
+        );
         Assert.Empty(saves);
         Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
         Assert.Equal(30, viewModel.RecordingStorageLimitInputGigabytes);
@@ -1023,6 +1464,20 @@ public sealed class SettingsViewModelTests
         );
     }
 
+    private static SettingsViewModel CreateViewModelWithUpdater(
+        ApplicationStatus status,
+        Func<Func<PullWatchSettings, PullWatchSettings>, Task<SettingsSaveResult>> updateSettings
+    )
+    {
+        return new SettingsViewModel(
+            status,
+            updateSettings,
+            new FakeSettingsDialogs(),
+            getEstimateCaptureSize: () => new VideoCaptureSize(1920, 1080),
+            notificationDispatcher: ImmediateUiDispatcher.Instance
+        );
+    }
+
     private static Task<SettingsSaveResult> Saved(PullWatchSettings settings)
     {
         return Task.FromResult(new SettingsSaveResult(SettingsSaveStatus.Saved, settings, []));
@@ -1095,10 +1550,8 @@ public sealed class SettingsViewModelTests
         public PendingRecordingStorageLimitChangeAction PendingRecordingStorageLimitChangeAction { get; init; } =
             PendingRecordingStorageLimitChangeAction.Cancel;
 
-        public List<(
-            int CurrentGigabytes,
-            int PendingGigabytes
-        )> PendingRecordingStorageLimitChangeRequests { get; } = [];
+        public List<PendingRecordingStorageLimitChange> PendingRecordingStorageLimitChangeRequests { get; } =
+        [];
 
         public string? PickFolder(string title, string? initialDirectory)
         {
@@ -1106,11 +1559,10 @@ public sealed class SettingsViewModelTests
         }
 
         public PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
-            int currentGigabytes,
-            int pendingGigabytes
+            PendingRecordingStorageLimitChange change
         )
         {
-            PendingRecordingStorageLimitChangeRequests.Add((currentGigabytes, pendingGigabytes));
+            PendingRecordingStorageLimitChangeRequests.Add(change);
             return PendingRecordingStorageLimitChangeAction;
         }
     }

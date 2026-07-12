@@ -153,16 +153,21 @@ public sealed record RecordingStorageSettings
     public const long DefaultMaxUsageBytes = 25L * 1024 * 1024 * 1024;
 
     public long MaxUsageBytes { get; init; } = DefaultMaxUsageBytes;
+    public long LastEnabledMaxUsageBytes { get; init; } = DefaultMaxUsageBytes;
 
     public bool IsLimitEnabled => MaxUsageBytes > UnlimitedBytes;
 }
 
 public sealed record UiSettings
 {
+    public const int DefaultPlaybackVolumePercent = 50;
+
     public WindowPlacementSettings WindowPlacement { get; init; } = new();
     public bool SidebarCollapsed { get; init; }
     public RecordingListCategory SelectedRecordingCategory { get; init; } =
         RecordingListCategory.ChallengeMode;
+    public int PlaybackVolumePercent { get; init; } = DefaultPlaybackVolumePercent;
+    public bool IsPlaybackMuted { get; init; }
 }
 
 public sealed record WindowPlacementSettings

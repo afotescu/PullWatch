@@ -179,6 +179,73 @@ public sealed class SettingsValidatorTests
         Assert.Contains("Recording storage limit cannot be negative.", result.Errors);
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void RejectsPlaybackVolumeOutsidePercentageRange(int volumePercent)
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Ui = new UiSettings { PlaybackVolumePercent = volumePercent } }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Playback volume must be between 0 and 100 percent.", result.Errors);
+    }
+
+    [Fact]
+    public void ZeroPlaybackVolumeIsNormalizedToMuted()
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Ui = new UiSettings { PlaybackVolumePercent = 0, IsPlaybackMuted = false },
+            }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.True(result.Settings!.Ui.IsPlaybackMuted);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void RejectsNonpositiveLastEnabledRecordingStorageLimit(long lastEnabledMaxUsageBytes)
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Storage = new RecordingStorageSettings
+                {
+                    LastEnabledMaxUsageBytes = lastEnabledMaxUsageBytes,
+                },
+            }
+        );
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.Settings);
+        Assert.Contains("Last enabled recording storage limit must be positive.", result.Errors);
+    }
+
+    [Fact]
+    public void ActiveRecordingStorageLimitBecomesLastEnabledLimit()
+    {
+        var maxUsageBytes = 40L * 1024 * 1024 * 1024;
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings
+            {
+                Storage = new RecordingStorageSettings
+                {
+                    MaxUsageBytes = maxUsageBytes,
+                    LastEnabledMaxUsageBytes = 10L * 1024 * 1024 * 1024,
+                },
+            }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.Equal(maxUsageBytes, result.Settings!.Storage.LastEnabledMaxUsageBytes);
+    }
+
     [Fact]
     public void ClearsStartMinimizedToTrayWhenWindowsStartupIsDisabled()
     {

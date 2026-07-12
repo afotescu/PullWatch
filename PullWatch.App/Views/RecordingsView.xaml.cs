@@ -2,40 +2,95 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 using WpfButtonBase = System.Windows.Controls.Primitives.ButtonBase;
 using WpfComboBox = System.Windows.Controls.ComboBox;
 using WpfKey = System.Windows.Input.Key;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
+using WpfModifierKeys = System.Windows.Input.ModifierKeys;
 using WpfPasswordBox = System.Windows.Controls.PasswordBox;
 using WpfTextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 
 namespace PullWatch;
 
-public partial class RecordingsView : UserControl
+public partial class RecordingsView : UserControl, IDisposable
 {
-    private FullscreenPlayerWindow? _fullscreenWindow;
+    private MainWindow? _fullScreenHostWindow;
     private Window? _keyboardWindow;
     private object _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
+    private bool _isDisposed;
 
     public RecordingsView()
     {
         InitializeComponent();
         RecordingPlayer.FullScreenRequested += OnPlayerFullScreenRequested;
         RecordingPlayer.ExitFullScreenRequested += OnPlayerExitFullScreenRequested;
+        RecordingPlayer.PlaybackAudioStateChanged += OnPlaybackAudioStateChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (DataContext is RecordingsViewModel viewModel)
+        {
+            RecordingPlayer.ApplyPlaybackAudioState(
+                viewModel.PlaybackVolumePercent,
+                viewModel.IsPlaybackMuted
+            );
+        }
+
         AttachWindowKeyHandler();
+        Dispatcher.BeginInvoke(FocusPlayerOnViewEntry, DispatcherPriority.Input);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs eventArgs)
     {
         DetachWindowKeyHandler();
-        CloseFullScreenWindow();
-        RecordingPlayer.StopPlayback();
+        SuspendPlayback();
+    }
+
+    internal void SuspendPlayback()
+    {
+        CloseFullScreen();
+        RecordingPlayer.SuspendPlayback();
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        DetachWindowKeyHandler();
+        CloseFullScreen();
+        RecordingPlayer.FullScreenRequested -= OnPlayerFullScreenRequested;
+        RecordingPlayer.ExitFullScreenRequested -= OnPlayerExitFullScreenRequested;
+        RecordingPlayer.PlaybackAudioStateChanged -= OnPlaybackAudioStateChanged;
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
+        RecordingPlayer.DisposePlayback();
+    }
+
+    private async void OnPlaybackAudioStateChanged(
+        object? sender,
+        PlaybackAudioStateChangedEventArgs eventArgs
+    )
+    {
+        if (DataContext is RecordingsViewModel viewModel)
+        {
+            await viewModel.UpdatePlaybackAudioStateAsync(
+                eventArgs.VolumePercent,
+                eventArgs.IsMuted
+            );
+        }
     }
 
     private void AttachWindowKeyHandler()
@@ -68,7 +123,33 @@ public partial class RecordingsView : UserControl
     private void OnWindowPreviewKeyDown(object sender, WpfKeyEventArgs eventArgs)
     {
         if (
-            eventArgs.Handled
+            RecordingPlayer.IsFullScreen
+            && (eventArgs.Key == WpfKey.Escape || eventArgs.SystemKey == WpfKey.F4)
+        )
+        {
+            eventArgs.Handled = true;
+            CloseFullScreen();
+            RecordingPlayer.Focus();
+            return;
+        }
+
+        if (eventArgs.Handled || eventArgs.KeyboardDevice.Modifiers != WpfModifierKeys.None)
+        {
+            return;
+        }
+
+        if (
+            eventArgs.Key == WpfKey.Space
+            && !ShouldPreserveSpaceInput(eventArgs.OriginalSource)
+            && RecordingPlayer.TogglePlayback()
+        )
+        {
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (
+            (!RecordingPlayer.IsFullScreen && !RecordingPlayer.IsKeyboardFocusWithin)
             || ShouldLeaveShortcutToFocusedControl(eventArgs.OriginalSource, eventArgs.Key)
         )
         {
@@ -80,7 +161,11 @@ public partial class RecordingsView : UserControl
 
     private void OnPlayerFullScreenRequested(object? sender, EventArgs eventArgs)
     {
-        if (_fullscreenWindow is not null || RecordingPlayer.Source is null)
+        if (
+            _fullScreenHostWindow is not null
+            || RecordingPlayer.Source is null
+            || Window.GetWindow(this) is not MainWindow hostWindow
+        )
         {
             return;
         }
@@ -90,55 +175,40 @@ public partial class RecordingsView : UserControl
         );
         RecordingPlayer.DataContext = DataContext;
         PlayerHost.Content = null;
+        _fullScreenHostWindow = hostWindow;
 
-        var fullscreenWindow = new FullscreenPlayerWindow
+        if (!hostWindow.EnterFullScreenPlayer(RecordingPlayer, CloseFullScreen))
         {
-            Owner = Window.GetWindow(this),
-            DataContext = DataContext,
-        };
-        fullscreenWindow.ExitRequested += OnFullScreenExitRequested;
-        fullscreenWindow.Closed += OnFullScreenClosed;
-        fullscreenWindow.SetPlayer(RecordingPlayer);
+            _fullScreenHostWindow = null;
+            PlayerHost.Content = RecordingPlayer;
+            RestorePlayerDataContext();
+            return;
+        }
 
-        _fullscreenWindow = fullscreenWindow;
-        fullscreenWindow.Show();
-        fullscreenWindow.Activate();
+        RecordingPlayer.Focus();
     }
 
     private void OnPlayerExitFullScreenRequested(object? sender, EventArgs eventArgs)
     {
-        CloseFullScreenWindow();
+        CloseFullScreen();
+        RecordingPlayer.Focus();
     }
 
-    private void OnFullScreenExitRequested(object? sender, EventArgs eventArgs)
+    private void CloseFullScreen()
     {
-        CloseFullScreenWindow();
-    }
-
-    private void CloseFullScreenWindow()
-    {
-        _fullscreenWindow?.Close();
-    }
-
-    private void OnFullScreenClosed(object? sender, EventArgs eventArgs)
-    {
-        if (sender is not FullscreenPlayerWindow fullscreenWindow)
+        if (_fullScreenHostWindow is not { } hostWindow)
         {
             return;
         }
 
-        fullscreenWindow.ExitRequested -= OnFullScreenExitRequested;
-        fullscreenWindow.Closed -= OnFullScreenClosed;
-
-        var player = fullscreenWindow.ReleasePlayer();
-
-        if (player is not null)
+        _fullScreenHostWindow = null;
+        if (!hostWindow.ExitFullScreenPlayer(RecordingPlayer))
         {
-            PlayerHost.Content = player;
-            RestorePlayerDataContext();
+            return;
         }
 
-        _fullscreenWindow = null;
+        PlayerHost.Content = RecordingPlayer;
+        RestorePlayerDataContext();
     }
 
     private void RestorePlayerDataContext()
@@ -171,6 +241,22 @@ public partial class RecordingsView : UserControl
                 return true;
             }
 
+            if (
+                current is Slider
+                && key
+                    is WpfKey.Left
+                        or WpfKey.Right
+                        or WpfKey.Up
+                        or WpfKey.Down
+                        or WpfKey.PageUp
+                        or WpfKey.PageDown
+                        or WpfKey.Home
+                        or WpfKey.End
+            )
+            {
+                return true;
+            }
+
             if (key == WpfKey.Space && current is WpfButtonBase)
             {
                 return true;
@@ -178,6 +264,36 @@ public partial class RecordingsView : UserControl
         }
 
         return false;
+    }
+
+    private static bool ShouldPreserveSpaceInput(object? source)
+    {
+        for (
+            var current = source as DependencyObject;
+            current is not null;
+            current = GetParent(current)
+        )
+        {
+            if (current is WpfTextBoxBase or WpfPasswordBox or WpfComboBox)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void FocusPlayerOnViewEntry()
+    {
+        if (
+            !_isDisposed
+            && IsLoaded
+            && !IsKeyboardFocusWithin
+            && RecordingPlayer.Source is not null
+        )
+        {
+            RecordingPlayer.Focus();
+        }
     }
 
     private static DependencyObject? GetParent(DependencyObject current)

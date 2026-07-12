@@ -49,6 +49,11 @@ public static class SettingsValidator
             );
         }
 
+        if (settings.Ui.PlaybackVolumePercent is < 0 or > 100)
+        {
+            errors.Add("Playback volume must be between 0 and 100 percent.");
+        }
+
         if (settings.RecordingFilters.MythicPlus.MinimumKeystoneLevel < 0)
         {
             errors.Add("Minimum Mythic+ keystone level cannot be negative.");
@@ -57,6 +62,11 @@ public static class SettingsValidator
         if (settings.Storage.MaxUsageBytes < 0)
         {
             errors.Add("Recording storage limit cannot be negative.");
+        }
+
+        if (settings.Storage.LastEnabledMaxUsageBytes <= RecordingStorageSettings.UnlimitedBytes)
+        {
+            errors.Add("Last enabled recording storage limit must be positive.");
         }
 
         foreach (var result in settings.EncoderCalibration.Results)
@@ -90,6 +100,17 @@ public static class SettingsValidator
                             settings.Startup.StartWithWindows
                             && settings.Startup.StartMinimizedToTray,
                     },
+                    Ui = settings.Ui with
+                    {
+                        IsPlaybackMuted =
+                            settings.Ui.IsPlaybackMuted || settings.Ui.PlaybackVolumePercent == 0,
+                    },
+                    Storage = settings.Storage.IsLimitEnabled
+                        ? settings.Storage with
+                        {
+                            LastEnabledMaxUsageBytes = settings.Storage.MaxUsageBytes,
+                        }
+                        : settings.Storage,
                 },
                 errors
             )

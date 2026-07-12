@@ -17,17 +17,24 @@ public sealed class WpfSettingsDialogs : ISettingsDialogs
     }
 
     public PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
-        int currentGigabytes,
-        int pendingGigabytes
+        PendingRecordingStorageLimitChange change
     )
     {
+        var changeDescription =
+            change.CurrentIsEnabled && !change.PendingIsEnabled
+                ? "You disabled the managed recordings storage limit, but the change has not been applied."
+            : !change.CurrentIsEnabled && change.PendingIsEnabled
+                ? $"You enabled the managed recordings storage limit at {change.PendingGigabytes} GB, but it has not been applied."
+            : $"You changed the managed recordings storage limit from {change.CurrentGigabytes} GB to {change.PendingGigabytes} GB, but it has not been applied.";
         var result = WpfConfirmationDialog.Show(
             Application.Current?.MainWindow,
             new ConfirmationDialogRequest(
                 "PullWatch",
                 [
-                    $"You changed the managed recordings storage limit from {currentGigabytes} GB to {pendingGigabytes} GB, but it has not been applied.",
-                    "Applying the new limit may delete old PullWatch-managed recordings if current usage exceeds it.",
+                    changeDescription,
+                    change.PendingIsEnabled
+                        ? "Applying the new limit may delete old PullWatch-managed recordings if current usage exceeds it."
+                        : "Applying this change stops automatic storage cleanup.",
                 ],
                 [
                     new ConfirmationDialogButton(

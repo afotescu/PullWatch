@@ -86,6 +86,19 @@
           "H.NotifyIcon": "2.4.1"
         }
       },
+      "LibVLCSharp": {
+        "type": "Transitive",
+        "resolved": "3.10.0",
+        "contentHash": "VHuOfq8Xtb/lNz0asvCm5qDjgTmfB3m3lC40Dz9iH9oL3DM0fSXHjZaLxdtYVr5nsldJoh5BTeG8MtODprhC9Q=="
+      },
+      "LibVLCSharp.WPF": {
+        "type": "Transitive",
+        "resolved": "3.10.0",
+        "contentHash": "W7MFdY0QZBhATS3ZIMZSY1UYV6MqDxb+GibNzT3AzKNzDQX2Kzf27OZA5B0gA7fa2FYq79P7Jvlvdbbygis63g==",
+        "dependencies": {
+          "LibVLCSharp": "3.10.0"
+        }
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -283,6 +296,11 @@
         "resolved": "1.2.0",
         "contentHash": "Rz67gJL619fSBS6omaSINUxyDuwhIxkm5mmubf7uLd5Qgi6LLKaKCha+QFP6n+Bw/UjA0vutnH4JQfYzn6ANtw=="
       },
+      "VideoLAN.LibVLC.Windows": {
+        "type": "Transitive",
+        "resolved": "3.0.23.1",
+        "contentHash": "yTGNrzj+Q/t72VNKK0d64jZ+8BGu5Vcp2nxpZ2ll350LkRWKSwqShGpZWcVxXVP8TiMbeGML09+Jzz3hNsIcqA=="
+      },
       "xunit.analyzers": {
         "type": "Transitive",
         "resolved": "1.27.0",
@@ -355,10 +373,12 @@
         "dependencies": {
           "CommunityToolkit.Mvvm": "[8.4.2, )",
           "H.NotifyIcon.Wpf": "[2.4.1, )",
+          "LibVLCSharp.WPF": "[3.10.0, )",
           "Microsoft.Extensions.Logging": "[10.0.0, )",
           "NuGet.Versioning": "[7.6.0, )",
           "PullWatch.Core": "[0.0.0-dev, )",
-          "Velopack": "[1.2.0, )"
+          "Velopack": "[1.2.0, )",
+          "VideoLAN.LibVLC.Windows": "[3.0.23.1, )"
         }
       },
       "pullwatch.core": {

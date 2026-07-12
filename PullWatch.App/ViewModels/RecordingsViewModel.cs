@@ -16,6 +16,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
     private readonly Func<Task> _testVideoEncoding;
     private readonly Func<Task> _openRecordingsFolder;
+    private readonly Func<int, bool, Task<bool>> _savePlaybackAudioState;
     private readonly RecordingLibraryViewModel _library;
     private readonly NotificationCenterViewModel? _notifications;
     private RecordingCoordinatorStatus _recording;
@@ -27,6 +28,10 @@ public sealed partial class RecordingsViewModel : ObservableObject
     private string? _commandMessage;
     private int _knownSavedCount;
     private bool _isTestingVideoEncoding;
+    private int _playbackVolumePercent;
+    private bool _isPlaybackMuted;
+    private bool _isPlaybackAudioSavePending;
+    private int _playbackAudioSaveVersion;
 
     public RecordingsViewModel(
         ApplicationStatus initialStatus,
@@ -38,7 +43,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         Func<RecordingListItem, bool> confirmPermanentDelete,
         Func<Task> openRecordingsFolder,
         Func<RecordingListCategory, Task> saveSelectedRecordingCategory,
-        NotificationCenterViewModel? notifications = null
+        NotificationCenterViewModel? notifications = null,
+        Func<int, bool, Task<bool>>? savePlaybackAudioState = null
     )
     {
         _recording = initialStatus.Recording;
@@ -51,6 +57,13 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _testVideoEncoding = testVideoEncoding;
         _openRecordingsFolder = openRecordingsFolder;
         _notifications = notifications;
+        _savePlaybackAudioState = savePlaybackAudioState ?? ((_, _) => Task.FromResult(true));
+        _playbackVolumePercent =
+            initialStatus.EffectiveSettings?.Ui.PlaybackVolumePercent
+            ?? UiSettings.DefaultPlaybackVolumePercent;
+        _isPlaybackMuted =
+            initialStatus.EffectiveSettings?.Ui.IsPlaybackMuted == true
+            || _playbackVolumePercent == 0;
         _library = new RecordingLibraryViewModel(
             initialStatus.EffectiveSettings?.RecordingsDirectory,
             initialStatus.EffectiveSettings?.Ui.SelectedRecordingCategory
@@ -143,6 +156,18 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
     public bool IsPlayerPlaceholderVisible => SelectedRecording is null;
 
+    public int PlaybackVolumePercent
+    {
+        get => _playbackVolumePercent;
+        private set => SetProperty(ref _playbackVolumePercent, value);
+    }
+
+    public bool IsPlaybackMuted
+    {
+        get => _isPlaybackMuted;
+        private set => SetProperty(ref _isPlaybackMuted, value);
+    }
+
     public RecordingStatusHealth RecorderHealth =>
         _recording.LastFailure is not null
         && !IsTargetUnavailableFailure(_recording.LastFailure)
@@ -170,6 +195,47 @@ public sealed partial class RecordingsViewModel : ObservableObject
     }
 
     public bool IsCommandMessageVisible => !string.IsNullOrWhiteSpace(CommandMessage);
+
+    public async Task UpdatePlaybackAudioStateAsync(int volumePercent, bool isMuted)
+    {
+        var normalizedVolumePercent = Math.Clamp(volumePercent, 0, 100);
+        var normalizedIsMuted = isMuted || normalizedVolumePercent == 0;
+
+        if (
+            normalizedVolumePercent == PlaybackVolumePercent
+            && normalizedIsMuted == IsPlaybackMuted
+            && !_isPlaybackAudioSavePending
+        )
+        {
+            return;
+        }
+
+        PlaybackVolumePercent = normalizedVolumePercent;
+        IsPlaybackMuted = normalizedIsMuted;
+        var saveVersion = ++_playbackAudioSaveVersion;
+
+        try
+        {
+            var wasPersisted = await _savePlaybackAudioState(
+                PlaybackVolumePercent,
+                IsPlaybackMuted
+            );
+
+            if (saveVersion == _playbackAudioSaveVersion)
+            {
+                _isPlaybackAudioSavePending = !wasPersisted;
+            }
+        }
+        catch (Exception exception)
+            when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // The playback preference can safely remain in-memory during shutdown.
+            if (saveVersion == _playbackAudioSaveVersion)
+            {
+                _isPlaybackAudioSavePending = true;
+            }
+        }
+    }
 
     public bool IsFailureVisible =>
         _recording.LastFailure is not null

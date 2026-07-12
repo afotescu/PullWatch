@@ -65,6 +65,60 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public async Task RestoresAndPersistsPlaybackAudioState()
+    {
+        var saves = new List<(int VolumePercent, bool IsMuted)>();
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                playbackVolumePercent: 35,
+                isPlaybackMuted: true
+            ),
+            savePlaybackAudioState: (volumePercent, isMuted) =>
+            {
+                saves.Add((volumePercent, isMuted));
+                return Task.FromResult(true);
+            }
+        );
+
+        Assert.Equal(35, viewModel.PlaybackVolumePercent);
+        Assert.True(viewModel.IsPlaybackMuted);
+
+        await viewModel.UpdatePlaybackAudioStateAsync(70, isMuted: false);
+
+        Assert.Equal(70, viewModel.PlaybackVolumePercent);
+        Assert.False(viewModel.IsPlaybackMuted);
+        Assert.Equal([(70, false)], saves);
+
+        await viewModel.UpdatePlaybackAudioStateAsync(0, isMuted: false);
+
+        Assert.Equal(0, viewModel.PlaybackVolumePercent);
+        Assert.True(viewModel.IsPlaybackMuted);
+        Assert.Equal([(70, false), (0, true)], saves);
+
+        await viewModel.UpdatePlaybackAudioStateAsync(0, isMuted: true);
+
+        Assert.Equal(2, saves.Count);
+    }
+
+    [Fact]
+    public async Task FailedPlaybackAudioSaveCanRetryTheSameState()
+    {
+        var saveAttempts = 0;
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            savePlaybackAudioState: (_, _) => Task.FromResult(++saveAttempts > 1)
+        );
+
+        await viewModel.UpdatePlaybackAudioStateAsync(35, isMuted: false);
+        await viewModel.UpdatePlaybackAudioStateAsync(35, isMuted: false);
+
+        Assert.Equal(2, saveAttempts);
+        Assert.Equal(35, viewModel.PlaybackVolumePercent);
+        Assert.False(viewModel.IsPlaybackMuted);
+    }
+
+    [Fact]
     public async Task MissingVideoEncodingSetupReplacesManualActionWithSetupAction()
     {
         var testCalls = 0;
@@ -1331,7 +1385,8 @@ public sealed class RecordingsViewModelTests
         Func<RecordingListItem, bool>? confirmPermanentDelete = null,
         Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null,
         Func<Task>? testVideoEncoding = null,
-        NotificationCenterViewModel? notifications = null
+        NotificationCenterViewModel? notifications = null,
+        Func<int, bool, Task<bool>>? savePlaybackAudioState = null
     )
     {
         return new RecordingsViewModel(
@@ -1344,7 +1399,8 @@ public sealed class RecordingsViewModelTests
             confirmPermanentDelete ?? (_ => true),
             () => Task.CompletedTask,
             saveSelectedRecordingCategory ?? (_ => Task.CompletedTask),
-            notifications
+            notifications,
+            savePlaybackAudioState
         );
     }
 
@@ -1364,7 +1420,9 @@ public sealed class RecordingsViewModelTests
         RecordingListCategory selectedRecordingCategory = RecordingListCategory.ChallengeMode,
         bool includeSelectedVideoProfile = true,
         bool includeEncoderCalibrationResults = true,
-        int encoderCalibrationVersion = EncoderCalibrationSettings.CurrentVersion
+        int encoderCalibrationVersion = EncoderCalibrationSettings.CurrentVersion,
+        int playbackVolumePercent = UiSettings.DefaultPlaybackVolumePercent,
+        bool isPlaybackMuted = false
     )
     {
         var selectedProfile = includeSelectedVideoProfile
@@ -1396,7 +1454,12 @@ public sealed class RecordingsViewModelTests
                         ? [CalibrationResult(selectedProfile)]
                         : [],
             },
-            Ui = new UiSettings { SelectedRecordingCategory = selectedRecordingCategory },
+            Ui = new UiSettings
+            {
+                SelectedRecordingCategory = selectedRecordingCategory,
+                PlaybackVolumePercent = playbackVolumePercent,
+                IsPlaybackMuted = isPlaybackMuted,
+            },
         };
 
         return new ApplicationStatus(

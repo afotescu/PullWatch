@@ -1,0 +1,32 @@
+VideoLAN corresponding source information
+
+PullWatch redistributes the following unmodified VideoLAN components:
+
+- VideoLAN.LibVLC.Windows 3.0.23.1, containing LibVLC 3.0.23
+- LibVLCSharp 3.10.0
+- LibVLCSharp.WPF 3.10.0
+
+These components are licensed under LGPL-2.1-or-later. See COPYING.LIB in this
+directory for the license terms.
+
+Each PullWatch GitHub Release includes these source assets alongside the
+installer and update packages:
+
+- vlc-3.0.23.tar.xz
+- LibVLCSharp-3.10.0-source.zip
+- libvlc-nuget-3.0.23.1-packaging-source.zip
+- VideoLAN-source-assets.sha256
+
+The VLC source archive contains the contrib build rules, upstream source URLs,
+and checksums for the libraries used by VLC. VideoLAN also publishes its contrib
+source archive index at:
+
+https://download.videolan.org/pub/videolan/contrib/
+
+Upstream source locations:
+
+https://download.videolan.org/pub/videolan/vlc/3.0.23/vlc-3.0.23.tar.xz
+https://code.videolan.org/videolan/LibVLCSharp/-/commit/59d70e96026229e7c232ce5074ecefbf6f8959b6
+https://code.videolan.org/videolan/libvlc-nuget/-/commit/042f49a49609b2da7aeea0c94e51f809cf2e1575
+
+PullWatch does not modify these components.

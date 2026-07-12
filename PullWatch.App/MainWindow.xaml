@@ -358,7 +358,7 @@
     </Border>
 
     <Grid Grid.Column="1">
-      <ContentControl Content="{Binding SelectedNavigationItem.Content}" />
+      <ContentControl x:Name="NavigationContent" />
 
       <ItemsControl
         Margin="18,18,18,0"
@@ -460,6 +460,16 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+    </Grid>
+
+    <Grid
+      x:Name="FullScreenLayer"
+      Grid.ColumnSpan="2"
+      Panel.ZIndex="100"
+      Background="{StaticResource PlayerSurfaceBrush}"
+      Visibility="Collapsed"
+    >
+      <ContentControl x:Name="FullScreenPlayerHost" />
     </Grid>
   </Grid>
 </Window>

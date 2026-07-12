@@ -131,6 +131,9 @@ jobs:
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
 
+      - name: Add VideoLAN source assets
+        run: ./scripts/add-videolan-source-assets.ps1 -ReleaseDir ${{ steps.package.outputs.release_dir }}
+
       - name: Upload Velopack artifact
         uses: actions/upload-artifact@v7
         with:
