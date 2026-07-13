@@ -381,6 +381,36 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public void FavoriteCapacityWarningDoesNotUseNotificationCenter()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var notifications = new NotificationCenterViewModel();
+        var constrainedStatus = new RecordingStorageStatus(
+            UsageBytes: 48 * bytesPerGigabyte,
+            MaxUsageBytes: 50 * bytesPerGigabyte,
+            RecordingCount: 8,
+            IsRefreshing: false,
+            IsCleaning: false,
+            LastDeletedRecordingCount: 0,
+            LastError: null,
+            FavoriteUsageBytes: 45 * bytesPerGigabyte,
+            FavoriteRecordingCount: 6
+        );
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            initialRecordingStorageStatus: constrainedStatus with
+            {
+                FavoriteUsageBytes = 29 * bytesPerGigabyte,
+            },
+            notifications: notifications
+        );
+
+        viewModel.ApplyRecordingStorageStatus(constrainedStatus);
+
+        Assert.Empty(notifications.Items);
+    }
+
+    [Fact]
     public void DisabledRecordingStorageLimitLoadsLastEnabledValue()
     {
         const long bytesPerGigabyte = 1024L * 1024 * 1024;

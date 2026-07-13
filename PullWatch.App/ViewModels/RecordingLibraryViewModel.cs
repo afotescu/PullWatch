@@ -11,32 +11,38 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
 
     private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
     private readonly Func<Guid, Task> _deleteRecording;
+    private readonly Func<Guid, bool, Task> _setRecordingFavorite;
     private readonly Func<RecordingListItem, bool> _confirmPermanentDelete;
     private readonly Func<RecordingListCategory, Task> _saveSelectedCategory;
     private readonly Action<string?> _setCommandMessage;
+    private readonly Action<string?> _setFavoriteError;
     private readonly List<RecordingListItem> _allRecordings = new();
+    private ActiveRefresh? _activeRefresh;
     private string? _recordingsDirectory;
     private RecordingListItem? _selectedRecording;
     private RecordingCategoryTab _selectedCategory;
     private string _status = NoDirectoryMessage;
-    private int _refreshVersion;
 
     public RecordingLibraryViewModel(
         string? recordingsDirectory,
         RecordingListCategory selectedCategory,
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> loadRecordings,
         Func<Guid, Task> deleteRecording,
+        Func<Guid, bool, Task> setRecordingFavorite,
         Func<RecordingListItem, bool> confirmPermanentDelete,
         Func<RecordingListCategory, Task> saveSelectedCategory,
-        Action<string?> setCommandMessage
+        Action<string?> setCommandMessage,
+        Action<string?> setFavoriteError
     )
     {
         _recordingsDirectory = recordingsDirectory;
         _loadRecordings = loadRecordings;
         _deleteRecording = deleteRecording;
+        _setRecordingFavorite = setRecordingFavorite;
         _confirmPermanentDelete = confirmPermanentDelete;
         _saveSelectedCategory = saveSelectedCategory;
         _setCommandMessage = setCommandMessage;
+        _setFavoriteError = setFavoriteError;
         RecordingCategories =
         [
             new RecordingCategoryTab(RecordingListCategory.ChallengeMode, "Mythic+"),
@@ -124,13 +130,15 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         bool preferMostRecent = false
     )
     {
-        var refreshVersion = ++_refreshVersion;
+        var refresh = new ActiveRefresh();
+        _activeRefresh = refresh;
         var recordingsDirectory = _recordingsDirectory;
         var existingSelectionPath = SelectedRecording?.Path;
 
         if (string.IsNullOrWhiteSpace(recordingsDirectory))
         {
             Clear(NoDirectoryMessage);
+            CompleteRefresh(refresh);
             return;
         }
 
@@ -139,11 +147,13 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
             var recordings = await _loadRecordings(recordingsDirectory);
             var recordingItems = RecordingListItemFactory.Create(recordings);
 
-            if (!IsCurrentRefresh(refreshVersion, recordingsDirectory))
+            if (!IsCurrentRefresh(refresh, recordingsDirectory))
             {
                 return;
             }
 
+            recordingItems = ExcludeDeletedRecordings(recordingItems, refresh);
+            ApplyFavoriteChanges(recordingItems, refresh);
             _allRecordings.Clear();
             _allRecordings.AddRange(recordingItems);
             UpdateCategoryCounts();
@@ -165,10 +175,14 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            if (IsCurrentRefresh(refreshVersion, recordingsDirectory))
+            if (IsCurrentRefresh(refresh, recordingsDirectory))
             {
                 Clear($"Could not read recordings catalog: {exception.Message}");
             }
+        }
+        finally
+        {
+            CompleteRefresh(refresh);
         }
     }
 
@@ -181,7 +195,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
             return;
         }
 
-        _refreshVersion++;
+        _activeRefresh = null;
         var removal = Remove(recording);
         SelectedRecording = null;
         UpdateStatus();
@@ -190,6 +204,13 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         {
             SelectNear(removal.VisibleIndex);
             await _deleteRecording(recording.Id);
+
+            if (_activeRefresh is { } refresh)
+            {
+                refresh.DeletedRecordingIds.Add(recording.Id);
+            }
+
+            RemoveRestoredRecording(recording.Id);
             _setCommandMessage("Recording deleted.");
         }
         catch (Exception exception)
@@ -199,13 +220,83 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         }
     }
 
+    public async Task ToggleFavoriteAsync(RecordingListItem recording)
+    {
+        var isFavorite = !recording.IsFavorite;
+
+        try
+        {
+            await _setRecordingFavorite(recording.Id, isFavorite);
+        }
+        catch (Exception exception)
+        {
+            var action = isFavorite ? "add recording to" : "remove recording from";
+            var message = $"Could not {action} favourites: {exception.Message}";
+            _setCommandMessage(message);
+            _setFavoriteError(message);
+            return;
+        }
+
+        _setFavoriteError(null);
+        if (_activeRefresh is { } refresh)
+        {
+            refresh.FavoriteChanges[recording.Id] = isFavorite;
+        }
+
+        var allIndex = FindIndex(_allRecordings, recording.Id);
+        if (allIndex < 0)
+        {
+            return;
+        }
+
+        _allRecordings[allIndex].SetFavorite(isFavorite);
+
+        _setCommandMessage(
+            isFavorite ? "Recording added to favourites." : "Recording removed from favourites."
+        );
+    }
+
+    private static void ApplyFavoriteChanges(
+        IReadOnlyList<RecordingListItem> recordings,
+        ActiveRefresh refresh
+    )
+    {
+        foreach (var recording in recordings)
+        {
+            if (refresh.FavoriteChanges.TryGetValue(recording.Id, out var isFavorite))
+            {
+                recording.SetFavorite(isFavorite);
+            }
+        }
+    }
+
+    private static IReadOnlyList<RecordingListItem> ExcludeDeletedRecordings(
+        IReadOnlyList<RecordingListItem> recordings,
+        ActiveRefresh refresh
+    )
+    {
+        return refresh.DeletedRecordingIds.Count == 0
+            ? recordings
+            : recordings
+                .Where(recording => !refresh.DeletedRecordingIds.Contains(recording.Id))
+                .ToList();
+    }
+
     private RecordingListColumnHeaders CurrentColumnHeaders =>
         GetColumnHeaders(SelectedRecordingCategory.Category);
 
-    private bool IsCurrentRefresh(int refreshVersion, string recordingsDirectory)
+    private bool IsCurrentRefresh(ActiveRefresh refresh, string recordingsDirectory)
     {
-        return refreshVersion == _refreshVersion
+        return ReferenceEquals(refresh, _activeRefresh)
             && PathsEqual(recordingsDirectory, _recordingsDirectory);
+    }
+
+    private void CompleteRefresh(ActiveRefresh refresh)
+    {
+        if (ReferenceEquals(refresh, _activeRefresh))
+        {
+            _activeRefresh = null;
+        }
     }
 
     private void Clear(string status)
@@ -327,6 +418,25 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         return new RecordingRemoval(visibleIndex, allIndex);
     }
 
+    private void RemoveRestoredRecording(Guid id)
+    {
+        var allIndex = FindIndex(_allRecordings, id);
+        if (allIndex < 0)
+        {
+            return;
+        }
+
+        var wasSelected = SelectedRecording?.Id == id;
+        var removal = Remove(_allRecordings[allIndex]);
+        if (wasSelected)
+        {
+            SelectedRecording = null;
+            SelectNear(removal.VisibleIndex);
+        }
+
+        UpdateStatus();
+    }
+
     private void Restore(RecordingListItem recording, RecordingRemoval removal)
     {
         if (FindIndex(_allRecordings, recording.Id) >= 0)
@@ -438,6 +548,13 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
     }
 
     private sealed record RecordingRemoval(int VisibleIndex, int AllIndex);
+
+    private sealed class ActiveRefresh
+    {
+        public Dictionary<Guid, bool> FavoriteChanges { get; } = [];
+
+        public HashSet<Guid> DeletedRecordingIds { get; } = [];
+    }
 
     private sealed record RecordingListColumnHeaders(
         string Activity,

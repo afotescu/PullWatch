@@ -11,6 +11,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
     private readonly InMemoryLogProvider _logs;
+    private readonly FavoriteStorageWarningTracker _favoriteStorageWarnings;
 
     private NavigationItemViewModel _selectedNavigationItem = null!;
 
@@ -67,6 +68,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _controller = controller;
         _dispatcher = dispatcher;
         _logs = logs;
+        _favoriteStorageWarnings = new FavoriteStorageWarningTracker(
+            controller.RecordingStorageStatus
+        );
         Notifications = new NotificationCenterViewModel();
         Recordings = new RecordingsViewModel(
             controller.Status,
@@ -79,7 +83,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             OpenRecordingsFolderAsync,
             SaveSelectedRecordingCategoryAsync,
             Notifications,
-            SavePlaybackAudioStateAsync
+            SavePlaybackAudioStateAsync,
+            setRecordingFavorite: controller.SetRecordingFavoriteAsync
         );
         Settings = new SettingsViewModel(
             controller.Status,
@@ -143,6 +148,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ApplicationUpdateViewModel Updates { get; }
 
+    internal event Action? FavoriteStorageWarningPending;
+
     public void Dispose()
     {
         _controller.StatusChanged -= OnStatusChanged;
@@ -158,6 +165,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void StartAutomaticUpdateCheck()
     {
         Updates.StartAutomaticCheck();
+    }
+
+    internal FavoriteStorageWarning? TakePendingFavoriteStorageWarning()
+    {
+        return _favoriteStorageWarnings.TakePendingWarning();
+    }
+
+    internal void SelectSettings()
+    {
+        SelectedNavigationItem = NavigationItems.First(item =>
+            ReferenceEquals(item.Content, Settings)
+        );
     }
 
     private bool CanRestartForUpdate()
@@ -251,11 +270,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _dispatcher.Post(() =>
         {
+            var favoriteStorageWarningPending = _favoriteStorageWarnings.ApplyStatus(status);
             Settings.ApplyRecordingStorageStatus(status);
 
             if (status.LastDeletedRecordingCount > 0)
             {
                 _ = Recordings.RefreshRecordingsAsync();
+            }
+
+            if (favoriteStorageWarningPending)
+            {
+                FavoriteStorageWarningPending?.Invoke();
             }
         });
     }

@@ -209,6 +209,111 @@ public sealed class ApplicationControllerTests
     }
 
     [Fact]
+    public async Task SetRecordingFavoritePersistsAndDeletingItRefreshesStorageUsage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var recordingsDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "Recordings")
+        );
+        var recordingPath = Path.Combine(recordingsDirectory.FullName, "favorite.mp4");
+        await File.WriteAllTextAsync(recordingPath, "favorite", cancellationToken);
+        var recordingSize = new FileInfo(recordingPath).Length;
+        var connectionFactory = new SqliteConnectionFactory(
+            new RecordingDatabasePathProvider(Path.Combine(directory.Path, "pullwatch.db"))
+        );
+        var initializer = new RecordingStorageInitializer(
+            connectionFactory,
+            NullLoggerFactory.Instance
+        );
+        await initializer.InitializeAsync(cancellationToken);
+        var repository = new RecordingCatalogRepository(connectionFactory);
+        var id = Guid.Parse("130B4A19-6C07-4430-B352-4D99EC9CAED1");
+        var startedAtUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+        await repository.UpsertAsync(
+            new RecordingCatalogSave(
+                id,
+                recordingPath,
+                RecordingCatalogStatus.Available,
+                RecordingCatalogKind.Manual,
+                startedAtUtc,
+                startedAtUtc.AddMinutes(5),
+                recordingSize,
+                new DateTimeOffset(File.GetLastWriteTimeUtc(recordingPath))
+            ),
+            cancellationToken
+        );
+        var store = new SettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                RecordingsDirectory = recordingsDirectory.FullName,
+                Storage = new RecordingStorageSettings
+                {
+                    MaxUsageBytes = recordingSize + 1,
+                    LastEnabledMaxUsageBytes = recordingSize + 1,
+                },
+            },
+            cancellationToken
+        );
+        var bootstrapper = new SettingsBootstrapper(
+            store,
+            NullLogger<SettingsBootstrapper>.Instance,
+            () => null
+        );
+        await using var controller = new ApplicationController(
+            bootstrapper,
+            _ => new FakeRecordingService(),
+            (_, _, _) => new FakeCombatLogMonitor(),
+            NullLoggerFactory.Instance,
+            UnavailableWowMonitor,
+            initializer,
+            new RecordingCatalog(repository),
+            resolveEncoderCalibrationEnvironment: _ =>
+                Task.FromResult(
+                    ApplicationControllerTestBuilder.DefaultEncoderCalibrationEnvironment
+                )
+        );
+        await controller.StartAsync(cancellationToken);
+
+        await controller.SetRecordingFavoriteAsync(id, true, cancellationToken);
+        await WaitForAsync(() => controller.RecordingStorageStatus.IsFavoriteCapacityConstrained);
+        var recording = await repository.GetByIdAsync(id, cancellationToken);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.SetRecordingFavoriteAsync(
+                Guid.Parse("14AA663E-A728-4AD5-A6A6-41C10A25D751"),
+                true,
+                cancellationToken
+            )
+        );
+
+        Assert.NotNull(recording);
+        Assert.True(recording.IsFavorite);
+        Assert.Equal(recordingSize, controller.RecordingStorageStatus.UsageBytes);
+        Assert.Equal(recordingSize, controller.RecordingStorageStatus.FavoriteUsageBytes);
+        Assert.Equal(1, controller.RecordingStorageStatus.RecordingCount);
+        Assert.Equal(1, controller.RecordingStorageStatus.FavoriteRecordingCount);
+        Assert.Equal(
+            "The recording could not be found in the catalog. Refresh the recording list and try again.",
+            exception.Message
+        );
+
+        await controller.DeleteRecordingAsync(id, cancellationToken);
+        await WaitForAsync(() =>
+        {
+            var status = controller.RecordingStorageStatus;
+            return status.UsageBytes == 0
+                && status.FavoriteUsageBytes == 0
+                && status.RecordingCount == 0
+                && status.FavoriteRecordingCount == 0;
+        });
+
+        Assert.False(controller.RecordingStorageStatus.IsFavoriteCapacityConstrained);
+        Assert.False(File.Exists(recordingPath));
+        Assert.Null(await repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    [Fact]
     public async Task FailedStartupRollsBackPartialStateAndAllowsRestart()
     {
         using var directory = new TemporaryDirectory();

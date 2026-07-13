@@ -64,12 +64,17 @@ internal sealed class RecordingStoragePresenter(RecordingStorageStatus initialSt
             return "Managed recordings are over the configured limit.";
         }
 
+        if (Status.IsFavoriteCapacityConstrainedFor(limitBytes))
+        {
+            return "Favourite recordings leave little room for new recordings.";
+        }
+
         if (IsNearLimit(isLimitEnabled, limitBytes))
         {
             return "Managed recordings are close to the configured limit.";
         }
 
-        return "Oldest managed recordings are removed first when the limit is reached.";
+        return "PullWatch keeps the newest recording, then removes older non-favourites before older favourites when the limit is reached.";
     }
 
     public double GetUsagePercent(long limitBytes)

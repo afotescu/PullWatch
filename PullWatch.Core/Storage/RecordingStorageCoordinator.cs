@@ -20,7 +20,8 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
     private readonly object _operationSync = new();
     private RecordingStorageStatus _status = RecordingStorageStatus.Initial;
     private TaskCompletionSource? _operationsDrained;
-    private int _operationVersion;
+    private int _refreshOrRetentionVersion;
+    private int _usageRefreshVersion;
     private int _activeOperationCount;
     private bool _disposed;
 
@@ -72,9 +73,75 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
 
     public void QueueRefreshOrRetention(PullWatchSettings settings)
     {
+        QueueOperation(settings, allowRetention: true);
+    }
+
+    public void QueueUsageRefresh(PullWatchSettings settings)
+    {
+        QueueOperation(settings, allowRetention: false);
+    }
+
+    public async Task<T> ExecuteExclusiveAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        CancellationToken shutdownCancellationToken;
+        lock (_operationSync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            shutdownCancellationToken = _shutdownCancellation.Token;
+            _activeOperationCount++;
+        }
+
+        var lockEntered = false;
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            shutdownCancellationToken
+        );
+
+        try
+        {
+            await _operationLock.WaitAsync(linkedCancellation.Token);
+            lockEntered = true;
+            return await operation(linkedCancellation.Token);
+        }
+        finally
+        {
+            if (lockEntered)
+            {
+                _operationLock.Release();
+            }
+
+            CompleteOperation();
+        }
+    }
+
+    public Task ExecuteExclusiveAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return ExecuteExclusiveAsync<bool>(
+            async operationCancellationToken =>
+            {
+                await operation(operationCancellationToken);
+                return true;
+            },
+            cancellationToken
+        );
+    }
+
+    private void QueueOperation(PullWatchSettings settings, bool allowRetention)
+    {
         ArgumentNullException.ThrowIfNull(settings);
 
-        int operationVersion;
+        int refreshOrRetentionVersion;
+        int usageRefreshVersion;
         CancellationToken cancellationToken;
 
         lock (_operationSync)
@@ -84,12 +151,28 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
                 return;
             }
 
-            operationVersion = ++_operationVersion;
+            if (allowRetention)
+            {
+                refreshOrRetentionVersion = ++_refreshOrRetentionVersion;
+                usageRefreshVersion = _usageRefreshVersion;
+            }
+            else
+            {
+                refreshOrRetentionVersion = _refreshOrRetentionVersion;
+                usageRefreshVersion = ++_usageRefreshVersion;
+            }
+
             cancellationToken = _shutdownCancellation.Token;
             _activeOperationCount++;
         }
 
-        var operation = RunOperationAsync(settings, operationVersion, cancellationToken);
+        var operation = RunOperationAsync(
+            settings,
+            refreshOrRetentionVersion,
+            usageRefreshVersion,
+            allowRetention,
+            cancellationToken
+        );
         _ = ObserveOperationAsync(operation);
     }
 
@@ -128,13 +211,15 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
 
     private async Task RunOperationAsync(
         PullWatchSettings settings,
-        int operationVersion,
+        int refreshOrRetentionVersion,
+        int usageRefreshVersion,
+        bool allowRetention,
         CancellationToken cancellationToken
     )
     {
         if (_getUsage is null || _enforceLimit is null)
         {
-            if (operationVersion == Volatile.Read(ref _operationVersion))
+            if (IsCurrentOperation(refreshOrRetentionVersion, usageRefreshVersion, allowRetention))
             {
                 SetStatus(
                     RecordingStorageStatus.Initial with
@@ -154,12 +239,12 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
             await _operationLock.WaitAsync(cancellationToken);
             lockEntered = true;
 
-            if (operationVersion != Volatile.Read(ref _operationVersion))
+            if (!IsCurrentOperation(refreshOrRetentionVersion, usageRefreshVersion, allowRetention))
             {
                 return;
             }
 
-            var enforceLimit = settings.Storage.IsLimitEnabled;
+            var enforceLimit = allowRetention && settings.Storage.IsLimitEnabled;
             var currentStatus = Status;
             SetStatus(
                 currentStatus with
@@ -176,31 +261,18 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
             {
                 var result = await _enforceLimit(settings, cancellationToken);
                 SetStatus(
-                    new RecordingStorageStatus(
-                        result.Usage.UsageBytes,
+                    CreateCompletedStatus(
+                        result.Usage,
                         settings.Storage.MaxUsageBytes,
-                        result.Usage.RecordingCount,
-                        IsRefreshing: false,
-                        IsCleaning: false,
-                        LastDeletedRecordingCount: result.DeletedCount,
-                        LastError: result.Errors.FirstOrDefault()
+                        result.DeletedCount,
+                        result.Errors.FirstOrDefault()
                     )
                 );
                 return;
             }
 
             var usage = await _getUsage(settings, cancellationToken);
-            SetStatus(
-                new RecordingStorageStatus(
-                    usage.UsageBytes,
-                    settings.Storage.MaxUsageBytes,
-                    usage.RecordingCount,
-                    IsRefreshing: false,
-                    IsCleaning: false,
-                    LastDeletedRecordingCount: 0,
-                    LastError: null
-                )
-            );
+            SetStatus(CreateCompletedStatus(usage, settings.Storage.MaxUsageBytes, 0, null));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -243,6 +315,36 @@ internal sealed class RecordingStorageCoordinator : IAsyncDisposable
         {
             CompleteOperation();
         }
+    }
+
+    private bool IsCurrentOperation(
+        int refreshOrRetentionVersion,
+        int usageRefreshVersion,
+        bool allowRetention
+    )
+    {
+        return refreshOrRetentionVersion == Volatile.Read(ref _refreshOrRetentionVersion)
+            && (allowRetention || usageRefreshVersion == Volatile.Read(ref _usageRefreshVersion));
+    }
+
+    private static RecordingStorageStatus CreateCompletedStatus(
+        RecordingStorageUsage usage,
+        long maxUsageBytes,
+        int deletedRecordingCount,
+        Exception? error
+    )
+    {
+        return new RecordingStorageStatus(
+            usage.UsageBytes,
+            maxUsageBytes,
+            usage.RecordingCount,
+            IsRefreshing: false,
+            IsCleaning: false,
+            LastDeletedRecordingCount: deletedRecordingCount,
+            LastError: error,
+            FavoriteUsageBytes: usage.FavoriteUsageBytes,
+            FavoriteRecordingCount: usage.FavoriteRecordingCount
+        );
     }
 
     private void CompleteOperation()

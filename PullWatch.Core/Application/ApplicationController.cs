@@ -289,6 +289,59 @@ public sealed class ApplicationController : IAsyncDisposable
         return DeleteRecordingAsync(recordingId, CancellationToken.None);
     }
 
+    public Task SetRecordingFavoriteAsync(Guid recordingId, bool isFavorite)
+    {
+        return SetRecordingFavoriteAsync(recordingId, isFavorite, CancellationToken.None);
+    }
+
+    public async Task SetRecordingFavoriteAsync(
+        Guid recordingId,
+        bool isFavorite,
+        CancellationToken cancellationToken
+    )
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        await _lifetimeLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+            if (_recordingCatalog is null)
+            {
+                return;
+            }
+
+            var settingsService =
+                _settingsService
+                ?? throw new InvalidOperationException(
+                    "The application controller has not been started."
+                );
+            var updated = await _recordingStorageCoordinator.ExecuteExclusiveAsync(
+                operationCancellationToken =>
+                    _recordingCatalog.SetFavoriteAsync(
+                        recordingId,
+                        isFavorite,
+                        operationCancellationToken
+                    ),
+                cancellationToken
+            );
+
+            if (!updated)
+            {
+                throw new InvalidOperationException(
+                    "The recording could not be found in the catalog. Refresh the recording list and try again."
+                );
+            }
+
+            _recordingStorageCoordinator.QueueUsageRefresh(settingsService.Current);
+        }
+        finally
+        {
+            _lifetimeLock.Release();
+        }
+    }
+
     public async Task DeleteRecordingAsync(Guid recordingId, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
@@ -312,11 +365,17 @@ public sealed class ApplicationController : IAsyncDisposable
                 settingsService.Current.RecordingsDirectory
                 ?? throw new InvalidOperationException("Recordings directory was not configured.");
 
-            await _recordingCatalog.DeleteAvailableRecordingAsync(
-                recordingId,
-                recordingsDirectory,
+            await _recordingStorageCoordinator.ExecuteExclusiveAsync(
+                operationCancellationToken =>
+                    _recordingCatalog.DeleteAvailableRecordingAsync(
+                        recordingId,
+                        recordingsDirectory,
+                        operationCancellationToken
+                    ),
                 cancellationToken
             );
+
+            _recordingStorageCoordinator.QueueUsageRefresh(settingsService.Current);
         }
         finally
         {

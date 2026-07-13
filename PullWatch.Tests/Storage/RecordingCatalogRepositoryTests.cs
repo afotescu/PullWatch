@@ -108,6 +108,54 @@ public sealed class RecordingCatalogRepositoryTests
     }
 
     [Fact]
+    public async Task SetFavoriteUpdatesDedicatedFlagAndLifecycleWritesPreserveIt()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var repository = new RecordingCatalogRepository(database.ConnectionFactory);
+        var id = Guid.Parse("06C29FD8-58D6-48F8-B3D5-77F12B166B9C");
+        var recording = CreateRecording(id, @"D:\Recordings\first.mp4");
+        await repository.UpsertAsync(recording, cancellationToken);
+
+        var initial = await repository.GetByIdAsync(id, cancellationToken);
+        var updatedExisting = await repository.SetFavoriteAsync(id, true, cancellationToken);
+        var updatedMissing = await repository.SetFavoriteAsync(
+            Guid.Parse("7E5002EA-564E-4DD5-849B-4333457C1888"),
+            true,
+            cancellationToken
+        );
+        await repository.UpsertAsync(
+            recording with
+            {
+                FilePath = @"D:\Recordings\second.mp4",
+            },
+            cancellationToken
+        );
+        await repository.UpdateAsync(
+            recording with
+            {
+                FilePath = @"D:\Recordings\completed.mp4",
+            },
+            cancellationToken
+        );
+
+        var afterLifecycleWrites = await repository.GetByIdAsync(id, cancellationToken);
+        var clearedExisting = await repository.SetFavoriteAsync(id, false, cancellationToken);
+        var cleared = await repository.GetByIdAsync(id, cancellationToken);
+
+        Assert.NotNull(initial);
+        Assert.False(initial.IsFavorite);
+        Assert.True(updatedExisting);
+        Assert.False(updatedMissing);
+        Assert.NotNull(afterLifecycleWrites);
+        Assert.True(afterLifecycleWrites.IsFavorite);
+        Assert.Equal(@"D:\Recordings\completed.mp4", afterLifecycleWrites.FilePath);
+        Assert.True(clearedExisting);
+        Assert.NotNull(cleared);
+        Assert.False(cleared.IsFavorite);
+    }
+
+    [Fact]
     public async Task DeleteRemovesExistingRecording()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

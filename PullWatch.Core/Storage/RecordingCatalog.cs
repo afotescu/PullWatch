@@ -91,6 +91,15 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
         await _repository.DeleteAsync(id, cancellationToken);
     }
 
+    public async Task<bool> SetFavoriteAsync(
+        Guid id,
+        bool isFavorite,
+        CancellationToken cancellationToken
+    )
+    {
+        return await _repository.SetFavoriteAsync(id, isFavorite, cancellationToken);
+    }
+
     public async Task DeleteAvailableRecordingAsync(
         Guid id,
         string recordingsDirectory,
@@ -179,7 +188,8 @@ public sealed class RecordingCatalog(RecordingCatalogRepository repository)
                     file.Length,
                     new DateTimeOffset(file.LastWriteTimeUtc),
                     raidEncounters.GetValueOrDefault(entry.Id),
-                    challengeModes.GetValueOrDefault(entry.Id)
+                    challengeModes.GetValueOrDefault(entry.Id),
+                    entry.IsFavorite
                 )
             );
         }
