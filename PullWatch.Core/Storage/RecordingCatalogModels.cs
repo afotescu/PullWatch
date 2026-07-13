@@ -24,7 +24,8 @@ public sealed record RecordingCatalogEntry(
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? EndedAtUtc,
     long? FileSizeBytes,
-    DateTimeOffset? FileModifiedAtUtc
+    DateTimeOffset? FileModifiedAtUtc,
+    bool IsFavorite = false
 );
 
 public sealed record RecordingCatalogSave(
@@ -47,7 +48,8 @@ public sealed record RecordingCatalogFile(
     long SizeBytes,
     DateTimeOffset ModifiedAtUtc,
     RaidEncounterEntry? RaidEncounter = null,
-    ChallengeModeEntry? ChallengeMode = null
+    ChallengeModeEntry? ChallengeMode = null,
+    bool IsFavorite = false
 );
 
 public sealed record RaidEncounterEntry(

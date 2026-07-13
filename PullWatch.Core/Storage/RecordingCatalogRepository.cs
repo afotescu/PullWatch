@@ -16,7 +16,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         StartedAtUtc,
         EndedAtUtc,
         FileSizeBytes,
-        FileModifiedAtUtc
+        FileModifiedAtUtc,
+        IsFavorite
         """;
     private const string RaidEncounterSelectColumns = """
         RecordingId,
@@ -274,6 +275,30 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         );
 
         return rows.Select(FromRow).ToList();
+    }
+
+    public async Task<bool> SetFavoriteAsync(
+        Guid id,
+        bool isFavorite,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(
+            cancellationToken
+        );
+        var affectedRows = await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE Recordings
+                SET IsFavorite = @IsFavorite
+                WHERE Id = @Id;
+                """,
+                new { Id = FormatId(id), IsFavorite = isFavorite },
+                cancellationToken: cancellationToken
+            )
+        );
+
+        return affectedRows > 0;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
@@ -617,7 +642,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
             StorageTimestampFormatter.ParseNullableUtc(row.StartedAtUtc),
             StorageTimestampFormatter.ParseNullableUtc(row.EndedAtUtc),
             row.FileSizeBytes,
-            StorageTimestampFormatter.ParseNullableUtc(row.FileModifiedAtUtc)
+            StorageTimestampFormatter.ParseNullableUtc(row.FileModifiedAtUtc),
+            row.IsFavorite != 0
         );
     }
 
@@ -788,7 +814,8 @@ public sealed class RecordingCatalogRepository(SqliteConnectionFactory connectio
         string? StartedAtUtc,
         string? EndedAtUtc,
         long? FileSizeBytes,
-        string? FileModifiedAtUtc
+        string? FileModifiedAtUtc,
+        long IsFavorite
     );
 
     private sealed record ChallengeModeParameters(

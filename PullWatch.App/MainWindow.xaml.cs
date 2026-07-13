@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private WindowStyle _windowStyleBeforeFullScreen;
     private bool _placementSaved;
     private bool _navigationViewsDisposed;
+    private bool _favoriteStorageWarningPresentationQueued;
+    private bool _isFavoriteStorageWarningDialogOpen;
 
     internal MainWindow(
         ApplicationController controller,
@@ -56,6 +58,9 @@ public partial class MainWindow : Window
         );
         DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.FavoriteStorageWarningPending += OnFavoriteStorageWarningPending;
+        Activated += OnActivated;
+        Loaded += OnLoaded;
         ShowSelectedNavigationContent();
         RestoreWindowPlacement(controller.Status.EffectiveSettings?.Ui.WindowPlacement);
         _durationTimer = new DispatcherTimer(
@@ -335,7 +340,121 @@ public partial class MainWindow : Window
         _fullScreenExitRequested = null;
         RestoreWindowAfterFullScreen();
         FullScreenLayer.Visibility = Visibility.Collapsed;
+        QueueFavoriteStorageWarningPresentation();
         return true;
+    }
+
+    private void OnFavoriteStorageWarningPending()
+    {
+        QueueFavoriteStorageWarningPresentation();
+    }
+
+    private void OnActivated(object? sender, EventArgs eventArgs)
+    {
+        QueueFavoriteStorageWarningPresentation();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs eventArgs)
+    {
+        QueueFavoriteStorageWarningPresentation();
+    }
+
+    private void QueueFavoriteStorageWarningPresentation()
+    {
+        if (
+            _navigationViewsDisposed
+            || _favoriteStorageWarningPresentationQueued
+            || _isFavoriteStorageWarningDialogOpen
+            || !CanPresentFavoriteStorageWarning()
+        )
+        {
+            return;
+        }
+
+        _favoriteStorageWarningPresentationQueued = true;
+        Dispatcher.BeginInvoke(PresentPendingFavoriteStorageWarning, DispatcherPriority.Background);
+    }
+
+    private void PresentPendingFavoriteStorageWarning()
+    {
+        _favoriteStorageWarningPresentationQueued = false;
+
+        if (!CanPresentFavoriteStorageWarning())
+        {
+            return;
+        }
+
+        var warning = _viewModel.TakePendingFavoriteStorageWarning();
+        if (warning is null)
+        {
+            return;
+        }
+
+        _isFavoriteStorageWarningDialogOpen = true;
+
+        try
+        {
+            var result = WpfConfirmationDialog.Show(
+                this,
+                CreateFavoriteStorageWarningDialog(warning)
+            );
+
+            if (result == ConfirmationDialogResult.Primary)
+            {
+                _viewModel.SelectSettings();
+            }
+        }
+        finally
+        {
+            _isFavoriteStorageWarningDialogOpen = false;
+            QueueFavoriteStorageWarningPresentation();
+        }
+    }
+
+    private bool CanPresentFavoriteStorageWarning()
+    {
+        return IsLoaded
+            && IsVisible
+            && IsActive
+            && WindowState != WindowState.Minimized
+            && FullScreenLayer.Visibility != Visibility.Visible;
+    }
+
+    private static ConfirmationDialogRequest CreateFavoriteStorageWarningDialog(
+        FavoriteStorageWarning warning
+    )
+    {
+        var heading =
+            warning.Level == FavoriteStorageWarningLevel.Warning80
+                ? "Favourites leave little room for new recordings"
+                : "Favourites are using most of your storage allowance";
+        var guidance =
+            warning.Level == FavoriteStorageWarningLevel.Warning80
+                ? "New recordings may be removed sooner. Increase the limit or remove some favourites to leave more room."
+                : "Consider increasing the limit or removing some favourites before storage gets tight.";
+
+        return new ConfirmationDialogRequest(
+            "PullWatch",
+            [
+                $"Favourites use {FileSizeFormatter.Format(warning.FavoriteUsageBytes)} of the {FileSizeFormatter.Format(warning.MaxUsageBytes)} managed storage limit.",
+                "Automatic cleanup remains enabled. PullWatch keeps the newest recording, then removes older non-favourites before older favourites if more space is needed.",
+                guidance,
+            ],
+            [
+                new ConfirmationDialogButton(
+                    "Adjust storage limit",
+                    ConfirmationDialogResult.Primary,
+                    ConfirmationDialogButtonKind.Accent,
+                    IsDefault: true
+                ),
+                new ConfirmationDialogButton(
+                    "Not now",
+                    ConfirmationDialogResult.Cancel,
+                    IsCancel: true
+                ),
+            ],
+            Heading: heading
+        );
     }
 
     private void RequestFullScreenExit()
@@ -402,7 +521,10 @@ public partial class MainWindow : Window
 
         _navigationViewsDisposed = true;
         RequestFullScreenExit();
+        Activated -= OnActivated;
+        Loaded -= OnLoaded;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.FavoriteStorageWarningPending -= OnFavoriteStorageWarningPending;
         NavigationContent.Content = null;
 
         foreach (var view in _navigationViews.Values.OfType<IDisposable>())

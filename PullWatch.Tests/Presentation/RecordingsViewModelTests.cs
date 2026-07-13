@@ -560,7 +560,8 @@ public sealed class RecordingsViewModelTests
                 CatalogFile(
                     newer,
                     new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
-                    startedAtUtc: newerStartedAtUtc
+                    startedAtUtc: newerStartedAtUtc,
+                    isFavorite: true
                 ),
                 CatalogFile(older, new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)),
             };
@@ -592,12 +593,17 @@ public sealed class RecordingsViewModelTests
                     Assert.False(first.IsContextVisible);
                     Assert.False(first.IsResultVisible);
                     Assert.True(first.IsDurationVisible);
+                    Assert.True(first.IsFavorite);
+                    Assert.Equal("Remove from favourites", first.FavoriteToolTip);
+                    Assert.Equal("Remove from favourites: newer", first.FavoriteAutomationName);
                     Assert.Equal("-", first.Duration);
                 },
                 second =>
                 {
                     Assert.Equal(older, second.Path);
                     Assert.Equal("older", second.DisplayName);
+                    Assert.False(second.IsFavorite);
+                    Assert.Equal("Add to favourites", second.FavoriteToolTip);
                 }
             );
             Assert.Equal(newer, viewModel.SelectedRecording?.Path);
@@ -708,6 +714,83 @@ public sealed class RecordingsViewModelTests
 
             Assert.Equal(current.Id, Assert.Single(viewModel.Recordings).Id);
             Assert.Equal(string.Empty, viewModel.RecordingLibraryStatus);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task FavoriteToggleMergesIntoNewestRefreshWithoutLosingCatalogChanges()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var target = CatalogFile(
+                Path.Combine(directory, "target.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var removed = CatalogFile(
+                Path.Combine(directory, "removed.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            );
+            var added = CatalogFile(
+                Path.Combine(directory, "added.mp4"),
+                new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero)
+            );
+            var obsoleteRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var currentRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var loadCalls = 0;
+            var persistedChanges = new List<(Guid Id, bool IsFavorite)>();
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    ++loadCalls switch
+                    {
+                        1 => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([
+                            target,
+                            removed,
+                        ]),
+                        2 => obsoleteRefresh.Task,
+                        3 => currentRefresh.Task,
+                        _ => throw new InvalidOperationException("Unexpected catalog load."),
+                    },
+                setRecordingFavorite: (id, isFavorite) =>
+                {
+                    persistedChanges.Add((id, isFavorite));
+                    return Task.CompletedTask;
+                }
+            );
+            var targetItem = viewModel.Recordings.Single(recording => recording.Id == target.Id);
+
+            var obsoleteTask = viewModel.RefreshRecordingsAsync();
+            var currentTask = viewModel.RefreshRecordingsAsync();
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(targetItem);
+            obsoleteRefresh.SetResult([removed, target]);
+            await obsoleteTask;
+            currentRefresh.SetResult([added, target]);
+            await currentTask;
+
+            var persistedChange = Assert.Single(persistedChanges);
+            Assert.Equal(target.Id, persistedChange.Id);
+            Assert.True(persistedChange.IsFavorite);
+            Assert.Equal(3, loadCalls);
+            Assert.DoesNotContain(viewModel.Recordings, recording => recording.Id == removed.Id);
+            Assert.Contains(viewModel.Recordings, recording => recording.Id == added.Id);
+            Assert.True(
+                viewModel.Recordings.Single(recording => recording.Id == target.Id).IsFavorite
+            );
+            Assert.Equal(target.Id, viewModel.SelectedRecording?.Id);
         }
         finally
         {
@@ -961,6 +1044,232 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public async Task ToggleFavoritePersistsBeforeUpdatingSelectedRecordingInPlace()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var recording = CatalogFile(
+                Path.Combine(directory, "favourite.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var saveStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var saveCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var savedChanges = new List<(Guid Id, bool IsFavorite)>();
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording]),
+                setRecordingFavorite: (id, isFavorite) =>
+                {
+                    savedChanges.Add((id, isFavorite));
+                    if (savedChanges.Count == 1)
+                    {
+                        saveStarted.SetResult();
+                        return saveCompletion.Task;
+                    }
+
+                    return Task.CompletedTask;
+                }
+            );
+            var originalItem = Assert.Single(viewModel.Recordings);
+            var collectionChangeCount = 0;
+            var propertyChanges = new List<string?>();
+            viewModel.Recordings.CollectionChanged += (_, _) => collectionChangeCount++;
+            originalItem.PropertyChanged += (_, args) => propertyChanges.Add(args.PropertyName);
+
+            var toggleTask = viewModel.ToggleFavoriteCommand.ExecuteAsync(originalItem);
+            await saveStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
+
+            var firstSave = Assert.Single(savedChanges);
+            Assert.Equal(recording.Id, firstSave.Id);
+            Assert.True(firstSave.IsFavorite);
+            Assert.Same(originalItem, Assert.Single(viewModel.Recordings));
+            Assert.False(originalItem.IsFavorite);
+            Assert.Same(originalItem, viewModel.SelectedRecording);
+
+            saveCompletion.SetResult();
+            await toggleTask;
+
+            var updatedItem = Assert.Single(viewModel.Recordings);
+            Assert.Same(originalItem, updatedItem);
+            Assert.True(updatedItem.IsFavorite);
+            Assert.Equal("Remove from favourites", updatedItem.FavoriteToolTip);
+            Assert.Same(updatedItem, viewModel.SelectedRecording);
+            Assert.Equal(0, collectionChangeCount);
+            Assert.Contains(nameof(RecordingListItem.IsFavorite), propertyChanges);
+            Assert.Contains(nameof(RecordingListItem.FavoriteToolTip), propertyChanges);
+            Assert.Contains(nameof(RecordingListItem.FavoriteAutomationName), propertyChanges);
+            Assert.Equal("Recording added to favourites.", viewModel.CommandMessage);
+
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(updatedItem);
+
+            Assert.Collection(
+                savedChanges,
+                first => Assert.True(first.IsFavorite),
+                second => Assert.False(second.IsFavorite)
+            );
+            var revertedItem = Assert.Single(viewModel.Recordings);
+            Assert.Same(updatedItem, revertedItem);
+            Assert.False(revertedItem.IsFavorite);
+            Assert.Equal("Add to favourites", revertedItem.FavoriteToolTip);
+            Assert.Same(revertedItem, viewModel.SelectedRecording);
+            Assert.Equal(0, collectionChangeCount);
+            Assert.Equal("Recording removed from favourites.", viewModel.CommandMessage);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FavoriteMutationKeepsListItemHashStable()
+    {
+        var item = Assert.Single(
+            RecordingListItemFactory.Create([
+                CatalogFile(
+                    @"D:\Recordings\favorite.mp4",
+                    new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+                ),
+            ])
+        );
+        var selection = new HashSet<RecordingListItem> { item };
+        var initialHashCode = item.GetHashCode();
+        item.PropertyChanged += (_, _) => { };
+
+        item.SetFavorite(true);
+
+        Assert.Equal(initialHashCode, item.GetHashCode());
+        Assert.True(selection.TryGetValue(item, out var selectedItem));
+        Assert.Same(item, selectedItem);
+    }
+
+    [Fact]
+    public async Task ToggleFavoriteFailureReportsCauseAndSuccessfulRetryClearsNotification()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var recording = CatalogFile(
+                Path.Combine(directory, "locked.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var notifications = new NotificationCenterViewModel();
+            var favoriteAttempts = 0;
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording]),
+                setRecordingFavorite: (_, _) =>
+                    ++favoriteAttempts == 1
+                        ? Task.FromException(new IOException("catalog is locked."))
+                        : Task.CompletedTask,
+                notifications: notifications
+            );
+            var originalItem = Assert.Single(viewModel.Recordings);
+
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(originalItem);
+
+            Assert.Same(originalItem, Assert.Single(viewModel.Recordings));
+            Assert.False(originalItem.IsFavorite);
+            Assert.Same(originalItem, viewModel.SelectedRecording);
+            Assert.Equal(
+                "Could not add recording to favourites: catalog is locked.",
+                viewModel.CommandMessage
+            );
+            var notification = Assert.Single(notifications.Items);
+            Assert.Equal(NotificationSeverity.Error, notification.Severity);
+            Assert.Equal("Favourite update failed", notification.Title);
+            Assert.Equal(viewModel.CommandMessage, notification.Message);
+
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(originalItem);
+
+            Assert.Equal(2, favoriteAttempts);
+            Assert.True(originalItem.IsFavorite);
+            Assert.Empty(notifications.Items);
+            Assert.Equal("Recording added to favourites.", viewModel.CommandMessage);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task ToggleFavoriteOnAnotherRowPreservesSelectionAndVisibleOrder()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var selected = CatalogFile(
+                Path.Combine(directory, "newer.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var toggled = CatalogFile(
+                Path.Combine(directory, "older.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            );
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([selected, toggled])
+            );
+            var selectedItem = viewModel.Recordings[0];
+            var toggledItem = viewModel.Recordings[1];
+            viewModel.SelectedRecording = selectedItem;
+
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(toggledItem);
+
+            Assert.Collection(
+                viewModel.Recordings,
+                first =>
+                {
+                    Assert.Equal(selected.Id, first.Id);
+                    Assert.False(first.IsFavorite);
+                },
+                second =>
+                {
+                    Assert.Equal(toggled.Id, second.Id);
+                    Assert.True(second.IsFavorite);
+                }
+            );
+            Assert.Same(selectedItem, viewModel.SelectedRecording);
+
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+            SelectCategory(viewModel, RecordingListCategory.Manual);
+
+            Assert.True(viewModel.Recordings[1].IsFavorite);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public async Task DeleteSelectedRecordingConfirmsDeletesAndRemovesVisibleItem()
     {
         var directory = CreateTempDirectory();
@@ -1092,6 +1401,91 @@ public sealed class RecordingsViewModelTests
             deleteCompletion.SetResult();
             await deleteTask;
             Assert.Equal(kept.Id, Assert.Single(viewModel.Recordings).Id);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshesStartedDuringDeleteCannotRestoreDeletedRecording()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var deleted = CatalogFile(
+                Path.Combine(directory, "deleted.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero)
+            );
+            var kept = CatalogFile(
+                Path.Combine(directory, "kept.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
+            );
+            var firstRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var secondRefresh = new TaskCompletionSource<IReadOnlyList<RecordingCatalogFile>>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var deleteCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var loadCalls = 0;
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.Manual
+                ),
+                loadRecordings: _ =>
+                    ++loadCalls switch
+                    {
+                        1 => Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([deleted, kept]),
+                        2 => firstRefresh.Task,
+                        3 => secondRefresh.Task,
+                        _ => throw new InvalidOperationException("Unexpected catalog load."),
+                    },
+                deleteRecording: _ =>
+                {
+                    deleteStarted.SetResult();
+                    return deleteCompletion.Task;
+                },
+                confirmPermanentDelete: _ => true
+            );
+
+            var deleteTask = viewModel.DeleteSelectedRecordingCommand.ExecuteAsync(null);
+            await deleteStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
+
+            var firstRefreshTask = viewModel.RefreshRecordingsAsync();
+            firstRefresh.SetResult([deleted, kept]);
+            await firstRefreshTask;
+            Assert.Contains(viewModel.Recordings, recording => recording.Id == deleted.Id);
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
+                recording.Id == deleted.Id
+            );
+            viewModel.Recordings.CollectionChanged += (_, _) => viewModel.SelectedRecording = null;
+
+            var secondRefreshTask = viewModel.RefreshRecordingsAsync();
+            deleteCompletion.SetResult();
+            await deleteTask;
+
+            Assert.Equal(kept.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(kept.Id, viewModel.SelectedRecording?.Id);
+
+            secondRefresh.SetResult([deleted, kept]);
+            await secondRefreshTask;
+
+            Assert.Equal(3, loadCalls);
+            Assert.Equal(kept.Id, Assert.Single(viewModel.Recordings).Id);
+            Assert.Equal(kept.Id, viewModel.SelectedRecording?.Id);
         }
         finally
         {
@@ -1382,6 +1776,7 @@ public sealed class RecordingsViewModelTests
         Func<Task<RecordingCommandResult>>? stopManual = null,
         Func<string, Task<IReadOnlyList<RecordingCatalogFile>>>? loadRecordings = null,
         Func<Guid, Task>? deleteRecording = null,
+        Func<Guid, bool, Task>? setRecordingFavorite = null,
         Func<RecordingListItem, bool>? confirmPermanentDelete = null,
         Func<RecordingListCategory, Task>? saveSelectedRecordingCategory = null,
         Func<Task>? testVideoEncoding = null,
@@ -1400,7 +1795,8 @@ public sealed class RecordingsViewModelTests
             () => Task.CompletedTask,
             saveSelectedRecordingCategory ?? (_ => Task.CompletedTask),
             notifications,
-            savePlaybackAudioState
+            savePlaybackAudioState,
+            setRecordingFavorite
         );
     }
 
@@ -1505,7 +1901,8 @@ public sealed class RecordingsViewModelTests
         RaidEncounterEntry? raidEncounter = null,
         ChallengeModeEntry? challengeMode = null,
         DateTimeOffset? startedAtUtc = null,
-        DateTimeOffset? endedAtUtc = null
+        DateTimeOffset? endedAtUtc = null,
+        bool isFavorite = false
     )
     {
         return new RecordingCatalogFile(
@@ -1517,7 +1914,8 @@ public sealed class RecordingsViewModelTests
             sizeBytes,
             modifiedAtUtc,
             raidEncounter,
-            challengeMode
+            challengeMode,
+            isFavorite
         );
     }
 

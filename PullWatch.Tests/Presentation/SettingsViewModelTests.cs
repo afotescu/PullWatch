@@ -381,6 +381,118 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public void RecordingStorageLimitBelowCurrentUsageRequiresCleanupConfirmation()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var dialogs = new FakeSettingsDialogs { ConfirmRecordingStorageCleanupResult = false };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            dialogs: dialogs,
+            initialRecordingStorageStatus: new RecordingStorageStatus(
+                20 * bytesPerGigabyte,
+                25 * bytesPerGigabyte,
+                3,
+                IsRefreshing: false,
+                IsCleaning: false,
+                LastDeletedRecordingCount: 0,
+                LastError: null
+            )
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 10;
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        Assert.Equal(
+            [
+                new RecordingStorageCleanupConfirmation(
+                    20 * bytesPerGigabyte,
+                    3,
+                    10 * bytesPerGigabyte
+                ),
+            ],
+            dialogs.RecordingStorageCleanupConfirmationRequests
+        );
+        Assert.Empty(saves);
+        Assert.True(viewModel.HasPendingRecordingStorageLimitChange);
+        Assert.Equal(10, viewModel.RecordingStorageLimitInputGigabytes);
+        Assert.Equal(25, viewModel.RecordingStorageLimitGigabytes);
+    }
+
+    [Fact]
+    public async Task ConfirmedRecordingStorageCleanupAppliesLimitBelowCurrentUsage()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var saves = new List<PullWatchSettings>();
+        var dialogs = new FakeSettingsDialogs { ConfirmRecordingStorageCleanupResult = true };
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            settings =>
+            {
+                saves.Add(settings);
+                return Saved(settings);
+            },
+            dialogs: dialogs,
+            initialRecordingStorageStatus: new RecordingStorageStatus(
+                20 * bytesPerGigabyte,
+                25 * bytesPerGigabyte,
+                3,
+                IsRefreshing: false,
+                IsCleaning: false,
+                LastDeletedRecordingCount: 0,
+                LastError: null
+            )
+        );
+
+        viewModel.RecordingStorageLimitInputGigabytes = 10;
+
+        viewModel.ApplyRecordingStorageLimitCommand.Execute(null);
+
+        await WaitForAsync(() =>
+            saves.Count == 1 && !viewModel.HasPendingRecordingStorageLimitChange
+        );
+        Assert.Single(dialogs.RecordingStorageCleanupConfirmationRequests);
+        Assert.Equal(10 * bytesPerGigabyte, saves[0].Storage.MaxUsageBytes);
+        Assert.Equal(10, viewModel.RecordingStorageLimitGigabytes);
+    }
+
+    [Fact]
+    public void FavoriteCapacityWarningDoesNotUseNotificationCenter()
+    {
+        const long bytesPerGigabyte = 1024L * 1024 * 1024;
+        var notifications = new NotificationCenterViewModel();
+        var constrainedStatus = new RecordingStorageStatus(
+            UsageBytes: 48 * bytesPerGigabyte,
+            MaxUsageBytes: 50 * bytesPerGigabyte,
+            RecordingCount: 8,
+            IsRefreshing: false,
+            IsCleaning: false,
+            LastDeletedRecordingCount: 0,
+            LastError: null,
+            FavoriteUsageBytes: 45 * bytesPerGigabyte,
+            FavoriteRecordingCount: 6
+        );
+        var viewModel = CreateViewModel(
+            Status(RecordingCoordinatorState.Idle),
+            initialRecordingStorageStatus: constrainedStatus with
+            {
+                FavoriteUsageBytes = 29 * bytesPerGigabyte,
+            },
+            notifications: notifications
+        );
+
+        viewModel.ApplyRecordingStorageStatus(constrainedStatus);
+
+        Assert.Empty(notifications.Items);
+    }
+
+    [Fact]
     public void DisabledRecordingStorageLimitLoadsLastEnabledValue()
     {
         const long bytesPerGigabyte = 1024L * 1024 * 1024;
@@ -1547,6 +1659,11 @@ public sealed class SettingsViewModelTests
     {
         public string? SelectedFolder { get; init; }
 
+        public bool ConfirmRecordingStorageCleanupResult { get; init; } = true;
+
+        public List<RecordingStorageCleanupConfirmation> RecordingStorageCleanupConfirmationRequests { get; } =
+        [];
+
         public PendingRecordingStorageLimitChangeAction PendingRecordingStorageLimitChangeAction { get; init; } =
             PendingRecordingStorageLimitChangeAction.Cancel;
 
@@ -1556,6 +1673,12 @@ public sealed class SettingsViewModelTests
         public string? PickFolder(string title, string? initialDirectory)
         {
             return SelectedFolder;
+        }
+
+        public bool ConfirmRecordingStorageCleanup(RecordingStorageCleanupConfirmation confirmation)
+        {
+            RecordingStorageCleanupConfirmationRequests.Add(confirmation);
+            return ConfirmRecordingStorageCleanupResult;
         }
 
         public PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(

@@ -54,6 +54,31 @@ public sealed class RecordingCatalogTests
     }
 
     [Fact]
+    public async Task SetFavoriteIsIncludedWhenListingAvailableFiles()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var catalog = new RecordingCatalog(database.Repository);
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var id = Guid.Parse("13B0D071-B9F2-46A2-8848-1352AA6D755A");
+        var path = WriteFile(directory.FullName, "favorite.mp4", "favorite");
+        await database.Repository.UpsertAsync(CreateSave(id, path), cancellationToken);
+
+        var updated = await catalog.SetFavoriteAsync(id, true, cancellationToken);
+        var recordings = await catalog.ListAvailableFilesAsync(
+            directory.FullName,
+            cancellationToken
+        );
+
+        Assert.True(updated);
+        var recording = Assert.Single(recordings);
+        Assert.Equal(id, recording.Id);
+        Assert.True(recording.IsFavorite);
+    }
+
+    [Fact]
     public async Task ChallengeModeRecordingStoresMetadata()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

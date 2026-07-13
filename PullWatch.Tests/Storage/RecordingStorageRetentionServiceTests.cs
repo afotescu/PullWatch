@@ -28,6 +28,11 @@ public sealed class RecordingStorageRetentionServiceTests
             CreateSave(Guid.Parse("93C66F94-CFE2-4545-8647-9F35284C84A7"), managedPath),
             cancellationToken
         );
+        await database.Catalog.SetFavoriteAsync(
+            Guid.Parse("93C66F94-CFE2-4545-8647-9F35284C84A7"),
+            true,
+            cancellationToken
+        );
         await database.Repository.UpsertAsync(
             CreateSave(Guid.Parse("06A73970-107D-411A-AD84-35154193B1F5"), activePath) with
             {
@@ -44,6 +49,166 @@ public sealed class RecordingStorageRetentionServiceTests
 
         Assert.Equal(40, usage.UsageBytes);
         Assert.Equal(1, usage.RecordingCount);
+        Assert.Equal(40, usage.FavoriteUsageBytes);
+        Assert.Equal(1, usage.FavoriteRecordingCount);
+    }
+
+    [Fact]
+    public async Task EnforceLimitKeepsNewestRecordingAndDeletesOlderNonFavoritesFirst()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var service = new RecordingStorageRetentionService(
+            database.Catalog,
+            NullLogger<RecordingStorageRetentionService>.Instance
+        );
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var oldestFavoriteId = Guid.Parse("5EB12F9D-FD1D-4CFA-AE7C-A20A5F17A8E2");
+        var olderNonFavoriteId = Guid.Parse("D2EB5921-948A-4DF2-BB87-E5765FD235FD");
+        var newestNonFavoriteId = Guid.Parse("D5DC63F1-91F6-4A98-A86A-B956CE98FCDB");
+        var newestFavoriteId = Guid.Parse("EC20CAB5-8B67-4D73-87B0-C652E42E602A");
+        var oldestFavoritePath = WriteFile(directory.FullName, "oldest-favorite.mp4", 40);
+        var olderNonFavoritePath = WriteFile(directory.FullName, "older-non-favorite.mp4", 20);
+        var newestNonFavoritePath = WriteFile(directory.FullName, "newest-non-favorite.mp4", 20);
+        var newestFavoritePath = WriteFile(directory.FullName, "newest-favorite.mp4", 40);
+        await database.Repository.UpsertAsync(
+            CreateSave(
+                oldestFavoriteId,
+                oldestFavoritePath,
+                DateTimeOffset.Parse("2026-06-20T10:00:00Z")
+            ),
+            cancellationToken
+        );
+        await database.Repository.UpsertAsync(
+            CreateSave(
+                olderNonFavoriteId,
+                olderNonFavoritePath,
+                DateTimeOffset.Parse("2026-06-20T10:30:00Z")
+            ),
+            cancellationToken
+        );
+        await database.Repository.UpsertAsync(
+            CreateSave(
+                newestFavoriteId,
+                newestFavoritePath,
+                DateTimeOffset.Parse("2026-06-20T11:00:00Z")
+            ),
+            cancellationToken
+        );
+        await database.Repository.UpsertAsync(
+            CreateSave(
+                newestNonFavoriteId,
+                newestNonFavoritePath,
+                DateTimeOffset.Parse("2026-06-20T12:00:00Z")
+            ),
+            cancellationToken
+        );
+        Assert.True(
+            await database.Catalog.SetFavoriteAsync(oldestFavoriteId, true, cancellationToken)
+        );
+        Assert.True(
+            await database.Catalog.SetFavoriteAsync(newestFavoriteId, true, cancellationToken)
+        );
+
+        var result = await service.EnforceLimitAsync(
+            Settings(directory.FullName, maxUsageBytes: 70),
+            cancellationToken
+        );
+
+        Assert.Equal(2, result.DeletedCount);
+        Assert.Equal(60, result.Usage.UsageBytes);
+        Assert.Equal(2, result.Usage.RecordingCount);
+        Assert.Equal(40, result.Usage.FavoriteUsageBytes);
+        Assert.Equal(1, result.Usage.FavoriteRecordingCount);
+        Assert.True(File.Exists(newestNonFavoritePath));
+        Assert.False(File.Exists(olderNonFavoritePath));
+        Assert.False(File.Exists(oldestFavoritePath));
+        Assert.True(File.Exists(newestFavoritePath));
+        Assert.NotNull(
+            await database.Repository.GetByIdAsync(newestNonFavoriteId, cancellationToken)
+        );
+        Assert.Null(await database.Repository.GetByIdAsync(olderNonFavoriteId, cancellationToken));
+        Assert.Null(await database.Repository.GetByIdAsync(oldestFavoriteId, cancellationToken));
+        Assert.NotNull(await database.Repository.GetByIdAsync(newestFavoriteId, cancellationToken));
+    }
+
+    [Fact]
+    public async Task EnforceLimitKeepsOnlyRecordingWhenItExceedsLimit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var service = new RecordingStorageRetentionService(
+            database.Catalog,
+            NullLogger<RecordingStorageRetentionService>.Instance
+        );
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var id = Guid.Parse("A1143946-3329-449B-A6F8-301EC4CF5B83");
+        var path = WriteFile(directory.FullName, "newest.mp4", 120);
+        await database.Repository.UpsertAsync(CreateSave(id, path), cancellationToken);
+
+        var result = await service.EnforceLimitAsync(
+            Settings(directory.FullName, maxUsageBytes: 100),
+            cancellationToken
+        );
+
+        Assert.Equal(0, result.DeletedCount);
+        Assert.Equal(120, result.Usage.UsageBytes);
+        Assert.Equal(1, result.Usage.RecordingCount);
+        Assert.Empty(result.Errors);
+        Assert.True(File.Exists(path));
+        Assert.NotNull(await database.Repository.GetByIdAsync(id, cancellationToken));
+    }
+
+    [Fact]
+    public async Task EnforceLimitMakesPreviouslyNewestRecordingEligibleAfterAnotherIsCreated()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var service = new RecordingStorageRetentionService(
+            database.Catalog,
+            NullLogger<RecordingStorageRetentionService>.Instance
+        );
+        var directory = Directory.CreateDirectory(
+            Path.Combine(database.DirectoryPath, "Recordings")
+        );
+        var firstId = Guid.Parse("8A18FBC3-E8D0-4472-8824-EFCDE6A7D3E3");
+        var secondId = Guid.Parse("BD470F30-1427-4B65-96C2-EDB2E558E55C");
+        var firstPath = WriteFile(directory.FullName, "first.mp4", 120);
+        await database.Repository.UpsertAsync(
+            CreateSave(firstId, firstPath, DateTimeOffset.Parse("2026-06-20T10:00:00Z")),
+            cancellationToken
+        );
+
+        var firstCleanup = await service.EnforceLimitAsync(
+            Settings(directory.FullName, maxUsageBytes: 100),
+            cancellationToken
+        );
+
+        Assert.Equal(0, firstCleanup.DeletedCount);
+        Assert.True(File.Exists(firstPath));
+
+        var secondPath = WriteFile(directory.FullName, "second.mp4", 10);
+        await database.Repository.UpsertAsync(
+            CreateSave(secondId, secondPath, DateTimeOffset.Parse("2026-06-20T11:00:00Z")),
+            cancellationToken
+        );
+
+        var secondCleanup = await service.EnforceLimitAsync(
+            Settings(directory.FullName, maxUsageBytes: 100),
+            cancellationToken
+        );
+
+        Assert.Equal(1, secondCleanup.DeletedCount);
+        Assert.Equal(10, secondCleanup.Usage.UsageBytes);
+        Assert.Equal(1, secondCleanup.Usage.RecordingCount);
+        Assert.False(File.Exists(firstPath));
+        Assert.True(File.Exists(secondPath));
+        Assert.Null(await database.Repository.GetByIdAsync(firstId, cancellationToken));
+        Assert.NotNull(await database.Repository.GetByIdAsync(secondId, cancellationToken));
     }
 
     [Fact]

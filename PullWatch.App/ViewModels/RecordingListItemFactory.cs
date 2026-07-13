@@ -30,7 +30,8 @@ internal static class RecordingListItemFactory
             FormatResult(file),
             FormatActivityDuration(file),
             file.ModifiedAtUtc.ToLocalTime(),
-            file.SizeBytes
+            file.SizeBytes,
+            file.IsFavorite
         );
     }
 

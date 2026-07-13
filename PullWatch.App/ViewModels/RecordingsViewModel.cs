@@ -7,6 +7,7 @@ namespace PullWatch;
 public sealed partial class RecordingsViewModel : ObservableObject
 {
     private const string FailureNotificationId = "recorder-failure";
+    private const string FavoriteFailureNotificationId = "recording-favorite-failure";
     private const string TargetUnavailableMessage = "World of Warcraft is not running.";
     private const string VideoEncodingSetupFallbackMessage =
         "Video encoding needs to be tested before recording.";
@@ -44,7 +45,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         Func<Task> openRecordingsFolder,
         Func<RecordingListCategory, Task> saveSelectedRecordingCategory,
         NotificationCenterViewModel? notifications = null,
-        Func<int, bool, Task<bool>>? savePlaybackAudioState = null
+        Func<int, bool, Task<bool>>? savePlaybackAudioState = null,
+        Func<Guid, bool, Task>? setRecordingFavorite = null
     )
     {
         _recording = initialStatus.Recording;
@@ -70,9 +72,11 @@ public sealed partial class RecordingsViewModel : ObservableObject
                 ?? RecordingListCategory.ChallengeMode,
             loadRecordings,
             deleteRecording,
+            setRecordingFavorite ?? ((_, _) => Task.CompletedTask),
             confirmPermanentDelete,
             saveSelectedRecordingCategory,
-            message => CommandMessage = message
+            message => CommandMessage = message,
+            SetFavoriteFailureNotification
         );
         _library.PropertyChanged += OnRecordingLibraryPropertyChanged;
         ApplyStatus(initialStatus);
@@ -355,6 +359,12 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return ExecuteCommandAsync(_library.DeleteSelectedRecordingAsync);
     }
 
+    [RelayCommand]
+    private Task ToggleFavoriteAsync(RecordingListItem recording)
+    {
+        return _library.ToggleFavoriteAsync(recording);
+    }
+
     private void OnRecordingLibraryPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         OnPropertyChanged(args.PropertyName);
@@ -474,6 +484,20 @@ public sealed partial class RecordingsViewModel : ObservableObject
                 FailureMessage,
                 Dismissed: DismissFailure
             )
+        );
+    }
+
+    private void SetFavoriteFailureNotification(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            _notifications?.Dismiss(FavoriteFailureNotificationId);
+            return;
+        }
+
+        _notifications?.ShowOrUpdate(
+            FavoriteFailureNotificationId,
+            new NotificationContent(NotificationSeverity.Error, "Favourite update failed", message)
         );
     }
 

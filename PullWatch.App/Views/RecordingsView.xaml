@@ -4,6 +4,26 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:local="clr-namespace:PullWatch"
 >
+  <UserControl.Resources>
+    <Style
+      x:Key="FavoriteButtonStyle"
+      BasedOn="{StaticResource BaseButtonStyle}"
+      TargetType="Button"
+    >
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="-6,0,0,0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Geometry x:Key="FavoriteStarGeometry">
+      M 8,1.25 L 10.06,5.43 L 14.67,6.1 L 11.34,9.35 L 12.13,13.94 L 8,11.77 L 3.87,13.94 L 4.66,9.35 L 1.33,6.1 L 5.94,5.43 Z
+    </Geometry>
+  </UserControl.Resources>
+
   <Grid>
     <Grid>
       <Grid.RowDefinitions>
@@ -177,6 +197,7 @@
 
         <Grid Grid.Row="1" Margin="15,0,15,6">
           <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="34" />
             <ColumnDefinition Width="132" />
             <ColumnDefinition Width="{Binding PullNumberColumnWidth}" />
             <ColumnDefinition Width="*" />
@@ -187,7 +208,7 @@
           </Grid.ColumnDefinitions>
 
           <TextBlock
-            Grid.Column="0"
+            Grid.Column="1"
             FontSize="11"
             FontWeight="SemiBold"
             Style="{StaticResource SecondaryTextStyle}"
@@ -195,7 +216,7 @@
             TextWrapping="NoWrap"
           />
           <TextBlock
-            Grid.Column="1"
+            Grid.Column="2"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -205,7 +226,7 @@
             Visibility="{Binding IsPullNumberColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           />
           <TextBlock
-            Grid.Column="2"
+            Grid.Column="3"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -214,7 +235,7 @@
             TextWrapping="NoWrap"
           />
           <TextBlock
-            Grid.Column="3"
+            Grid.Column="4"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -224,7 +245,7 @@
             Visibility="{Binding IsContextColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           />
           <TextBlock
-            Grid.Column="4"
+            Grid.Column="5"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -234,7 +255,7 @@
             Visibility="{Binding IsResultColumnVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
           />
           <TextBlock
-            Grid.Column="5"
+            Grid.Column="6"
             Margin="14,0,0,0"
             FontSize="11"
             FontWeight="SemiBold"
@@ -261,6 +282,7 @@
             <DataTemplate>
               <Grid Margin="4" ToolTip="{Binding ToolTip}">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="34" />
                   <ColumnDefinition Width="132" />
                   <ColumnDefinition Width="{Binding PullNumberColumnWidth}" />
                   <ColumnDefinition Width="*" />
@@ -269,58 +291,94 @@
                   <ColumnDefinition Width="{Binding DurationColumnWidth}" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock
+                <Button
                   Grid.Column="0"
+                  AutomationProperties.Name="{Binding FavoriteAutomationName}"
+                  Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType={x:Type ListBox}}}"
+                  CommandParameter="{Binding}"
+                  Style="{StaticResource FavoriteButtonStyle}"
+                  ToolTip="{Binding FavoriteToolTip}"
+                >
+                  <Path
+                    Width="16"
+                    Height="16"
+                    Data="{StaticResource FavoriteStarGeometry}"
+                    Stretch="Uniform"
+                    StrokeLineJoin="Round"
+                    StrokeThickness="1.4"
+                  >
+                    <Path.Style>
+                      <Style TargetType="Path">
+                        <Setter Property="Fill" Value="Transparent" />
+                        <Setter Property="Stroke" Value="{StaticResource SecondaryTextBrush}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                            <Setter Property="Fill" Value="{StaticResource FavoriteBrush}" />
+                            <Setter Property="Stroke" Value="{StaticResource FavoriteBrush}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Path.Style>
+                  </Path>
+                </Button>
+                <TextBlock
+                  Grid.Column="1"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
                   Text="{Binding StartedAt}"
                   TextWrapping="NoWrap"
+                  VerticalAlignment="Center"
                 />
                 <TextBlock
-                  Grid.Column="1"
+                  Grid.Column="2"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
                   Text="{Binding PullNumber}"
                   TextWrapping="NoWrap"
+                  VerticalAlignment="Center"
                   Visibility="{Binding IsPullNumberVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                 />
                 <TextBlock
-                  Grid.Column="2"
+                  Grid.Column="3"
                   Margin="14,0,0,0"
                   FontWeight="SemiBold"
                   Text="{Binding Activity}"
                   TextTrimming="CharacterEllipsis"
                   TextWrapping="NoWrap"
-                />
-                <TextBlock
-                  Grid.Column="3"
-                  Margin="14,0,0,0"
-                  FontSize="12"
-                  Style="{StaticResource SecondaryTextStyle}"
-                  Text="{Binding Context}"
-                  TextTrimming="CharacterEllipsis"
-                  TextWrapping="NoWrap"
-                  Visibility="{Binding IsContextVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  VerticalAlignment="Center"
                 />
                 <TextBlock
                   Grid.Column="4"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
-                  Text="{Binding Result}"
+                  Text="{Binding Context}"
                   TextTrimming="CharacterEllipsis"
                   TextWrapping="NoWrap"
-                  Visibility="{Binding IsResultVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  VerticalAlignment="Center"
+                  Visibility="{Binding IsContextVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                 />
                 <TextBlock
                   Grid.Column="5"
                   Margin="14,0,0,0"
                   FontSize="12"
                   Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding Result}"
+                  TextTrimming="CharacterEllipsis"
+                  TextWrapping="NoWrap"
+                  VerticalAlignment="Center"
+                  Visibility="{Binding IsResultVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                />
+                <TextBlock
+                  Grid.Column="6"
+                  Margin="14,0,0,0"
+                  FontSize="12"
+                  Style="{StaticResource SecondaryTextStyle}"
                   Text="{Binding Duration}"
                   TextAlignment="Right"
                   TextWrapping="NoWrap"
+                  VerticalAlignment="Center"
                   Visibility="{Binding IsDurationVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                 />
               </Grid>

@@ -14,9 +14,17 @@ public sealed record PendingRecordingStorageLimitChange(
     int PendingGigabytes
 );
 
+public sealed record RecordingStorageCleanupConfirmation(
+    long CurrentUsageBytes,
+    int RecordingCount,
+    long PendingLimitBytes
+);
+
 public interface ISettingsDialogs
 {
     string? PickFolder(string title, string? initialDirectory);
+
+    bool ConfirmRecordingStorageCleanup(RecordingStorageCleanupConfirmation confirmation);
 
     PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
         PendingRecordingStorageLimitChange change

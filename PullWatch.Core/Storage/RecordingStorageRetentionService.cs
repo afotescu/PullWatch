@@ -31,27 +31,31 @@ public sealed class RecordingStorageRetentionService(
         ArgumentNullException.ThrowIfNull(settings);
 
         var recordings = await ListManagedRecordingsAsync(settings, cancellationToken);
-        var usageBytes = SumBytes(recordings);
+        var usage = CreateUsage(recordings);
+        var usageBytes = usage.UsageBytes;
+        var favoriteUsageBytes = usage.FavoriteUsageBytes;
+        var favoriteRecordingCount = usage.FavoriteRecordingCount;
         var maxUsageBytes = settings.Storage.MaxUsageBytes;
 
         if (maxUsageBytes <= RecordingStorageSettings.UnlimitedBytes || usageBytes <= maxUsageBytes)
         {
-            return new RecordingStorageCleanupResult(
-                new RecordingStorageUsage(usageBytes, recordings.Count),
-                0,
-                []
-            );
+            return new RecordingStorageCleanupResult(usage, 0, []);
         }
 
-        var targetBytes = GetCleanupTargetBytes(maxUsageBytes);
+        var targetBytes = RecordingStorageRetentionPolicy.GetCleanupTargetBytes(maxUsageBytes);
+        // Keep the newest recording even when it alone exceeds the storage limit.
+        var cleanupCandidates = recordings
+            .OrderByDescending(GetRetentionSortKey)
+            .ThenByDescending(recording => recording.ModifiedAtUtc)
+            .ThenBy(recording => recording.FilePath, StringComparer.OrdinalIgnoreCase)
+            .Skip(1)
+            .OrderBy(recording => recording.IsFavorite)
+            .ThenBy(GetRetentionSortKey)
+            .ThenBy(recording => recording.FilePath, StringComparer.OrdinalIgnoreCase);
         var deletedCount = 0;
         var errors = new List<Exception>();
 
-        foreach (
-            var recording in recordings
-                .OrderBy(GetRetentionSortKey)
-                .ThenBy(recording => recording.FilePath, StringComparer.OrdinalIgnoreCase)
-        )
+        foreach (var recording in cleanupCandidates)
         {
             if (usageBytes <= targetBytes)
             {
@@ -67,7 +71,15 @@ public sealed class RecordingStorageRetentionService(
                     settings.RecordingsDirectory!,
                     cancellationToken
                 );
-                usageBytes = Math.Max(0, usageBytes - Math.Max(0, recording.SizeBytes));
+                var sizeBytes = Math.Max(0, recording.SizeBytes);
+                usageBytes = Math.Max(0, usageBytes - sizeBytes);
+
+                if (recording.IsFavorite)
+                {
+                    favoriteUsageBytes = Math.Max(0, favoriteUsageBytes - sizeBytes);
+                    favoriteRecordingCount = Math.Max(0, favoriteRecordingCount - 1);
+                }
+
                 deletedCount++;
                 _logger.LogDebug(
                     "Deleted old managed recording {RecordingId} at {FilePath} ({SizeBytes} bytes) during storage retention cleanup",
@@ -103,7 +115,12 @@ public sealed class RecordingStorageRetentionService(
         }
 
         return new RecordingStorageCleanupResult(
-            new RecordingStorageUsage(usageBytes, Math.Max(0, recordings.Count - deletedCount)),
+            new RecordingStorageUsage(
+                usageBytes,
+                Math.Max(0, recordings.Count - deletedCount),
+                favoriteUsageBytes,
+                favoriteRecordingCount
+            ),
             deletedCount,
             errors
         );
@@ -127,7 +144,14 @@ public sealed class RecordingStorageRetentionService(
 
     private static RecordingStorageUsage CreateUsage(IReadOnlyList<RecordingCatalogFile> recordings)
     {
-        return new RecordingStorageUsage(SumBytes(recordings), recordings.Count);
+        var favoriteRecordings = recordings.Where(recording => recording.IsFavorite).ToArray();
+
+        return new RecordingStorageUsage(
+            SumBytes(recordings),
+            recordings.Count,
+            SumBytes(favoriteRecordings),
+            favoriteRecordings.Length
+        );
     }
 
     private static long SumBytes(IEnumerable<RecordingCatalogFile> recordings)
@@ -149,19 +173,18 @@ public sealed class RecordingStorageRetentionService(
         return total;
     }
 
-    private static long GetCleanupTargetBytes(long maxUsageBytes)
-    {
-        var cleanupMarginBytes = Math.Max(1, maxUsageBytes / 10);
-        return Math.Max(0, maxUsageBytes - cleanupMarginBytes);
-    }
-
     private static DateTimeOffset GetRetentionSortKey(RecordingCatalogFile recording)
     {
         return recording.StartedAtUtc ?? recording.EndedAtUtc ?? recording.ModifiedAtUtc;
     }
 }
 
-public sealed record RecordingStorageUsage(long UsageBytes, int RecordingCount);
+public sealed record RecordingStorageUsage(
+    long UsageBytes,
+    int RecordingCount,
+    long FavoriteUsageBytes = 0,
+    int FavoriteRecordingCount = 0
+);
 
 public sealed record RecordingStorageCleanupResult(
     RecordingStorageUsage Usage,

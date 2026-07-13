@@ -16,6 +16,39 @@ public sealed class WpfSettingsDialogs : ISettingsDialogs
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
     }
 
+    public bool ConfirmRecordingStorageCleanup(RecordingStorageCleanupConfirmation confirmation)
+    {
+        var recordingDescription =
+            confirmation.RecordingCount == 1
+                ? "1 PullWatch-managed recording"
+                : $"{confirmation.RecordingCount} PullWatch-managed recordings";
+        var result = WpfConfirmationDialog.Show(
+            Application.Current?.MainWindow,
+            new ConfirmationDialogRequest(
+                "PullWatch",
+                [
+                    $"Your {recordingDescription} currently use {FileSizeFormatter.Format(confirmation.CurrentUsageBytes)}, which is more than the new {FileSizeFormatter.Format(confirmation.PendingLimitBytes)} limit.",
+                    "Applying this limit will permanently delete the oldest recordings to reduce storage usage. Favourite recordings are deleted last.",
+                ],
+                [
+                    new ConfirmationDialogButton(
+                        "Apply and delete",
+                        ConfirmationDialogResult.Primary,
+                        ConfirmationDialogButtonKind.Destructive
+                    ),
+                    new ConfirmationDialogButton(
+                        "Cancel",
+                        ConfirmationDialogResult.Cancel,
+                        IsCancel: true
+                    ),
+                ],
+                Heading: "Delete old recordings?"
+            )
+        );
+
+        return result == ConfirmationDialogResult.Primary;
+    }
+
     public PendingRecordingStorageLimitChangeAction ConfirmPendingRecordingStorageLimitChange(
         PendingRecordingStorageLimitChange change
     )

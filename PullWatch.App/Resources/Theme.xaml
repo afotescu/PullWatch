@@ -19,6 +19,7 @@
   <SolidColorBrush x:Key="StatusNeutralBrush" Color="#7D8794" />
   <SolidColorBrush x:Key="HealthyBrush" Color="#66B58A" />
   <SolidColorBrush x:Key="FailureBrush" Color="#E06C75" />
+  <SolidColorBrush x:Key="FavoriteBrush" Color="#F2C14E" />
 
   <SolidColorBrush x:Key="ButtonHoverOverlayBrush" Color="#24FFFFFF" />
   <SolidColorBrush x:Key="ButtonPressedOverlayBrush" Color="#22000000" />
