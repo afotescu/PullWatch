@@ -622,7 +622,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         ) switch
         {
             PendingRecordingStorageLimitChangeAction.Apply =>
-                ApplyPendingRecordingStorageLimitChange(),
+                ApplyPendingRecordingStorageLimitChange(cleanupWarningAlreadyShown: true),
             PendingRecordingStorageLimitChangeAction.Discard =>
                 DiscardPendingRecordingStorageLimitChange(),
             _ => false,
@@ -630,6 +630,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public bool ApplyPendingRecordingStorageLimitChange()
+    {
+        return ApplyPendingRecordingStorageLimitChange(cleanupWarningAlreadyShown: false);
+    }
+
+    private bool ApplyPendingRecordingStorageLimitChange(bool cleanupWarningAlreadyShown)
     {
         if (!HasPendingRecordingStorageLimitChange)
         {
@@ -642,9 +647,41 @@ public sealed partial class SettingsViewModel : ObservableObject
             return false;
         }
 
+        if (
+            !cleanupWarningAlreadyShown
+            && GetPendingRecordingStorageCleanupConfirmation() is { } confirmation
+            && !_dialogs.ConfirmRecordingStorageCleanup(confirmation)
+        )
+        {
+            return false;
+        }
+
         SetRetryOnNextAutosave(SettingsSaveScope.Storage, shouldRetry: false);
         _ = QueueAutosaveAsync(SettingsSaveScope.Storage);
         return true;
+    }
+
+    private RecordingStorageCleanupConfirmation? GetPendingRecordingStorageCleanupConfirmation()
+    {
+        if (
+            !IsRecordingStorageLimitEnabled
+            || _recordingStoragePresenter.Status.UsageBytes is not { } usageBytes
+            || _recordingStoragePresenter.Status.RecordingCount <= 1
+        )
+        {
+            return null;
+        }
+
+        var pendingLimitBytes = RecordingStoragePresenter.GigabytesToBytes(
+            RecordingStorageLimitInputGigabytes
+        );
+        return usageBytes > pendingLimitBytes
+            ? new RecordingStorageCleanupConfirmation(
+                usageBytes,
+                _recordingStoragePresenter.Status.RecordingCount,
+                pendingLimitBytes
+            )
+            : null;
     }
 
     public bool DiscardPendingRecordingStorageLimitChange()
