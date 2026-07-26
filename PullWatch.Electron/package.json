@@ -5,12 +5,18 @@
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "private": true,
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint ."
+    "package": "npm run check && electron-forge package",
+    "make": "npm run check && electron-forge make",
+    "publish": "npm run check && electron-forge publish",
+    "lint": "eslint .",
+    "typecheck": "tsc --build",
+    "typecheck:watch": "tsc --build --watch --preserveWatchOutput",
+    "check": "npm run lint && npm run typecheck"
   },
   "keywords": [],
   "author": {
@@ -30,6 +36,7 @@
     "@electron/fuses": "^1.8.0",
     "@eslint/js": "^10.0.1",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^24.13.3",
     "@typescript-eslint/parser": "^8.65.0",
     "electron": "43.2.0",
     "eslint": "^10.8.0",

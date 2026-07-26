@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": ".vite/tsbuildinfo/preload.tsbuildinfo",
+    "lib": ["ES2025"],
+    "types": ["node"]
+  },
+  "include": ["src/preload/**/*.ts"]
+}

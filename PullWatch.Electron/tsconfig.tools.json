@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": ".vite/tsbuildinfo/tools.tsbuildinfo",
+    "lib": ["ES2025"],
+    "types": ["node"]
+  },
+  "include": [
+    "forge.config.ts",
+    "vite.main.config.ts",
+    "vite.preload.config.ts",
+    "vite.renderer.config.ts"
+  ]
+}
