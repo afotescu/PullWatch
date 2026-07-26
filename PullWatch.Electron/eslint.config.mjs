@@ -25,7 +25,17 @@ export default defineConfig(
       },
     },
     settings: {
-      'import-x/resolver-next': [createTypeScriptImportResolver()],
+      'import-x/resolver-next': [
+        createTypeScriptImportResolver({
+          noWarnOnMultipleProjects: true,
+          project: [
+            './tsconfig.main.json',
+            './tsconfig.preload.json',
+            './tsconfig.renderer.json',
+            './tsconfig.tools.json',
+          ],
+        }),
+      ],
     },
   },
 );

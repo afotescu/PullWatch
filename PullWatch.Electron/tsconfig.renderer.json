@@ -5,7 +5,10 @@
     "tsBuildInfoFile": ".vite/tsbuildinfo/renderer.tsbuildinfo",
     "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/renderer/*"]
+    }
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
 }
