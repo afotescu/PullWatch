@@ -26,6 +26,8 @@ public partial class RecordingPlayerControl : UserControl
     private const double VolumeStep = 0.1;
     private const double VolumeSliderScale = 100;
     private const double FallbackUnmuteVolume = 0.5;
+    private const int KeyboardSeekCommitDelayMilliseconds = 150;
+    private static readonly TimeSpan EndSeekInset = TimeSpan.FromMilliseconds(50);
 
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(
         nameof(Source),
@@ -49,6 +51,7 @@ public partial class RecordingPlayerControl : UserControl
     );
 
     private readonly DispatcherTimer _positionTimer;
+    private readonly DispatcherTimer _keyboardSeekTimer;
     private bool _hasMedia;
     private bool _hasPlaybackEnded;
     private bool _isPlaying;
@@ -61,6 +64,8 @@ public partial class RecordingPlayerControl : UserControl
     private double _volume = FallbackUnmuteVolume;
     private int _sourceLoadVersion;
     private TimeSpan? _pendingPlaybackStartPosition;
+    private TimeSpan? _pendingKeyboardSeekPosition;
+    private bool _pendingKeyboardSeekNeedsCommit;
     private string? _playbackErrorText;
     private bool _isDisposed;
 
@@ -74,6 +79,13 @@ public partial class RecordingPlayerControl : UserControl
             OnPositionTimerTick,
             Dispatcher
         );
+        _keyboardSeekTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(KeyboardSeekCommitDelayMilliseconds),
+            DispatcherPriority.Input,
+            OnKeyboardSeekTimerTick,
+            Dispatcher
+        );
+        _keyboardSeekTimer.Stop();
         PlaybackSlider.AddHandler(
             Thumb.DragStartedEvent,
             new DragStartedEventHandler(OnPlaybackThumbDragStarted)
@@ -185,13 +197,13 @@ public partial class RecordingPlayerControl : UserControl
         return true;
     }
 
-    public bool HandlePlaybackKey(Key key)
+    public bool HandlePlaybackKey(Key key, bool isRepeat = false)
     {
         return key switch
         {
             Key.Space => TogglePlayback(),
-            Key.Left => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds)),
-            Key.Right => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds)),
+            Key.Left => SeekByFromKeyboard(TimeSpan.FromSeconds(-SeekStepSeconds), isRepeat),
+            Key.Right => SeekByFromKeyboard(TimeSpan.FromSeconds(SeekStepSeconds), isRepeat),
             Key.Up => AdjustVolume(VolumeStep),
             Key.Down => AdjustVolume(-VolumeStep),
             Key.M => ToggleMuteFromKeyboard(),
@@ -427,9 +439,23 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnPositionTimerTick(object? sender, EventArgs eventArgs)
     {
-        if (!_isSeeking)
+        if (!_isSeeking && _pendingKeyboardSeekPosition is null)
         {
             UpdatePositionFromPlayer();
+        }
+    }
+
+    private void OnKeyboardSeekTimerTick(object? sender, EventArgs eventArgs)
+    {
+        _keyboardSeekTimer.Stop();
+        var position = _pendingKeyboardSeekPosition;
+        var needsCommit = _pendingKeyboardSeekNeedsCommit;
+        _pendingKeyboardSeekPosition = null;
+        _pendingKeyboardSeekNeedsCommit = false;
+
+        if (needsCommit && position is not null)
+        {
+            SeekTo(position.Value);
         }
     }
 
@@ -454,20 +480,26 @@ public partial class RecordingPlayerControl : UserControl
 
         eventArgs.Handled = eventArgs.Key switch
         {
-            Key.Left or Key.Down => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds)),
-            Key.Right or Key.Up => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds)),
-            Key.PageDown => SeekBy(TimeSpan.FromSeconds(-SeekStepSeconds * 2)),
-            Key.PageUp => SeekBy(TimeSpan.FromSeconds(SeekStepSeconds * 2)),
+            Key.Left or Key.Down => SeekByFromKeyboard(
+                TimeSpan.FromSeconds(-SeekStepSeconds),
+                eventArgs.IsRepeat
+            ),
+            Key.Right or Key.Up => SeekByFromKeyboard(
+                TimeSpan.FromSeconds(SeekStepSeconds),
+                eventArgs.IsRepeat
+            ),
+            Key.PageDown => SeekByFromKeyboard(
+                TimeSpan.FromSeconds(-SeekStepSeconds * 2),
+                eventArgs.IsRepeat
+            ),
+            Key.PageUp => SeekByFromKeyboard(
+                TimeSpan.FromSeconds(SeekStepSeconds * 2),
+                eventArgs.IsRepeat
+            ),
             Key.Home => SeekTo(TimeSpan.Zero),
             Key.End => SeekTo(GetDuration()),
             _ => false,
         };
-    }
-
-    private void OnPlaybackSliderPreviewMouseUp(object sender, MouseButtonEventArgs eventArgs)
-    {
-        SeekToSliderValue();
-        _isSeeking = false;
     }
 
     private void OnPlaybackThumbDragStarted(object sender, DragStartedEventArgs eventArgs)
@@ -563,6 +595,8 @@ public partial class RecordingPlayerControl : UserControl
 
     private bool SeekTo(TimeSpan requestedPosition)
     {
+        CancelPendingKeyboardSeek();
+
         if (!_hasMedia)
         {
             return false;
@@ -581,11 +615,48 @@ public partial class RecordingPlayerControl : UserControl
         }
         else
         {
-            MediaPlayer.Position = position;
+            MediaPlayer.Position =
+                position >= duration
+                    ? Clamp(duration - EndSeekInset, TimeSpan.Zero, duration)
+                    : position;
         }
 
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
         UpdatePlaybackTimeText(position, duration);
+        return true;
+    }
+
+    private bool SeekByFromKeyboard(TimeSpan offset, bool isRepeat)
+    {
+        if (!_hasMedia)
+        {
+            return false;
+        }
+
+        var duration = GetDuration();
+        if (duration <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        var origin =
+            _pendingKeyboardSeekPosition ?? _pendingPlaybackStartPosition ?? MediaPlayer.Position;
+        var position = Clamp(origin + offset, TimeSpan.Zero, duration);
+
+        if (isRepeat)
+        {
+            PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
+            UpdatePlaybackTimeText(position, duration);
+        }
+        else
+        {
+            SeekTo(position);
+        }
+
+        _pendingKeyboardSeekPosition = position;
+        _pendingKeyboardSeekNeedsCommit = isRepeat;
+        _keyboardSeekTimer.Stop();
+        _keyboardSeekTimer.Start();
         return true;
     }
 
@@ -661,6 +732,7 @@ public partial class RecordingPlayerControl : UserControl
     private void StopPlaybackCore()
     {
         CancelPendingSurfaceInteraction();
+        CancelPendingKeyboardSeek();
         _hasPlaybackEnded = false;
         _pendingPlaybackStartPosition = null;
         _positionTimer.Stop();
@@ -772,6 +844,7 @@ public partial class RecordingPlayerControl : UserControl
     private void ResetPlayerState(bool sourceAvailable)
     {
         CancelPendingSurfaceInteraction();
+        CancelPendingKeyboardSeek();
         _hasMedia = false;
         _hasPlaybackEnded = false;
         _pendingPlaybackStartPosition = null;
@@ -815,6 +888,13 @@ public partial class RecordingPlayerControl : UserControl
     private void CancelPendingSurfaceInteraction()
     {
         _surfacePressClickCount = 0;
+    }
+
+    private void CancelPendingKeyboardSeek()
+    {
+        _keyboardSeekTimer.Stop();
+        _pendingKeyboardSeekPosition = null;
+        _pendingKeyboardSeekNeedsCommit = false;
     }
 
     private static TimeSpan Clamp(TimeSpan value, TimeSpan minimum, TimeSpan maximum)

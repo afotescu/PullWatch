@@ -156,7 +156,7 @@ public partial class RecordingsView : UserControl, IDisposable
             return;
         }
 
-        eventArgs.Handled = RecordingPlayer.HandlePlaybackKey(eventArgs.Key);
+        eventArgs.Handled = RecordingPlayer.HandlePlaybackKey(eventArgs.Key, eventArgs.IsRepeat);
     }
 
     private void OnPlayerFullScreenRequested(object? sender, EventArgs eventArgs)
