@@ -1,17 +1,18 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
-public sealed class FfmpegEncoderTestService(
-    Func<nint> getWindowHandle,
-    ILogger<FfmpegEncoderTestService> logger
-)
+public sealed class FfmpegEncoderTestService(ILogger<FfmpegEncoderTestService> logger)
 {
     private static readonly TimeSpan TestDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(12);
+    private static readonly VideoCaptureSize TestFrameSize = new(1920, 1080);
 
     public async Task<IReadOnlyList<VideoEncoderTestResult>> TestAsync(
         PullWatchSettings settings,
@@ -27,34 +28,34 @@ public sealed class FfmpegEncoderTestService(
         CancellationToken cancellationToken
     )
     {
+        return await TestAsync(
+            settings,
+            FfmpegToolPaths.ResolveFfmpegPath(),
+            progress,
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyList<VideoEncoderTestResult>> TestAsync(
+        PullWatchSettings settings,
+        string ffmpegPath,
+        IProgress<VideoEncoderTestProgress>? progress,
+        CancellationToken cancellationToken
+    )
+    {
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ffmpegPath);
 
         var testTimestamp = Stopwatch.GetTimestamp();
-        var windowHandle = getWindowHandle();
-        if (windowHandle == nint.Zero)
-        {
-            logger.LogWarning(
-                "FFmpeg video encoder test could not start because no capture window was available"
-            );
-            throw new InvalidOperationException("Could not find the PullWatch window to capture.");
-        }
-
-        var captureSize = WowWindowCaptureSizeDetector.GetCaptureSize(windowHandle);
-        var outputSize = FfmpegVideoOutputSizeCalculator.CalculateOutputSize(
-            captureSize,
-            settings.Video.Scaling
-        );
-        var ffmpegPath = FfmpegToolPaths.ResolveFfmpegPath();
         var results = new List<VideoEncoderTestResult>();
         var profiles = GetTestProfiles();
 
         logger.LogInformation(
-            "Starting FFmpeg video encoder test with {ProfileCount} profiles, capture {CaptureWidth}x{CaptureHeight}, output {OutputWidth}x{OutputHeight}, FFmpeg path {FfmpegPath}",
+            "Starting FFmpeg video encoder test with {ProfileCount} profiles, synthetic source testsrc2 {Width}x{Height} at {FrameRate} FPS, FFmpeg path {FfmpegPath}",
             profiles.Count,
-            captureSize.Width,
-            captureSize.Height,
-            outputSize.Width,
-            outputSize.Height,
+            TestFrameSize.Width,
+            TestFrameSize.Height,
+            settings.Video.FrameRate,
             ffmpegPath
         );
 
@@ -80,11 +81,8 @@ public sealed class FfmpegEncoderTestService(
                 );
                 var result = await TestProviderAsync(
                     ffmpegPath,
-                    windowHandle,
                     settings,
                     profile,
-                    captureSize,
-                    outputSize,
                     cancellationToken
                 );
                 LogTestResult(profile, result);
@@ -141,20 +139,18 @@ public sealed class FfmpegEncoderTestService(
         }
 
         logger.LogInformation(
-            "FFmpeg video encoder profile unavailable: {VideoEncoder} ({VideoEncoderName}); {ResultMessage}",
+            "FFmpeg video encoder profile unavailable: {VideoEncoder} ({VideoEncoderName}); classification={FailureKind}; {ResultMessage}",
             profile.DisplayName,
             result.EncoderName ?? profile.EncoderName,
+            result.FailureKind,
             result.Message
         );
     }
 
-    private static async Task<VideoEncoderTestResult> TestProviderAsync(
+    private async Task<VideoEncoderTestResult> TestProviderAsync(
         string ffmpegPath,
-        nint windowHandle,
         PullWatchSettings settings,
         FfmpegVideoEncoderProfile profile,
-        VideoCaptureSize captureSize,
-        VideoCaptureSize outputSize,
         CancellationToken cancellationToken
     )
     {
@@ -179,7 +175,7 @@ public sealed class FfmpegEncoderTestService(
         {
             videoEncoderOptions = FfmpegEncoderOptionsFactory.CreateVideoEncoderOptions(
                 testSettings,
-                outputSize,
+                TestFrameSize,
                 encoderCapabilities
             );
         }
@@ -190,43 +186,105 @@ public sealed class FfmpegEncoderTestService(
                 profile.Codec,
                 profile.Provider,
                 null,
-                SimplifyMessage(exception.Message)
+                SimplifyMessage(exception.Message),
+                VideoEncoderTestFailureKind.EncoderUnavailable
             );
         }
 
         var outputPath = CreateTestOutputPath(profile);
+        var deleteOutput = true;
         try
         {
-            var startInfo = FfmpegRecordingService.CreateStartInfo(
+            var startInfo = CreateSyntheticTestStartInfo(
                 ffmpegPath,
-                windowHandle,
                 testSettings,
-                captureSize,
-                outputSize,
                 outputPath,
-                null,
                 videoEncoderOptions,
-                null,
                 TestDuration
             );
-            var recordingResult = await ExternalProcessRunner.RunAsync(
-                startInfo,
-                TestTimeout,
-                cancellationToken,
-                $"{Path.GetFileName(startInfo.FileName)} test"
+            var requestedFrameCount = GetRequestedFrameCount(testSettings.Video.FrameRate);
+            logger.LogInformation(
+                "FFmpeg calibration launch for {VideoEncoder} ({VideoEncoderName}): executable={FfmpegPath}; arguments(JSON)={FfmpegArguments}; input=lavfi testsrc2; dimensions={Width}x{Height}; frame rate={FrameRate}; requested frames={RequestedFrameCount}; audio=false; temporary output={OutputPath}; requested duration={RequestedDuration}; timeout={Timeout}",
+                profile.DisplayName,
+                profile.EncoderName,
+                Path.GetFullPath(startInfo.FileName),
+                JsonSerializer.Serialize(startInfo.ArgumentList.ToArray()),
+                TestFrameSize.Width,
+                TestFrameSize.Height,
+                testSettings.Video.FrameRate,
+                requestedFrameCount,
+                outputPath,
+                TestDuration,
+                TestTimeout
             );
+            var recordingResult = await FfmpegCalibrationProcessRunner.RunAsync(
+                startInfo,
+                outputPath,
+                TestDuration,
+                TestTimeout,
+                cancellationToken
+            );
+            deleteOutput = recordingResult.ExitCode is not null;
+            LogProcessDiagnostics(
+                profile,
+                startInfo,
+                testSettings.Video.FrameRate,
+                outputPath,
+                recordingResult
+            );
+
+            if (recordingResult.CallerCancellationFired)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (recordingResult.TimeoutFired)
+            {
+                if (recordingResult.ExitCode is not null)
+                {
+                    await LogFailedProcessOutputAsync(
+                        ffmpegPath,
+                        outputPath,
+                        profile,
+                        TestFrameSize,
+                        cancellationToken
+                    );
+                }
+
+                var failureKind = ClassifyTimeout(recordingResult);
+                return VideoEncoderTestResult.Unavailable(
+                    profile.Codec,
+                    profile.Provider,
+                    videoEncoderOptions.EncoderName,
+                    CreateTimeoutFailureMessage(failureKind, recordingResult),
+                    failureKind
+                );
+            }
+
             if (recordingResult.ExitCode != 0)
             {
+                await LogFailedProcessOutputAsync(
+                    ffmpegPath,
+                    outputPath,
+                    profile,
+                    TestFrameSize,
+                    cancellationToken
+                );
+                var failureKind = ClassifyRecordingFailure(
+                    recordingResult.StandardErrorTail,
+                    recordingResult.StandardOutputTail
+                );
                 return VideoEncoderTestResult.Unavailable(
                     profile.Codec,
                     profile.Provider,
                     videoEncoderOptions.EncoderName,
                     CreateRecordingFailureMessage(
                         profile.Provider,
-                        recordingResult.StandardError,
-                        recordingResult.StandardOutput,
-                        recordingResult.ExitCode
-                    )
+                        recordingResult.StandardErrorTail,
+                        recordingResult.StandardOutputTail,
+                        recordingResult.ExitCode ?? -1
+                    ),
+                    failureKind
                 );
             }
 
@@ -234,20 +292,25 @@ public sealed class FfmpegEncoderTestService(
                 ffmpegPath,
                 outputPath,
                 profile.Codec,
-                outputSize,
+                TestFrameSize,
                 TestDuration,
                 cancellationToken
             );
             if (!validation.IsValid)
             {
+                LogOutputValidation(profile, outputPath, validation);
                 return VideoEncoderTestResult.Unavailable(
                     profile.Codec,
                     profile.Provider,
                     videoEncoderOptions.EncoderName,
-                    validation.Message
+                    validation.Message,
+                    validation.FileExists
+                        ? VideoEncoderTestFailureKind.OutputFileInvalid
+                        : VideoEncoderTestFailureKind.OutputFileMissing
                 );
             }
 
+            LogOutputValidation(profile, outputPath, validation);
             return VideoEncoderTestResult.Available(
                 profile.Codec,
                 profile.Provider,
@@ -258,6 +321,27 @@ public sealed class FfmpegEncoderTestService(
                 validation.Duration
             );
         }
+        catch (FfmpegEncoderTestValidationException exception)
+            when (exception.InnerException is TimeoutException)
+        {
+            var file = GetFileSnapshot(outputPath);
+            logger.LogWarning(
+                "FFmpeg calibration output validation timed out for {VideoEncoder} ({VideoEncoderName}): path={OutputPath}; exists={FileExists}; size={FileSize} bytes; timeout={Timeout}",
+                profile.DisplayName,
+                profile.EncoderName,
+                outputPath,
+                file.Exists,
+                file.Size,
+                TestTimeout
+            );
+            return VideoEncoderTestResult.Unavailable(
+                profile.Codec,
+                profile.Provider,
+                videoEncoderOptions.EncoderName,
+                SimplifyMessage(exception.Message),
+                VideoEncoderTestFailureKind.OutputValidationTimedOut
+            );
+        }
         catch (Exception exception)
             when (exception
                     is Win32Exception
@@ -266,22 +350,102 @@ public sealed class FfmpegEncoderTestService(
                         or TimeoutException
             )
         {
+            var failureKind = exception is Win32Exception { NativeErrorCode: 2 }
+                ? VideoEncoderTestFailureKind.EncoderUnavailable
+                : VideoEncoderTestFailureKind.EncoderInitializationFailed;
             return VideoEncoderTestResult.Unavailable(
                 profile.Codec,
                 profile.Provider,
                 videoEncoderOptions.EncoderName,
-                SimplifyMessage(exception.Message)
+                SimplifyMessage(exception.Message),
+                failureKind
             );
         }
         finally
         {
-            TryDelete(outputPath);
+            if (deleteOutput)
+            {
+                TryDelete(outputPath);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Preserving FFmpeg calibration output because the process did not exit: {OutputPath}",
+                    outputPath
+                );
+            }
         }
     }
 
     internal static IReadOnlyList<FfmpegVideoEncoderProfile> GetTestProfiles()
     {
         return FfmpegEncoderOptionsFactory.GetCalibrationProfiles();
+    }
+
+    internal static ProcessStartInfo CreateSyntheticTestStartInfo(
+        string ffmpegPath,
+        PullWatchSettings settings,
+        string outputPath,
+        FfmpegVideoEncoderOptions videoEncoderOptions,
+        TimeSpan testDuration
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ffmpegPath);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        ArgumentNullException.ThrowIfNull(videoEncoderOptions);
+
+        var startInfo = new ProcessStartInfo(ffmpegPath)
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            CreateNoWindow = true,
+        };
+        var arguments = startInfo.ArgumentList;
+        arguments.Add("-hide_banner");
+        arguments.Add("-nostats");
+        arguments.Add("-loglevel");
+        arguments.Add("info");
+        arguments.Add("-stats_period");
+        arguments.Add("0.5");
+        arguments.Add("-progress");
+        arguments.Add("pipe:1");
+        arguments.Add("-y");
+        arguments.Add("-f");
+        arguments.Add("lavfi");
+        arguments.Add("-i");
+        arguments.Add(
+            $"testsrc2=size={TestFrameSize.Width}x{TestFrameSize.Height}:rate={settings.Video.FrameRate}"
+        );
+        arguments.Add("-map");
+        arguments.Add("0:v:0");
+        arguments.Add("-an");
+
+        foreach (var argument in videoEncoderOptions.CreateArguments())
+        {
+            arguments.Add(argument);
+        }
+
+        arguments.Add("-pix_fmt");
+        arguments.Add(
+            videoEncoderOptions.Provider == VideoEncoderProvider.Software ? "yuv420p" : "nv12"
+        );
+        arguments.Add("-frames:v");
+        arguments.Add(
+            GetRequestedFrameCount(settings.Video.FrameRate, testDuration)
+                .ToString(CultureInfo.InvariantCulture)
+        );
+        arguments.Add(outputPath);
+        return startInfo;
+    }
+
+    private static int GetRequestedFrameCount(int frameRate, TimeSpan testDuration = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameRate);
+        var duration = testDuration == default ? TestDuration : testDuration;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
+        return checked((int)Math.Ceiling(frameRate * duration.TotalSeconds));
     }
 
     private static string CreateTestOutputPath(FfmpegVideoEncoderProfile profile)
@@ -294,6 +458,228 @@ public sealed class FfmpegEncoderTestService(
         );
     }
 
+    private async Task LogFailedProcessOutputAsync(
+        string ffmpegPath,
+        string outputPath,
+        FfmpegVideoEncoderProfile profile,
+        VideoCaptureSize outputSize,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var validation = await ValidateOutputAsync(
+                ffmpegPath,
+                outputPath,
+                profile.Codec,
+                outputSize,
+                TestDuration,
+                cancellationToken
+            );
+            LogOutputValidation(profile, outputPath, validation);
+        }
+        catch (FfmpegEncoderTestValidationException exception)
+            when (exception.InnerException is TimeoutException)
+        {
+            var file = GetFileSnapshot(outputPath);
+            logger.LogWarning(
+                "FFmpeg calibration diagnostic output validation timed out for {VideoEncoder} ({VideoEncoderName}): path={OutputPath}; exists={FileExists}; size={FileSize} bytes; timeout={Timeout}",
+                profile.DisplayName,
+                profile.EncoderName,
+                outputPath,
+                file.Exists,
+                file.Size,
+                TestTimeout
+            );
+        }
+        catch (FfmpegEncoderTestValidationException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "FFmpeg calibration diagnostic output validation failed for {VideoEncoder} ({VideoEncoderName}): {OutputPath}",
+                profile.DisplayName,
+                profile.EncoderName,
+                outputPath
+            );
+        }
+    }
+
+    private void LogProcessDiagnostics(
+        FfmpegVideoEncoderProfile profile,
+        ProcessStartInfo startInfo,
+        int frameRate,
+        string outputPath,
+        FfmpegCalibrationProcessResult result
+    )
+    {
+        var finalFile = GetFileSnapshot(outputPath);
+        var diagnostics = new StringBuilder();
+        diagnostics.AppendLine($"FFmpeg calibration process diagnostics: {profile.DisplayName}");
+        diagnostics.AppendLine($"Encoder: {profile.EncoderName}");
+        diagnostics.AppendLine($"Executable path: {Path.GetFullPath(startInfo.FileName)}");
+        diagnostics.AppendLine(
+            $"Arguments (JSON array): {JsonSerializer.Serialize(startInfo.ArgumentList.ToArray())}"
+        );
+        diagnostics.AppendLine($"Process id: {result.ProcessId}");
+        diagnostics.AppendLine($"UTC start time: {result.StartTimeUtc:O}");
+        diagnostics.AppendLine("Input source: lavfi testsrc2 (synthetic; no capture target)");
+        diagnostics.AppendLine(
+            $"Resolved dimensions: {TestFrameSize.Width}x{TestFrameSize.Height}; frame rate: {frameRate}; requested frames: {GetRequestedFrameCount(frameRate)}"
+        );
+        diagnostics.AppendLine("Audio capture enabled: false");
+        diagnostics.AppendLine(
+            $"Redirected streams: stdin={startInfo.RedirectStandardInput}; stdout={startInfo.RedirectStandardOutput}; stderr={startInfo.RedirectStandardError}"
+        );
+        diagnostics.AppendLine("FFmpeg stdout continuously captured: true");
+        diagnostics.AppendLine("FFmpeg stderr continuously captured: true");
+        diagnostics.AppendLine($"Latest FFmpeg progress: {result.LatestProgress ?? "(none)"}");
+        diagnostics.AppendLine($"Latest encoded frame count: {result.LatestFrameCount}");
+        diagnostics.AppendLine($"Any frames received: {result.AnyFramesReceived}");
+        diagnostics.AppendLine($"Temporary output path: {outputPath}");
+        diagnostics.AppendLine(
+            $"Output observed during test: exists={result.OutputFileObserved}; maximum size={result.MaximumObservedOutputFileSize} bytes"
+        );
+        diagnostics.AppendLine($"Requested test duration: {TestDuration}; timeout: {TestTimeout}");
+        diagnostics.AppendLine(
+            $"Graceful shutdown attempted: {result.GracefulShutdownAttempted}; q sent: {result.QSent}; stdin closed: {result.StdinClosed}; exited after graceful shutdown: {result.ExitedAfterGracefulShutdown}; error: {result.GracefulShutdownError ?? "(none)"}"
+        );
+        diagnostics.AppendLine($"Timeout cancellation fired: {result.TimeoutFired}");
+        diagnostics.AppendLine(
+            $"Kill(entireProcessTree: true) called: {result.KillEntireProcessTreeCalled}; exited after kill: {result.ExitedAfterKill}; error: {result.KillError ?? "(none)"}"
+        );
+        diagnostics.AppendLine(
+            $"Exit code: {result.ExitCode?.ToString() ?? "(unavailable)"}; elapsed: {result.Elapsed}"
+        );
+        diagnostics.AppendLine(
+            $"Output after process exit: exists={finalFile.Exists}; size={finalFile.Size} bytes"
+        );
+        diagnostics.AppendLine("Last useful FFmpeg stderr (up to 100 lines):");
+        diagnostics.Append(
+            string.IsNullOrWhiteSpace(result.StandardErrorTail)
+                ? "(none)"
+                : result.StandardErrorTail
+        );
+
+        logger.LogInformation("{FfmpegCalibrationDiagnostics}", diagnostics.ToString());
+    }
+
+    private void LogOutputValidation(
+        FfmpegVideoEncoderProfile profile,
+        string outputPath,
+        FfmpegTestOutputValidation validation
+    )
+    {
+        logger.LogInformation(
+            "FFmpeg calibration output validation for {VideoEncoder} ({VideoEncoderName}): valid={IsValid}; path={OutputPath}; exists={FileExists}; size={FileSize} bytes; duration={DurationSeconds}s; resolution={Width}x{Height}; codec={CodecName}; streams={StreamInformation}; message={ValidationMessage}",
+            profile.DisplayName,
+            profile.EncoderName,
+            validation.IsValid,
+            outputPath,
+            validation.FileExists,
+            validation.FileSize,
+            validation.Duration,
+            validation.Width,
+            validation.Height,
+            validation.CodecName ?? "(unknown)",
+            validation.StreamInformation ?? "(unknown)",
+            validation.Message
+        );
+    }
+
+    internal static VideoEncoderTestFailureKind ClassifyTimeout(
+        FfmpegCalibrationProcessResult result
+    )
+    {
+        if (
+            result.KillEntireProcessTreeCalled
+            && !result.ExitedAfterKill
+            && !result.ExitedAfterGracefulShutdown
+        )
+        {
+            return VideoEncoderTestFailureKind.ProcessKillFailed;
+        }
+
+        if (result.GracefulShutdownAttempted && !result.QSent)
+        {
+            return VideoEncoderTestFailureKind.GracefulShutdownFailed;
+        }
+
+        if (!result.AnyFramesReceived)
+        {
+            return VideoEncoderTestFailureKind.NoFramesReceived;
+        }
+
+        return result.ReachedRequestedDuration
+            ? VideoEncoderTestFailureKind.EncodedSuccessfullyButDidNotExit
+            : VideoEncoderTestFailureKind.FfmpegTimedOutWhileActivelyEncoding;
+    }
+
+    internal static VideoEncoderTestFailureKind ClassifyRecordingFailure(
+        string standardError,
+        string standardOutput
+    )
+    {
+        var diagnostic = $"{standardError}{Environment.NewLine}{standardOutput}";
+        if (
+            ContainsAny(
+                diagnostic,
+                "unknown encoder",
+                "encoder not found",
+                "requested encoder is not available"
+            )
+        )
+        {
+            return VideoEncoderTestFailureKind.EncoderUnavailable;
+        }
+
+        if (
+            diagnostic.Contains("gfxcapture", StringComparison.OrdinalIgnoreCase)
+            && ContainsAny(diagnostic, "could not", "error", "failed", "invalid", "not supported")
+        )
+        {
+            return VideoEncoderTestFailureKind.CaptureInitializationFailed;
+        }
+
+        return VideoEncoderTestFailureKind.EncoderInitializationFailed;
+    }
+
+    private static string CreateTimeoutFailureMessage(
+        VideoEncoderTestFailureKind failureKind,
+        FfmpegCalibrationProcessResult result
+    )
+    {
+        var detail = failureKind switch
+        {
+            VideoEncoderTestFailureKind.NoFramesReceived =>
+                "no frames received; the synthetic test source did not deliver a frame before the test timeout",
+            VideoEncoderTestFailureKind.FfmpegTimedOutWhileActivelyEncoding =>
+                $"FFmpeg timed out while actively encoding; latest frame {result.LatestFrameCount}, output time {result.LatestOutTime}",
+            VideoEncoderTestFailureKind.EncodedSuccessfullyButDidNotExit =>
+                $"FFmpeg reached the requested duration but did not exit; latest frame {result.LatestFrameCount}, output time {result.LatestOutTime}",
+            VideoEncoderTestFailureKind.GracefulShutdownFailed =>
+                $"graceful shutdown failed; q could not be sent: {result.GracefulShutdownError ?? "no error was reported"}",
+            VideoEncoderTestFailureKind.ProcessKillFailed =>
+                $"process kill failed; FFmpeg did not exit after Kill(entireProcessTree: true): {result.KillError ?? "no error was reported"}",
+            _ => $"FFmpeg did not finish within {TestTimeout}",
+        };
+
+        return $"{detail}.";
+    }
+
+    private static (bool Exists, long Size) GetFileSnapshot(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists ? (true, file.Length) : (false, 0);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return (false, 0);
+        }
+    }
+
     internal static async Task<FfmpegTestOutputValidation> ValidateOutputAsync(
         string ffmpegPath,
         string outputPath,
@@ -303,9 +689,14 @@ public sealed class FfmpegEncoderTestService(
         CancellationToken cancellationToken
     )
     {
-        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+        var file = GetFileSnapshot(outputPath);
+        if (!file.Exists || file.Size == 0)
         {
-            return FfmpegTestOutputValidation.Invalid("No output file was produced.");
+            return FfmpegTestOutputValidation.Invalid(
+                "No output file was produced.",
+                file.Exists,
+                file.Size
+            );
         }
 
         var startInfo = new ProcessStartInfo(ffmpegPath);
@@ -314,7 +705,7 @@ public sealed class FfmpegEncoderTestService(
             {
                 "-hide_banner",
                 "-v",
-                "error",
+                "info",
                 "-xerror",
                 "-i",
                 outputPath,
@@ -358,16 +749,108 @@ public sealed class FfmpegEncoderTestService(
         if (result.ExitCode != 0)
         {
             return FfmpegTestOutputValidation.Invalid(
-                CreateFailureMessage("ffmpeg validation failed", result)
+                CreateFailureMessage("ffmpeg validation failed", result),
+                file.Exists,
+                file.Size,
+                GetStreamInformation(result.StandardError)
+            );
+        }
+
+        var metadata = ParseOutputMetadata(result.StandardError);
+        if (
+            metadata.CodecName is null
+            || metadata.Width <= 0
+            || metadata.Height <= 0
+            || metadata.Duration <= 0
+        )
+        {
+            return FfmpegTestOutputValidation.Invalid(
+                "ffmpeg validation could decode the output but could not read complete video metadata.",
+                file.Exists,
+                file.Size,
+                metadata.StreamInformation
+            );
+        }
+
+        var expectedCodec = FormatCodecName(codec);
+        if (
+            !metadata.CodecName.Equals(expectedCodec, StringComparison.OrdinalIgnoreCase)
+            || metadata.Width != outputSize.Width
+            || metadata.Height != outputSize.Height
+            || metadata.Duration < expectedDuration.TotalSeconds - 0.25
+        )
+        {
+            return FfmpegTestOutputValidation.Invalid(
+                $"ffmpeg validation found {metadata.CodecName}, {metadata.Width}x{metadata.Height}, {metadata.Duration:0.###}s; expected {expectedCodec}, {outputSize.Width}x{outputSize.Height}, approximately {expectedDuration.TotalSeconds:0.###}s.",
+                file.Exists,
+                file.Size,
+                metadata.StreamInformation,
+                metadata.CodecName,
+                metadata.Width,
+                metadata.Height,
+                metadata.Duration
             );
         }
 
         return FfmpegTestOutputValidation.Valid(
-            FormatCodecName(codec),
-            outputSize.Width,
-            outputSize.Height,
-            expectedDuration.TotalSeconds
+            metadata.CodecName,
+            metadata.Width,
+            metadata.Height,
+            metadata.Duration,
+            file.Size,
+            metadata.StreamInformation
         );
+    }
+
+    internal static FfmpegOutputMetadata ParseOutputMetadata(string standardError)
+    {
+        var durationMatch = Regex.Match(
+            standardError,
+            @"Duration:\s*(?<hours>\d{2}):(?<minutes>\d{2}):(?<seconds>\d{2}(?:\.\d+)?)",
+            RegexOptions.CultureInvariant
+        );
+        var videoLine = ReadMeaningfulLines(standardError)
+            .FirstOrDefault(line => line.Contains("Video:", StringComparison.OrdinalIgnoreCase));
+        if (!durationMatch.Success || videoLine is null)
+        {
+            return new FfmpegOutputMetadata(null, 0, 0, 0, GetStreamInformation(standardError));
+        }
+
+        var videoMatch = Regex.Match(
+            videoLine,
+            @"Video:\s*(?<codec>[^,\s(]+).*?(?<width>\d{2,5})x(?<height>\d{2,5})(?:[,\s])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+        );
+        if (!videoMatch.Success)
+        {
+            return new FfmpegOutputMetadata(null, 0, 0, 0, GetStreamInformation(standardError));
+        }
+
+        var duration =
+            TimeSpan.FromHours(int.Parse(durationMatch.Groups["hours"].Value))
+            + TimeSpan.FromMinutes(int.Parse(durationMatch.Groups["minutes"].Value))
+            + TimeSpan.FromSeconds(
+                double.Parse(
+                    durationMatch.Groups["seconds"].Value,
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            );
+
+        return new FfmpegOutputMetadata(
+            videoMatch.Groups["codec"].Value,
+            int.Parse(videoMatch.Groups["width"].Value),
+            int.Parse(videoMatch.Groups["height"].Value),
+            duration.TotalSeconds,
+            GetStreamInformation(standardError)
+        );
+    }
+
+    private static string? GetStreamInformation(string standardError)
+    {
+        var streams = ReadMeaningfulLines(standardError)
+            .Where(line => line.StartsWith("Stream #", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return streams.Length == 0 ? null : string.Join(" | ", streams);
     }
 
     private static string CreateFailureMessage(string prefix, ExternalProcessResult result)
@@ -536,20 +1019,33 @@ public sealed class FfmpegEncoderTestService(
 internal sealed class FfmpegEncoderTestValidationException(string message, Exception innerException)
     : Exception(message, innerException);
 
+internal sealed record FfmpegOutputMetadata(
+    string? CodecName,
+    int Width,
+    int Height,
+    double Duration,
+    string? StreamInformation
+);
+
 internal sealed record FfmpegTestOutputValidation(
     bool IsValid,
     string Message,
     string? CodecName,
     int Width,
     int Height,
-    double Duration
+    double Duration,
+    bool FileExists,
+    long FileSize,
+    string? StreamInformation
 )
 {
     public static FfmpegTestOutputValidation Valid(
         string codecName,
         int width,
         int height,
-        double duration
+        double duration,
+        long fileSize,
+        string? streamInformation
     )
     {
         return new FfmpegTestOutputValidation(
@@ -558,14 +1054,52 @@ internal sealed record FfmpegTestOutputValidation(
             codecName,
             width,
             height,
-            duration
+            duration,
+            true,
+            fileSize,
+            streamInformation
         );
     }
 
-    public static FfmpegTestOutputValidation Invalid(string message)
+    public static FfmpegTestOutputValidation Invalid(
+        string message,
+        bool fileExists,
+        long fileSize,
+        string? streamInformation = null,
+        string? codecName = null,
+        int width = 0,
+        int height = 0,
+        double duration = 0
+    )
     {
-        return new FfmpegTestOutputValidation(false, message, null, 0, 0, 0);
+        return new FfmpegTestOutputValidation(
+            false,
+            message,
+            codecName,
+            width,
+            height,
+            duration,
+            fileExists,
+            fileSize,
+            streamInformation
+        );
     }
+}
+
+public enum VideoEncoderTestFailureKind
+{
+    None,
+    EncoderUnavailable,
+    EncoderInitializationFailed,
+    CaptureInitializationFailed,
+    NoFramesReceived,
+    FfmpegTimedOutWhileActivelyEncoding,
+    EncodedSuccessfullyButDidNotExit,
+    GracefulShutdownFailed,
+    ProcessKillFailed,
+    OutputFileMissing,
+    OutputFileInvalid,
+    OutputValidationTimedOut,
 }
 
 public sealed record VideoEncoderTestResult(
@@ -576,7 +1110,8 @@ public sealed record VideoEncoderTestResult(
     string Message,
     int Width,
     int Height,
-    double DurationSeconds
+    double DurationSeconds,
+    VideoEncoderTestFailureKind FailureKind = VideoEncoderTestFailureKind.None
 )
 {
     public static VideoEncoderTestResult Available(
@@ -597,7 +1132,8 @@ public sealed record VideoEncoderTestResult(
             message,
             width,
             height,
-            durationSeconds
+            durationSeconds,
+            VideoEncoderTestFailureKind.None
         );
     }
 
@@ -605,10 +1141,22 @@ public sealed record VideoEncoderTestResult(
         VideoCodec codec,
         VideoEncoderProvider provider,
         string? encoderName,
-        string message
+        string message,
+        VideoEncoderTestFailureKind failureKind =
+            VideoEncoderTestFailureKind.EncoderInitializationFailed
     )
     {
-        return new VideoEncoderTestResult(codec, provider, encoderName, false, message, 0, 0, 0);
+        return new VideoEncoderTestResult(
+            codec,
+            provider,
+            encoderName,
+            false,
+            message,
+            0,
+            0,
+            0,
+            failureKind
+        );
     }
 
     public EncoderCalibrationResult ToCalibrationResult()
@@ -623,6 +1171,7 @@ public sealed record VideoEncoderTestResult(
             Width = Width,
             Height = Height,
             DurationSeconds = DurationSeconds,
+            FailureKind = FailureKind,
         };
     }
 }
