@@ -129,7 +129,7 @@ public partial class RecordingsView : UserControl, IDisposable
         {
             eventArgs.Handled = true;
             CloseFullScreen();
-            RecordingPlayer.Focus();
+            RestorePlayerFocusAfterFullScreen();
             return;
         }
 
@@ -191,7 +191,12 @@ public partial class RecordingsView : UserControl, IDisposable
     private void OnPlayerExitFullScreenRequested(object? sender, EventArgs eventArgs)
     {
         CloseFullScreen();
-        RecordingPlayer.Focus();
+        RestorePlayerFocusAfterFullScreen();
+    }
+
+    private void RestorePlayerFocusAfterFullScreen()
+    {
+        Dispatcher.BeginInvoke(FocusPlayerOnViewEntry, DispatcherPriority.Input);
     }
 
     private void CloseFullScreen()
