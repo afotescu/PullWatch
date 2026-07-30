@@ -38,40 +38,67 @@
           </StackPanel>
         </local:SectionCard>
 
-        <local:SectionCard Header="Storage">
+        <local:SectionCard Header="Storage" Style="{StaticResource FlatSettingsSectionStyle}">
           <StackPanel>
-            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Managed recordings storage" />
-            <CheckBox
-              IsChecked="{Binding IsRecordingStorageLimitEnabled}"
-              Content="Automatically delete oldest recordings when storage exceeds"
+            <Grid Margin="0,18,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0" Margin="0,0,24,0">
+                <TextBlock
+                  Style="{StaticResource ControlLabelTextStyle}"
+                  Text="Managed recording storage"
+                />
+                <TextBlock
+                  Margin="0,4,0,0"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="Automatically remove the oldest managed recordings after the storage limit is reached."
+                />
+              </StackPanel>
+              <ToggleButton
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Managed recording storage"
+                IsChecked="{Binding IsRecordingStorageLimitEnabled}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
+
+            <TextBlock
+              Margin="0,20,0,6"
+              Style="{StaticResource ControlLabelTextStyle}"
+              Text="Storage limit"
             />
-            <StackPanel Margin="25,10,0,0" Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal">
               <TextBox
                 Width="100"
                 InputScope="Number"
                 IsEnabled="{Binding CanConfigureRecordingStorageLimit}"
                 local:TextBoxInput.AcceptsNonNegativeIntegerOnly="True"
                 local:TextBoxInput.FallbackTextWhenEmpty="1"
+                Style="{StaticResource TextInputStyle}"
                 Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"
               />
               <TextBlock
-                Margin="8,8,0,0"
-                Foreground="{StaticResource PrimaryTextBrush}"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
                 Text="GB"
               />
               <Button
                 Margin="12,0,0,0"
                 Command="{Binding ApplyRecordingStorageLimitCommand}"
                 Content="Apply"
+                Style="{StaticResource SecondaryButtonStyle}"
               />
             </StackPanel>
             <TextBlock
-              Margin="0,14,0,0"
+              Margin="0,16,0,0"
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding RecordingStorageUsageText}"
             />
             <ProgressBar
-              Width="300"
+              Width="420"
               HorizontalAlignment="Left"
               Margin="0,8,0,0"
               IsIndeterminate="{Binding IsRecordingStorageUsageIndeterminate, Mode=OneWay}"
@@ -97,17 +124,35 @@
           </StackPanel>
         </local:SectionCard>
 
-        <local:SectionCard Header="Automatic recording">
+        <local:SectionCard
+          Header="Automatic recording"
+          Style="{StaticResource FlatSettingsSectionStyle}"
+        >
           <StackPanel Margin="0,18,0,0">
-            <CheckBox
-              FontWeight="SemiBold"
-              IsChecked="{Binding RecordMythicPlus}"
-              Content="Mythic+"
-            />
-            <StackPanel Margin="25,10,0,0" IsEnabled="{Binding CanConfigureMythicPlus}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Record Mythic+"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Record Mythic+"
+                IsChecked="{Binding RecordMythicPlus}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
+
+            <StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanConfigureMythicPlus}">
               <TextBlock
                 Margin="0,0,0,6"
-                Foreground="{StaticResource PrimaryTextBrush}"
+                Style="{StaticResource ControlLabelTextStyle}"
                 Text="Minimum keystone level"
               />
               <TextBox
@@ -116,6 +161,7 @@
                 InputScope="Number"
                 local:TextBoxInput.AcceptsNonNegativeIntegerOnly="True"
                 local:TextBoxInput.FallbackTextWhenEmpty="0"
+                Style="{StaticResource TextInputStyle}"
                 Text="{Binding MinimumMythicPlusKeystoneLevel, UpdateSourceTrigger=PropertyChanged}"
               />
               <TextBlock
@@ -125,16 +171,36 @@
               />
             </StackPanel>
 
-            <CheckBox
-              Margin="0,22,0,0"
-              FontWeight="SemiBold"
-              IsChecked="{Binding RecordRaidEncounters}"
-              Content="Raid encounters"
+            <Border
+              Height="1"
+              Margin="0,24"
+              Background="{StaticResource BorderSubtleBrush}"
             />
-            <StackPanel Margin="25,10,0,0" IsEnabled="{Binding CanConfigureRaidEncounters}">
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Record raid encounters"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Record raid encounters"
+                IsChecked="{Binding RecordRaidEncounters}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
+
+            <StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanConfigureRaidEncounters}">
               <TextBlock
                 Margin="0,0,0,8"
-                Foreground="{StaticResource PrimaryTextBrush}"
+                Style="{StaticResource ControlLabelTextStyle}"
                 Text="Difficulties"
               />
               <UniformGrid HorizontalAlignment="Left" Columns="2" Rows="2">
@@ -167,118 +233,220 @@
           </StackPanel>
         </local:SectionCard>
 
-        <local:SectionCard Header="Startup">
-          <StackPanel>
-            <CheckBox
-              Margin="0,18,0,0"
-              IsChecked="{Binding StartWithWindows}"
-              Content="Start PullWatch when Windows starts"
-            />
-            <CheckBox
-              Margin="0,10,0,0"
-              IsChecked="{Binding StartMinimizedToTray}"
-              IsEnabled="{Binding CanStartMinimizedToTray}"
-              Content="Start minimized to tray when launched by Windows"
-            />
+        <local:SectionCard Header="Startup" Style="{StaticResource FlatSettingsSectionStyle}">
+          <StackPanel Margin="0,18,0,0">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Start PullWatch when Windows starts"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Start PullWatch when Windows starts"
+                IsChecked="{Binding StartWithWindows}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
+
+            <Grid Margin="0,16,0,0" IsEnabled="{Binding CanStartMinimizedToTray}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Start minimized to tray when launched by Windows"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Start minimized to tray when launched by Windows"
+                IsChecked="{Binding StartMinimizedToTray}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
           </StackPanel>
         </local:SectionCard>
 
-        <Border Margin="0,0,0,18" Style="{StaticResource CardStyle}">
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <local:SectionCard Header="Video" Style="{StaticResource FlatSettingsSectionStyle}">
+          <StackPanel Margin="0,18,0,0">
+            <TextBlock
+              Style="{StaticResource ControlLabelTextStyle}"
+              Text="Video encoding"
+            />
+            <TextBlock
+              Margin="0,6,0,0"
+              FontWeight="SemiBold"
+              Text="{Binding VideoEncodingSummary}"
+            />
+            <TextBlock
+              Width="420"
+              Margin="0,4,0,0"
+              HorizontalAlignment="Left"
+              Style="{StaticResource SecondaryTextStyle}"
+              Text="{Binding VideoEncodingStatus}"
+            />
+            <Button
+              Margin="0,12,0,0"
+              HorizontalAlignment="Left"
+              Command="{Binding TestVideoEncodingCommand}"
+              Content="{Binding TestVideoEncodingButtonText}"
+              Style="{StaticResource SecondaryButtonStyle}"
+            />
 
-            <StackPanel Grid.Column="0" Margin="0,0,18,0">
-              <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Video" />
-              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video encoding" />
+            <TextBlock
+              Style="{StaticResource InputLabelStyle}"
+              Text="Encoder profile"
+              Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
+            />
+            <ComboBox
+              Width="420"
+              HorizontalAlignment="Left"
+              DisplayMemberPath="Label"
+              IsEnabled="{Binding CanChooseVideoProfile}"
+              ItemsSource="{Binding VideoProfileOptions}"
+              SelectedValue="{Binding SelectedVideoProfile, Mode=TwoWay}"
+              SelectedValuePath="Value"
+              Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
+            />
+
+            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video quality" />
+            <ComboBox
+              Width="420"
+              HorizontalAlignment="Left"
+              DisplayMemberPath="Label"
+              ItemsSource="{Binding VideoQualityOptions}"
+              SelectedValue="{Binding SelectedVideoQuality, Mode=TwoWay}"
+              SelectedValuePath="Value"
+            />
+
+            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Frame rate" />
+            <ComboBox
+              Width="420"
+              HorizontalAlignment="Left"
+              DisplayMemberPath="Label"
+              ItemsSource="{Binding FrameRateOptions}"
+              SelectedValue="{Binding SelectedFrameRate, Mode=TwoWay}"
+              SelectedValuePath="Value"
+            />
+
+            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Output scaling" />
+            <ComboBox
+              Width="420"
+              HorizontalAlignment="Left"
+              DisplayMemberPath="Label"
+              ItemsSource="{Binding VideoScalingOptions}"
+              SelectedValue="{Binding SelectedVideoScaling, Mode=TwoWay}"
+              SelectedValuePath="Value"
+            />
+            <TextBlock
+              Width="420"
+              Margin="0,10,0,0"
+              HorizontalAlignment="Left"
+              Style="{StaticResource SecondaryTextStyle}"
+              Text="{Binding EstimatedRecordingSize}"
+            />
+
+            <Border
+              Height="1"
+              Margin="0,24"
+              Background="{StaticResource BorderSubtleBrush}"
+            />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
               <TextBlock
-                Foreground="{StaticResource PrimaryTextBrush}"
-                FontSize="15"
-                FontWeight="SemiBold"
-                Text="{Binding VideoEncodingSummary}"
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Capture cursor"
               />
-              <TextBlock
-                Margin="0,4,0,0"
-                Style="{StaticResource SecondaryTextStyle}"
-                Text="{Binding VideoEncodingStatus}"
-                TextWrapping="Wrap"
-              />
-              <Button
-                Margin="0,10,0,0"
-                HorizontalAlignment="Left"
-                Command="{Binding TestVideoEncodingCommand}"
-                Content="{Binding TestVideoEncodingButtonText}"
-              />
-              <TextBlock
-                Style="{StaticResource InputLabelStyle}"
-                Text="Encoder profile"
-                Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
-              />
-              <ComboBox
-                DisplayMemberPath="Label"
-                IsEnabled="{Binding CanChooseVideoProfile}"
-                ItemsSource="{Binding VideoProfileOptions}"
-                SelectedValue="{Binding SelectedVideoProfile, Mode=TwoWay}"
-                SelectedValuePath="Value"
-                Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
-              />
-              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video quality" />
-              <ComboBox
-                DisplayMemberPath="Label"
-                ItemsSource="{Binding VideoQualityOptions}"
-                SelectedValue="{Binding SelectedVideoQuality, Mode=TwoWay}"
-                SelectedValuePath="Value"
-              />
-              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Frame rate" />
-              <ComboBox
-                DisplayMemberPath="Label"
-                ItemsSource="{Binding FrameRateOptions}"
-                SelectedValue="{Binding SelectedFrameRate, Mode=TwoWay}"
-                SelectedValuePath="Value"
-              />
-              <TextBlock Style="{StaticResource InputLabelStyle}" Text="Output scaling" />
-              <ComboBox
-                DisplayMemberPath="Label"
-                ItemsSource="{Binding VideoScalingOptions}"
-                SelectedValue="{Binding SelectedVideoScaling, Mode=TwoWay}"
-                SelectedValuePath="Value"
-              />
-              <TextBlock
-                Margin="0,10,0,0"
-                Style="{StaticResource SecondaryTextStyle}"
-                Text="{Binding EstimatedRecordingSize}"
-                TextWrapping="Wrap"
-              />
-              <CheckBox
-                Margin="0,18,0,0"
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Capture cursor"
                 IsChecked="{Binding CaptureCursor}"
-                Content="Capture cursor"
+                Style="{StaticResource SwitchStyle}"
               />
-              <CheckBox
-                Margin="0,10,0,0"
-                IsChecked="{Binding ShowCaptureBorder}"
-                Content="Show capture border"
-              />
-            </StackPanel>
+            </Grid>
 
-            <StackPanel Grid.Column="1" Margin="18,0,0,0">
-              <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Audio" />
-              <CheckBox
-                Margin="0,18,0,0"
+            <Grid Margin="0,16,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Show capture border"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Show capture border"
+                IsChecked="{Binding ShowCaptureBorder}"
+                Style="{StaticResource SwitchStyle}"
+              />
+            </Grid>
+          </StackPanel>
+        </local:SectionCard>
+
+        <local:SectionCard Header="Audio" Style="{StaticResource FlatSettingsSectionStyle}">
+          <StackPanel Margin="0,18,0,0">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Capture system audio"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Capture system audio"
                 IsChecked="{Binding CaptureSystemAudio}"
-                Content="Capture system audio"
+                Style="{StaticResource SwitchStyle}"
               />
-              <CheckBox
-                Margin="0,10,0,0"
-                IsEnabled="{Binding CanCaptureMicrophone}"
+            </Grid>
+
+            <Grid Margin="0,16,0,0" IsEnabled="{Binding CanCaptureMicrophone}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Grid.Column="0"
+                Margin="0,0,24,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Capture microphone"
+              />
+              <ToggleButton
+                Grid.Column="1"
+                AutomationProperties.Name="Capture microphone"
                 IsChecked="{Binding CaptureMicrophone}"
-                Content="Capture microphone"
+                Style="{StaticResource SwitchStyle}"
               />
-            </StackPanel>
-          </Grid>
-        </Border>
+            </Grid>
+          </StackPanel>
+        </local:SectionCard>
       </StackPanel>
     </Grid>
   </ScrollViewer>

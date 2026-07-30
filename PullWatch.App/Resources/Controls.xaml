@@ -411,11 +411,127 @@
     <Setter Property="Padding" Value="10,8" />
   </Style>
 
+  <Style x:Key="SwitchStyle" TargetType="ToggleButton">
+    <Setter Property="Width" Value="42" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="Background" Value="{StaticResource BorderSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Cursor" Value="Arrow" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToggleButton">
+          <Grid x:Name="SwitchRoot" SnapsToDevicePixels="True">
+            <Border
+              x:Name="SwitchTrack"
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}"
+              CornerRadius="11"
+            />
+            <Ellipse
+              x:Name="SwitchThumb"
+              Width="18"
+              Height="18"
+              Margin="2"
+              HorizontalAlignment="Left"
+              Fill="{StaticResource TextSecondaryBrush}"
+            />
+            <Border
+              x:Name="SwitchFocusBorder"
+              BorderBrush="{StaticResource AccentBrush}"
+              BorderThickness="1"
+              CornerRadius="11"
+              IsHitTestVisible="False"
+              Opacity="0"
+            />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter
+                TargetName="SwitchTrack"
+                Property="BorderBrush"
+                Value="{StaticResource TextMutedBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter
+                TargetName="SwitchTrack"
+                Property="Background"
+                Value="{StaticResource SurfaceSelectedBrush}"
+              />
+              <Setter TargetName="SwitchThumb" Property="Opacity" Value="0.8" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter
+                TargetName="SwitchTrack"
+                Property="Background"
+                Value="{StaticResource AccentBrush}"
+              />
+              <Setter
+                TargetName="SwitchTrack"
+                Property="BorderBrush"
+                Value="{StaticResource AccentBrush}"
+              />
+              <Setter TargetName="SwitchThumb" Property="HorizontalAlignment" Value="Right" />
+              <Setter
+                TargetName="SwitchThumb"
+                Property="Fill"
+                Value="{StaticResource AccentForegroundBrush}"
+              />
+            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsChecked" Value="True" />
+                <Condition Property="IsMouseOver" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter
+                TargetName="SwitchTrack"
+                Property="Background"
+                Value="{StaticResource AccentHoverBrush}"
+              />
+              <Setter
+                TargetName="SwitchTrack"
+                Property="BorderBrush"
+                Value="{StaticResource AccentHoverBrush}"
+              />
+            </MultiTrigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsChecked" Value="True" />
+                <Condition Property="IsPressed" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter
+                TargetName="SwitchTrack"
+                Property="Background"
+                Value="{StaticResource AccentPressedBrush}"
+              />
+              <Setter
+                TargetName="SwitchTrack"
+                Property="BorderBrush"
+                Value="{StaticResource AccentPressedBrush}"
+              />
+            </MultiTrigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="SwitchFocusBorder" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="SwitchRoot" Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="ComboBox">
-    <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
     <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBox">
@@ -438,7 +554,7 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="4"
+                    CornerRadius="5"
                   >
                     <Grid>
                       <Grid.ColumnDefinitions>
@@ -475,7 +591,7 @@
                       <Setter
                         TargetName="ToggleBorder"
                         Property="BorderBrush"
-                        Value="{StaticResource AccentBrush}"
+                        Value="{StaticResource TextMutedBrush}"
                       />
                     </Trigger>
                     <Trigger Property="IsChecked" Value="True">
@@ -503,10 +619,10 @@
                 MaxHeight="{TemplateBinding MaxDropDownHeight}"
               >
                 <Border
-                  Background="{StaticResource SurfaceRaisedBrush}"
+                  Background="{StaticResource SurfaceBrush}"
                   BorderBrush="{StaticResource BorderBrush}"
                   BorderThickness="1"
-                  CornerRadius="4"
+                  CornerRadius="5"
                 >
                   <ScrollViewer Margin="1" CanContentScroll="True">
                     <ItemsPresenter />
