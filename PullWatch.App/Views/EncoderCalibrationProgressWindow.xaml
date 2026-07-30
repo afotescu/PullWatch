@@ -25,8 +25,7 @@
 
         <TextBlock
           Grid.Row="0"
-          FontSize="18"
-          FontWeight="SemiBold"
+          Style="{StaticResource DialogTitleTextStyle}"
           Text="Testing video encoding"
           TextWrapping="Wrap"
         />

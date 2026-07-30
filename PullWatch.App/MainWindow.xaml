@@ -13,69 +13,40 @@
   WindowStartupLocation="CenterScreen"
 >
   <Window.Resources>
-    <Style x:Key="CollapsedStatusButtonStyle" TargetType="Button">
+    <Style
+      x:Key="CollapsedStatusButtonStyle"
+      BasedOn="{StaticResource IconButtonStyle}"
+      TargetType="Button"
+    >
       <Setter Property="Width" Value="44" />
       <Setter Property="Height" Value="28" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderBrush" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Cursor" Value="Arrow" />
       <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Grid Background="Transparent">
-              <Border
-                x:Name="HoverBackground"
-                Background="{StaticResource SurfaceRaisedBrush}"
-                CornerRadius="6"
-                Opacity="0"
-              />
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-              <Border
-                x:Name="FocusBorder"
-                BorderBrush="{StaticResource FocusBrush}"
-                BorderThickness="1"
-                CornerRadius="6"
-                IsHitTestVisible="False"
-                Opacity="0"
-              />
-            </Grid>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="HoverBackground" Property="Opacity" Value="1" />
-              </Trigger>
-              <Trigger Property="IsPressed" Value="True">
-                <Setter
-                  TargetName="HoverBackground"
-                  Property="Background"
-                  Value="{StaticResource SurfaceSelectedBrush}"
-                />
-                <Setter TargetName="HoverBackground" Property="Opacity" Value="1" />
-              </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="FocusBorder" Property="Opacity" Value="1" />
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
     </Style>
 
     <Style
-      x:Key="SidebarUpdateLinkStyle"
-      BasedOn="{StaticResource LinkButtonStyle}"
+      x:Key="SidebarUpdateButtonStyle"
+      BasedOn="{StaticResource SecondaryButtonStyle}"
       TargetType="Button"
     >
-      <Setter Property="MaxWidth" Value="190" />
-      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
-      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
       <Style.Triggers>
         <DataTrigger Binding="{Binding Updates.IsActionProminent}" Value="True">
-          <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+          <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+          <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
           <Setter Property="FontWeight" Value="SemiBold" />
+          <Setter
+            Property="local:ButtonChrome.HoverOverlayBrush"
+            Value="{StaticResource FilledButtonHoverOverlayBrush}"
+          />
+          <Setter
+            Property="local:ButtonChrome.PressedOverlayBrush"
+            Value="{StaticResource FilledButtonPressedOverlayBrush}"
+          />
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -104,7 +75,7 @@
     </Style>
   </Window.Resources>
 
-  <Grid Background="{StaticResource WindowBrush}">
+  <Grid Background="{StaticResource BackgroundBrush}">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="{Binding DataContext.SidebarWidth, ElementName=ShellWindow}" />
       <ColumnDefinition Width="*" />
@@ -156,7 +127,7 @@
             />
             <Button
               Command="{Binding Updates.UpdateCommand}"
-              Style="{StaticResource SidebarUpdateLinkStyle}"
+              Style="{StaticResource SidebarUpdateButtonStyle}"
               ToolTip="{Binding Updates.ActionToolTip}"
             >
               <TextBlock
@@ -311,8 +282,7 @@
             <TextBlock
               Margin="0,0,0,10"
               HorizontalAlignment="Center"
-              FontSize="10"
-              Style="{StaticResource SecondaryTextStyle}"
+              Style="{StaticResource MutedTextStyle}"
               Text="{Binding AppVersionShortLabel}"
               TextAlignment="Center"
               TextWrapping="NoWrap"

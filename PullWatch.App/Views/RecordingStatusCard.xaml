@@ -31,14 +31,12 @@
 
         <TextBlock
           Grid.Column="1"
-          FontSize="13"
-          FontWeight="SemiBold"
           Text="{Binding RecorderStateLabel}"
           TextTrimming="CharacterEllipsis"
         >
           <TextBlock.Style>
             <Style
-              BasedOn="{StaticResource {x:Type TextBlock}}"
+              BasedOn="{StaticResource ControlLabelTextStyle}"
               TargetType="TextBlock"
             >
               <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -60,6 +58,12 @@
                   Value="{x:Static local:RecorderPresentationState.Starting}"
                 >
                   <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Recording}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource RecordingBrush}" />
                 </DataTrigger>
                 <DataTrigger
                   Binding="{Binding RecorderState}"
@@ -98,8 +102,7 @@
 
       <TextBlock
         Margin="17,12,0,0"
-        FontSize="13"
-        FontWeight="SemiBold"
+        Style="{StaticResource ControlLabelTextStyle}"
         Text="{Binding RecorderContextDisplay}"
         TextTrimming="CharacterEllipsis"
         Visibility="{Binding IsRecorderContextVisible, Converter={StaticResource BooleanToVisibilityConverter}}"

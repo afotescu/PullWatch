@@ -123,7 +123,7 @@
                 <Style BasedOn="{StaticResource CompactProgressBarStyle}" TargetType="ProgressBar">
                   <Style.Triggers>
                     <DataTrigger Binding="{Binding IsRecordingStorageOverLimit}" Value="True">
-                      <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
+                      <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
                     </DataTrigger>
                   </Style.Triggers>
                 </Style>
