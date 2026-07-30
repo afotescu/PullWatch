@@ -63,8 +63,8 @@
               Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="{x:Static local:RecorderPresentationState.Recording}"
             >
-              <Setter Property="Fill" Value="{StaticResource RecordingBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource RecordingBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
             </DataTrigger>
             <DataTrigger
               Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
@@ -84,8 +84,8 @@
               Binding="{Binding IsPulseActive, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="True"
             >
-              <Setter Property="Fill" Value="{StaticResource RecordingBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource RecordingBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
               <DataTrigger.EnterActions>
                 <BeginStoryboard x:Name="RecordingPulseStoryboard">
                   <Storyboard RepeatBehavior="Forever" AutoReverse="True">

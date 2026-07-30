@@ -63,7 +63,7 @@
                   Binding="{Binding RecorderState}"
                   Value="{x:Static local:RecorderPresentationState.Recording}"
                 >
-                  <Setter Property="Foreground" Value="{StaticResource RecordingBrush}" />
+                  <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
                 </DataTrigger>
                 <DataTrigger
                   Binding="{Binding RecorderState}"

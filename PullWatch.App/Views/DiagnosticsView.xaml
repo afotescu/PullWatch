@@ -80,10 +80,10 @@
                                   Binding="{Binding Indicator}"
                                   Value="{x:Static local:DiagnosticIndicatorKind.Recording}"
                                 >
-                                  <Setter Property="Fill" Value="{StaticResource RecordingBrush}" />
+                                  <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
                                   <Setter
                                     Property="Stroke"
-                                    Value="{StaticResource RecordingBrush}"
+                                    Value="{StaticResource SuccessBrush}"
                                   />
                                 </DataTrigger>
                                 <DataTrigger

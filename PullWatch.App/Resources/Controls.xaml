@@ -36,7 +36,7 @@
     <Setter Property="Background" Value="{StaticResource BorderSubtleBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ProgressBar">
