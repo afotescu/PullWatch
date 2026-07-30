@@ -16,6 +16,7 @@ public sealed class FfmpegRecordingService(
     private const int StderrTailLimit = 40;
     private static readonly TimeSpan StartupConfirmationDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan AudioPipeConnectionTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AudioCaptureStopTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan AudioStartupFailureExitProbeDelay = TimeSpan.FromMilliseconds(
         500
     );
@@ -218,8 +219,13 @@ public sealed class FfmpegRecordingService(
                     GetRecordingDuration(),
                     _outputPath
                 );
-                RequestGracefulStop(process);
-                _audioPipe?.CloseInput();
+                var audioPipe = _audioPipe;
+                await CoordinateGracefulStopAsync(
+                    audioPipe is null
+                        ? null
+                        : () => audioPipe.StopAndCloseInputAsync(AudioCaptureStopTimeout),
+                    () => RequestGracefulStop(process)
+                );
             }
         }
         catch
@@ -739,6 +745,19 @@ public sealed class FfmpegRecordingService(
         }
     }
 
+    internal static async Task CoordinateGracefulStopAsync(
+        Func<Task>? stopAudioInput,
+        Action requestFfmpegStop
+    )
+    {
+        if (stopAudioInput is not null)
+        {
+            await stopAudioInput();
+        }
+
+        requestFfmpegStop();
+    }
+
     private void OnWowProcessExited(object? sender, EventArgs eventArgs)
     {
         logger.LogInformation("World of Warcraft exited while an FFmpeg recording was active");
@@ -888,6 +907,7 @@ public sealed class FfmpegRecordingService(
         private readonly ILogger _logger;
         private readonly NamedPipeServerStream _pipe;
         private readonly object _stateLock = new();
+        private readonly TaskCompletionSource _captureStopped = CreateCompletionSource();
         private bool _disposed;
         private bool _stopping;
 
@@ -963,7 +983,7 @@ public sealed class FfmpegRecordingService(
             _capture.StartRecording();
         }
 
-        public void CloseInput()
+        public async Task StopAndCloseInputAsync(TimeSpan timeout)
         {
             lock (_stateLock)
             {
@@ -977,14 +997,28 @@ public sealed class FfmpegRecordingService(
 
             try
             {
-                _pipe.Dispose();
+                _capture.StopRecording();
             }
             catch (Exception exception)
             {
-                _logger.LogDebug(exception, "FFmpeg audio pipe close failed");
+                _logger.LogDebug(exception, "FFmpeg audio capture stop failed");
+                _captureStopped.TrySetResult();
             }
 
-            _ = Task.Run(StopCapture);
+            try
+            {
+                await _captureStopped.Task.WaitAsync(timeout);
+            }
+            catch (TimeoutException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "FFmpeg audio capture did not stop within {Timeout}",
+                    timeout
+                );
+            }
+
+            ClosePipe();
         }
 
         public void Dispose()
@@ -1011,20 +1045,9 @@ public sealed class FfmpegRecordingService(
                 _logger.LogDebug(exception, "FFmpeg audio capture stop during disposal failed");
             }
 
+            _captureStopped.TrySetResult();
             _capture.Dispose();
-            _pipe.Dispose();
-        }
-
-        private void StopCapture()
-        {
-            try
-            {
-                _capture.StopRecording();
-            }
-            catch (Exception exception)
-            {
-                _logger.LogDebug(exception, "FFmpeg audio capture stop failed");
-            }
+            ClosePipe();
         }
 
         private void OnDataAvailable(object? sender, WaveInEventArgs eventArgs)
@@ -1061,6 +1084,20 @@ public sealed class FfmpegRecordingService(
                     eventArgs.Exception,
                     "FFmpeg audio capture stopped unexpectedly"
                 );
+            }
+
+            _captureStopped.TrySetResult();
+        }
+
+        private void ClosePipe()
+        {
+            try
+            {
+                _pipe.Dispose();
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(exception, "FFmpeg audio pipe close failed");
             }
         }
 

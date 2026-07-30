@@ -305,6 +305,41 @@ public sealed class FfmpegRecordingServiceTests
     }
 
     [Fact]
+    public async Task GracefulStopWaitsForAudioInputBeforeRequestingFfmpegStop()
+    {
+        var audioStopStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var allowAudioStop = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var audioStopCompleted = 0;
+        var ffmpegStopRequested = 0;
+
+        var stopTask = FfmpegRecordingService.CoordinateGracefulStopAsync(
+            async () =>
+            {
+                audioStopStarted.SetResult();
+                await allowAudioStop.Task;
+                Volatile.Write(ref audioStopCompleted, 1);
+            },
+            () =>
+            {
+                Assert.Equal(1, Volatile.Read(ref audioStopCompleted));
+                Volatile.Write(ref ffmpegStopRequested, 1);
+            }
+        );
+
+        await audioStopStarted.Task;
+        Assert.Equal(0, Volatile.Read(ref ffmpegStopRequested));
+
+        allowAudioStop.SetResult();
+        await stopTask;
+
+        Assert.Equal(1, Volatile.Read(ref ffmpegStopRequested));
+    }
+
+    [Fact]
     public void EncoderCapabilitiesParseFfmpegEncoderListOutput()
     {
         const string output = """
