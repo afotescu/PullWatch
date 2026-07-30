@@ -4,7 +4,8 @@ param(
     [string]$FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
     [string]$FfmpegSha256 = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
     [switch]$SkipFfmpegBundle,
-    [switch]$LockedRestore
+    [switch]$LockedRestore,
+    [switch]$NoRestore
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +52,10 @@ if (!$resolvedPublishPath.StartsWith(
 }
 
 $publishPath = $resolvedPublishPath
+
+if ($LockedRestore -and $NoRestore) {
+    throw "LockedRestore and NoRestore cannot be used together."
+}
 
 function Add-FfmpegBundle {
     param(
@@ -146,6 +151,31 @@ function Add-FfmpegBundle {
     Write-Host "Bundled $($ffmpegVersion | Select-Object -First 1)"
 }
 
+function Assert-FlyleafRuntimeBundle {
+    param(
+        [string]$PublishPath
+    )
+
+    $runtimePath = Join-Path $PublishPath "FlyleafRuntime"
+    $requiredLibraries = @(
+        "avcodec-61.dll",
+        "avdevice-61.dll",
+        "avfilter-10.dll",
+        "avformat-61.dll",
+        "avutil-59.dll",
+        "postproc-58.dll",
+        "swresample-5.dll",
+        "swscale-8.dll"
+    )
+
+    foreach ($library in $requiredLibraries) {
+        $libraryPath = Join-Path $runtimePath $library
+        if (!(Test-Path -LiteralPath $libraryPath -PathType Leaf)) {
+            throw "Published Flyleaf runtime is incomplete. Missing: $libraryPath"
+        }
+    }
+}
+
 $lockingProcesses = Get-Process |
     Where-Object {
         try {
@@ -170,6 +200,8 @@ if (Test-Path -LiteralPath $publishPath) {
     Remove-Item -LiteralPath $publishPath -Recurse -Force
 }
 
+& (Join-Path $PSScriptRoot "setup-flyleaf-runtime.ps1")
+
 dotnet clean $projectPath `
     -c Release `
     -p:Platform=x64
@@ -191,7 +223,7 @@ if ($LockedRestore) {
 
 $publishArguments = @()
 $publishArguments += $publishProperties
-if ($LockedRestore) {
+if ($LockedRestore -or $NoRestore) {
     $publishArguments += "--no-restore"
 }
 
@@ -221,11 +253,13 @@ if ($SkipFfmpegBundle) {
         -PublishPath $publishPath
 }
 
+Assert-FlyleafRuntimeBundle -PublishPath $publishPath
+
 $readmePath = Join-Path $publishPath "README.txt"
 @"
 PullWatch release build
 
-Run PullWatch.exe. Keep the ffmpeg folder next to PullWatch.exe.
+Run PullWatch.exe. Keep the ffmpeg and FlyleafRuntime folders next to PullWatch.exe.
 
 Screen recording requires:
 - Windows x64
@@ -237,10 +271,12 @@ start event.
 Closing the PullWatch window hides it to the system tray. Use Exit from the tray
 icon menu to fully quit the app.
 
-See LICENSE.txt and PRIVACY.md in this folder for license and privacy details.
+See LICENSE.txt, THIRD-PARTY-NOTICES.txt, and PRIVACY.md in this folder for
+license and privacy details.
 "@ | Set-Content -LiteralPath $readmePath -Encoding UTF8
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $publishPath "LICENSE.txt")
+Copy-Item -LiteralPath (Join-Path $repoRoot "THIRD-PARTY-NOTICES.md") -Destination (Join-Path $publishPath "THIRD-PARTY-NOTICES.txt")
 Copy-Item -LiteralPath (Join-Path $repoRoot "PRIVACY.md") -Destination (Join-Path $publishPath "PRIVACY.md")
 
 $totalBytes = (Get-ChildItem -LiteralPath $publishPath -Recurse -File | Measure-Object -Property Length -Sum).Sum

@@ -11,6 +11,9 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
     <StartupObject>PullWatch.Program</StartupObject>
+    <FlyleafFFmpegPath Condition="'$(FlyleafFFmpegPath)' == ''"
+      >$(MSBuildProjectDirectory)\..\.tools\flyleaf\runtime-7.1\FFmpeg</FlyleafFFmpegPath>
+    <FlyleafRuntimeDirectoryName>FlyleafRuntime</FlyleafRuntimeDirectoryName>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PullWatchBuildForTests)' == 'true'">
@@ -20,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="FlyleafLib" Version="3.10.4" />
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
@@ -39,6 +43,41 @@
   <ItemGroup>
     <Resource Include="Assets\favicon.ico" />
   </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(FlyleafFFmpegPath)')">
+    <Content Include="$(FlyleafFFmpegPath)\*.dll">
+      <Link>$(FlyleafRuntimeDirectoryName)\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="ValidateFlyleafRuntimeForPublish" BeforeTargets="PrepareForPublish">
+    <ItemGroup>
+      <_RequiredFlyleafRuntimeLibrary
+        Include="
+          avcodec-61.dll;
+          avdevice-61.dll;
+          avfilter-10.dll;
+          avformat-61.dll;
+          avutil-59.dll;
+          postproc-58.dll;
+          swresample-5.dll;
+          swscale-8.dll
+        "
+      />
+    </ItemGroup>
+
+    <Error
+      Condition="!Exists('$(FlyleafFFmpegPath)')"
+      Text="Flyleaf's FFmpeg runtime was not found at '$(FlyleafFFmpegPath)'. Run scripts/setup-flyleaf-runtime.ps1 before publishing."
+    />
+    <Error
+      Condition="!Exists('$(FlyleafFFmpegPath)\%(_RequiredFlyleafRuntimeLibrary.Identity)')"
+      Text="Flyleaf's FFmpeg runtime is incomplete. Missing: $(FlyleafFFmpegPath)\%(_RequiredFlyleafRuntimeLibrary.Identity)"
+    />
+  </Target>
 
   <Target
     Name="ExcludeUnneededFilesFromPublish"
