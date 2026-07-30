@@ -11,6 +11,9 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
     <StartupObject>PullWatch.Program</StartupObject>
+    <FlyleafFFmpegPath
+      Condition="'$(FlyleafFFmpegPath)' == ''"
+    >$(MSBuildProjectDirectory)\..\.tools\flyleaf\runtime-7.1\FFmpeg</FlyleafFFmpegPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PullWatchBuildForTests)' == 'true'">
@@ -20,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="FlyleafLib" Version="3.10.4" />
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="NuGet.Versioning" Version="7.6.0" />
@@ -37,6 +41,14 @@
 
   <ItemGroup>
     <Resource Include="Assets\favicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(FlyleafFFmpegPath)')">
+    <Content Include="$(FlyleafFFmpegPath)\*.dll">
+      <Link>FFmpeg\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <Target

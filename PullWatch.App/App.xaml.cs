@@ -22,6 +22,13 @@ public partial class App : Application
 
     internal SemanticVersion? RestartedVersion { get; init; }
 
+    internal ILogger<T> CreateLogger<T>()
+    {
+        return (
+            _loggerFactory ?? throw new InvalidOperationException("Logging is not initialized.")
+        ).CreateLogger<T>();
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

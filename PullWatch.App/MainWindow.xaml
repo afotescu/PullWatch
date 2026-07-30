@@ -357,10 +357,11 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Column="1">
+    <Grid x:Name="NavigationLayer" Grid.Column="1">
       <ContentControl x:Name="NavigationContent" />
 
       <ItemsControl
+        x:Name="NotificationsOverlay"
         Margin="18,18,18,0"
         Panel.ZIndex="10"
         VerticalAlignment="Top"
@@ -460,16 +461,6 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-    </Grid>
-
-    <Grid
-      x:Name="FullScreenLayer"
-      Grid.ColumnSpan="2"
-      Panel.ZIndex="100"
-      Background="{StaticResource PlayerSurfaceBrush}"
-      Visibility="Collapsed"
-    >
-      <ContentControl x:Name="FullScreenPlayerHost" />
     </Grid>
   </Grid>
 </Window>

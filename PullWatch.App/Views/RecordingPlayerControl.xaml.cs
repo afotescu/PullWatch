@@ -1,9 +1,14 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using FlyleafLib;
+using FlyleafLib.MediaPlayer;
+using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
@@ -50,8 +55,12 @@ public partial class RecordingPlayerControl : UserControl
         new PropertyMetadata(false, OnIsFullScreenChanged)
     );
 
+    private readonly ILogger<RecordingPlayerControl> _logger;
+    private readonly Player _player;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _keyboardSeekTimer;
+    private Uri? _currentSource;
+    private Stopwatch? _openStopwatch;
     private bool _hasMedia;
     private bool _hasPlaybackEnded;
     private bool _isPlaying;
@@ -71,7 +80,19 @@ public partial class RecordingPlayerControl : UserControl
 
     public RecordingPlayerControl()
     {
+        _logger = ((App)Application.Current).CreateLogger<RecordingPlayerControl>();
+        FlyleafEngineBootstrapper.Start(_logger);
+
+        var playerConfig = new Config();
+        playerConfig.Player.AutoPlay = false;
+        playerConfig.Player.Stats = true;
+        _player = new Player(playerConfig);
+        _player.OpenCompleted += OnPlayerOpenCompleted;
+        _player.OpeningVideoStream += OnPlayerOpeningVideoStream;
+        _player.PlaybackStopped += OnPlayerPlaybackStopped;
+
         InitializeComponent();
+        MediaPlayer.Player = _player;
         PlayerPlaceholder.SetCurrentValue(TextBlock.TextProperty, PlaceholderText);
         _positionTimer = new DispatcherTimer(
             TimeSpan.FromMilliseconds(250),
@@ -155,7 +176,7 @@ public partial class RecordingPlayerControl : UserControl
     {
         _sourceLoadVersion++;
         StopPlaybackCore();
-        MediaPlayer.Source = null;
+        _currentSource = null;
         ResetPlayerState(sourceAvailable: false);
     }
 
@@ -175,12 +196,16 @@ public partial class RecordingPlayerControl : UserControl
         _isDisposed = true;
         Loaded -= OnLoaded;
         StopPlayback();
-        MediaPlayer.Close();
+        _player.OpenCompleted -= OnPlayerOpenCompleted;
+        _player.OpeningVideoStream -= OnPlayerOpeningVideoStream;
+        _player.PlaybackStopped -= OnPlayerPlaybackStopped;
+        _player.Dispose();
+        MediaPlayer.Dispose();
     }
 
     public bool TogglePlayback()
     {
-        if (MediaPlayer.Source is null || !_hasMedia)
+        if (_currentSource is null || !_hasMedia)
         {
             return false;
         }
@@ -214,7 +239,7 @@ public partial class RecordingPlayerControl : UserControl
 
     public bool SeekBy(TimeSpan offset)
     {
-        return SeekTo((_pendingPlaybackStartPosition ?? MediaPlayer.Position) + offset);
+        return SeekTo((_pendingPlaybackStartPosition ?? GetPosition()) + offset);
     }
 
     public bool AdjustVolume(double delta)
@@ -253,7 +278,7 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
-        if (!_isDisposed && Source is not null && !Equals(MediaPlayer.Source, Source))
+        if (!_isDisposed && Source is not null && !Equals(_currentSource, Source))
         {
             ScheduleLoadSource(Source);
         }
@@ -303,7 +328,7 @@ public partial class RecordingPlayerControl : UserControl
     private void LoadSource(Uri? source)
     {
         StopPlaybackCore();
-        MediaPlayer.Source = null;
+        _currentSource = null;
         ResetPlayerState(source is not null);
 
         if (source is null)
@@ -311,9 +336,14 @@ public partial class RecordingPlayerControl : UserControl
             return;
         }
 
-        MediaPlayer.IsMuted = true;
-        MediaPlayer.Source = source;
-        MediaPlayer.Play();
+        _currentSource = source;
+        _player.Audio.Mute = true;
+        _openStopwatch = Stopwatch.StartNew();
+        _logger.LogInformation(
+            "Flyleaf opening recording {RecordingFile}",
+            GetSourceDisplayName(source)
+        );
+        _player.OpenAsync(GetPlayerSource(source));
     }
 
     private void OnPlayPauseClicked(object sender, RoutedEventArgs eventArgs)
@@ -384,30 +414,108 @@ public partial class RecordingPlayerControl : UserControl
         ToggleMute();
     }
 
-    private void OnPlayerMediaOpened(object sender, RoutedEventArgs eventArgs)
+    private void OnPlayerOpenCompleted(object? sender, OpenCompletedArgs eventArgs)
     {
-        if (MediaPlayer.Source is null)
+        Dispatcher.InvokeAsync(() => CompletePlayerOpen(eventArgs));
+    }
+
+    private void CompletePlayerOpen(OpenCompletedArgs eventArgs)
+    {
+        if (
+            eventArgs.IsSubtitles
+            || _currentSource is null
+            || !string.Equals(
+                eventArgs.Url,
+                GetPlayerSource(_currentSource),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             return;
         }
 
-        _hasMedia = true;
+        _openStopwatch?.Stop();
+
+        if (!eventArgs.Success || !string.IsNullOrWhiteSpace(eventArgs.Error))
+        {
+            var error = string.IsNullOrWhiteSpace(eventArgs.Error)
+                ? "Flyleaf could not open the recording."
+                : eventArgs.Error;
+            _logger.LogWarning(
+                "Flyleaf failed to open {RecordingFile} after {ElapsedMilliseconds:F1} ms: {PlaybackError}",
+                _currentSource is null ? "(none)" : GetSourceDisplayName(_currentSource),
+                _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
+                error
+            );
+            ShowPlaybackError($"This recording could not be played: {error}");
+            return;
+        }
+
+        _hasMedia = _player.CanPlay;
         _hasPlaybackEnded = false;
         _pendingPlaybackStartPosition = null;
         _isPlaying = false;
-        MediaPlayer.Pause();
-        MediaPlayer.Position = TimeSpan.Zero;
+        _player.Pause();
+        SetPosition(TimeSpan.Zero);
         ApplyPlayerAudioState();
 
-        PlayPauseButton.IsEnabled = true;
-        FullScreenButton.IsEnabled = true;
+        PlayPauseButton.IsEnabled = _hasMedia;
+        FullScreenButton.IsEnabled = _hasMedia;
         UpdatePlayPauseButton();
         UpdateDurationFromPlayer();
         UpdatePositionFromPlayer();
         PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
+
+        _logger.LogInformation(
+            "Flyleaf opened {RecordingFile} in {ElapsedMilliseconds:F1} ms; duration={Duration}; video={VideoCodec} {VideoWidth}x{VideoHeight} {PixelFormat} {FramesPerSecond:F2} FPS; hardwareAcceleration={HardwareAcceleration}; audio={AudioCodec} {AudioSampleRate} Hz {AudioChannels} channels",
+            GetSourceDisplayName(_currentSource),
+            _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
+            GetDuration(),
+            _player.Video.Codec,
+            _player.Video.Width,
+            _player.Video.Height,
+            _player.Video.PixelFormat,
+            _player.Video.FPS,
+            _player.Video.VideoAcceleration,
+            _player.Audio.Codec,
+            _player.Audio.SampleRate,
+            _player.Audio.Channels
+        );
     }
 
-    private void OnPlayerMediaEnded(object sender, RoutedEventArgs eventArgs)
+    private void OnPlayerOpeningVideoStream(object? sender, Player.OpeningVideoStreamArgs eventArgs)
+    {
+        _logger.LogInformation(
+            "Flyleaf selected video decoder; hardwareAcceleration={HardwareAcceleration}",
+            eventArgs.VideoAcceleration
+        );
+    }
+
+    private void OnPlayerPlaybackStopped(object? sender, PlaybackStoppedArgs eventArgs)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (_isDisposed || _currentSource is null)
+            {
+                return;
+            }
+
+            if (!eventArgs.Success)
+            {
+                ShowPlaybackError(
+                    $"This recording could not be played: {eventArgs.Error ?? "Flyleaf playback failed."}"
+                );
+                return;
+            }
+
+            if (_player.Status == Status.Ended)
+            {
+                OnPlayerMediaEnded();
+            }
+        });
+    }
+
+    private void OnPlayerMediaEnded()
     {
         _positionTimer.Stop();
         _isPlaying = false;
@@ -416,13 +524,6 @@ public partial class RecordingPlayerControl : UserControl
         UpdatePlayPauseButton();
         PlaybackSlider.Value = PlaybackSlider.Maximum;
         UpdatePlaybackTimeText(GetDuration(), GetDuration());
-    }
-
-    private void OnPlayerMediaFailed(object sender, ExceptionRoutedEventArgs eventArgs)
-    {
-        ShowPlaybackError(
-            $"This recording could not be played: {eventArgs.ErrorException.Message}"
-        );
     }
 
     private void ShowPlaybackError(string message)
@@ -615,10 +716,11 @@ public partial class RecordingPlayerControl : UserControl
         }
         else
         {
-            MediaPlayer.Position =
+            SetPosition(
                 position >= duration
                     ? Clamp(duration - EndSeekInset, TimeSpan.Zero, duration)
-                    : position;
+                    : position
+            );
         }
 
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
@@ -639,8 +741,7 @@ public partial class RecordingPlayerControl : UserControl
             return false;
         }
 
-        var origin =
-            _pendingKeyboardSeekPosition ?? _pendingPlaybackStartPosition ?? MediaPlayer.Position;
+        var origin = _pendingKeyboardSeekPosition ?? _pendingPlaybackStartPosition ?? GetPosition();
         var position = Clamp(origin + offset, TimeSpan.Zero, duration);
 
         if (isRepeat)
@@ -724,7 +825,7 @@ public partial class RecordingPlayerControl : UserControl
 
     private void UpdatePositionFromPlayer()
     {
-        var position = MediaPlayer.Position;
+        var position = GetPosition();
         PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
         UpdatePlaybackTimeText(position, GetDuration());
     }
@@ -739,9 +840,9 @@ public partial class RecordingPlayerControl : UserControl
         _isPlaying = false;
         UpdatePlayPauseButton();
 
-        if (MediaPlayer.Source is not null)
+        if (_currentSource is not null)
         {
-            MediaPlayer.Stop();
+            _player.Stop();
         }
 
         ApplyPlayerAudioState();
@@ -750,14 +851,14 @@ public partial class RecordingPlayerControl : UserControl
     private void StartPlayback()
     {
         var duration = GetDuration();
-        if (_hasPlaybackEnded || (duration > TimeSpan.Zero && MediaPlayer.Position >= duration))
+        if (_hasPlaybackEnded || (duration > TimeSpan.Zero && GetPosition() >= duration))
         {
             var startPosition = Clamp(
                 _pendingPlaybackStartPosition ?? TimeSpan.Zero,
                 TimeSpan.Zero,
                 duration
             );
-            MediaPlayer.Position = startPosition;
+            SetPosition(startPosition);
             PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, startPosition.TotalSeconds);
             UpdatePlaybackTimeText(startPosition, duration);
         }
@@ -765,7 +866,7 @@ public partial class RecordingPlayerControl : UserControl
         _hasPlaybackEnded = false;
         _pendingPlaybackStartPosition = null;
         ApplyPlayerAudioState();
-        MediaPlayer.Play();
+        _player.Play();
         _isPlaying = true;
         UpdatePlayPauseButton();
         _positionTimer.Start();
@@ -773,9 +874,9 @@ public partial class RecordingPlayerControl : UserControl
 
     private void PausePlayback()
     {
-        if (MediaPlayer.Source is not null && _hasMedia)
+        if (_currentSource is not null && _hasMedia)
         {
-            MediaPlayer.Pause();
+            _player.Pause();
         }
 
         _positionTimer.Stop();
@@ -869,15 +970,23 @@ public partial class RecordingPlayerControl : UserControl
 
     private void ApplyPlayerAudioState()
     {
-        MediaPlayer.Volume = _volume;
-        MediaPlayer.IsMuted = IsEffectivelyMuted();
+        _player.Audio.Volume = (int)Math.Round(_volume * VolumeSliderScale);
+        _player.Audio.Mute = IsEffectivelyMuted();
     }
 
     private TimeSpan GetDuration()
     {
-        return MediaPlayer.NaturalDuration.HasTimeSpan
-            ? MediaPlayer.NaturalDuration.TimeSpan
-            : TimeSpan.Zero;
+        return _player.Duration > 0 ? TimeSpan.FromTicks(_player.Duration) : TimeSpan.Zero;
+    }
+
+    private TimeSpan GetPosition()
+    {
+        return _player.CurTime > 0 ? TimeSpan.FromTicks(_player.CurTime) : TimeSpan.Zero;
+    }
+
+    private void SetPosition(TimeSpan position)
+    {
+        _player.CurTime = position.Ticks;
     }
 
     private bool IsEffectivelyMuted()
@@ -905,5 +1014,15 @@ public partial class RecordingPlayerControl : UserControl
         }
 
         return value > maximum ? maximum : value;
+    }
+
+    private static string GetPlayerSource(Uri source)
+    {
+        return source.IsFile ? source.LocalPath : source.AbsoluteUri;
+    }
+
+    private static string GetSourceDisplayName(Uri source)
+    {
+        return source.IsFile ? Path.GetFileName(source.LocalPath) : source.Host;
     }
 }

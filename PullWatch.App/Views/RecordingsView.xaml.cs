@@ -17,7 +17,11 @@ public partial class RecordingsView : UserControl, IDisposable
 {
     private MainWindow? _fullScreenHostWindow;
     private Window? _keyboardWindow;
-    private object _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
+    private GridLength _playerRowHeightBeforeFullScreen;
+    private GridLength _splitterRowHeightBeforeFullScreen;
+    private GridLength _recordingListRowHeightBeforeFullScreen;
+    private double _playerRowMinHeightBeforeFullScreen;
+    private double _recordingListRowMinHeightBeforeFullScreen;
     private bool _isDisposed;
 
     public RecordingsView()
@@ -170,18 +174,13 @@ public partial class RecordingsView : UserControl, IDisposable
             return;
         }
 
-        _playerDataContextBeforeFullScreen = RecordingPlayer.ReadLocalValue(
-            FrameworkElement.DataContextProperty
-        );
-        RecordingPlayer.DataContext = DataContext;
-        PlayerHost.Content = null;
         _fullScreenHostWindow = hostWindow;
+        SetFullScreenLayout(true);
 
         if (!hostWindow.EnterFullScreenPlayer(RecordingPlayer, CloseFullScreen))
         {
             _fullScreenHostWindow = null;
-            PlayerHost.Content = RecordingPlayer;
-            RestorePlayerDataContext();
+            SetFullScreenLayout(false);
             return;
         }
 
@@ -206,31 +205,45 @@ public partial class RecordingsView : UserControl, IDisposable
             return;
         }
 
-        _fullScreenHostWindow = null;
         if (!hostWindow.ExitFullScreenPlayer(RecordingPlayer))
         {
             return;
         }
 
-        PlayerHost.Content = RecordingPlayer;
-        RestorePlayerDataContext();
+        _fullScreenHostWindow = null;
+        SetFullScreenLayout(false);
     }
 
-    private void RestorePlayerDataContext()
+    private void SetFullScreenLayout(bool isFullScreen)
     {
-        if (_playerDataContextBeforeFullScreen == DependencyProperty.UnsetValue)
+        if (isFullScreen)
         {
-            RecordingPlayer.ClearValue(FrameworkElement.DataContextProperty);
+            _playerRowHeightBeforeFullScreen = PlayerRow.Height;
+            _splitterRowHeightBeforeFullScreen = SplitterRow.Height;
+            _recordingListRowHeightBeforeFullScreen = RecordingListRow.Height;
+            _playerRowMinHeightBeforeFullScreen = PlayerRow.MinHeight;
+            _recordingListRowMinHeightBeforeFullScreen = RecordingListRow.MinHeight;
+
+            PlayerRow.MinHeight = 0;
+            PlayerRow.Height = new GridLength(1, GridUnitType.Star);
+            SplitterRow.Height = new GridLength(0);
+            RecordingListRow.MinHeight = 0;
+            RecordingListRow.Height = new GridLength(0);
+            PlayerListSplitter.Visibility = Visibility.Collapsed;
+            RecordingListPanel.Visibility = Visibility.Collapsed;
         }
         else
         {
-            RecordingPlayer.SetValue(
-                FrameworkElement.DataContextProperty,
-                _playerDataContextBeforeFullScreen
-            );
+            PlayerRow.MinHeight = _playerRowMinHeightBeforeFullScreen;
+            PlayerRow.Height = _playerRowHeightBeforeFullScreen;
+            SplitterRow.Height = _splitterRowHeightBeforeFullScreen;
+            RecordingListRow.MinHeight = _recordingListRowMinHeightBeforeFullScreen;
+            RecordingListRow.Height = _recordingListRowHeightBeforeFullScreen;
+            PlayerListSplitter.Visibility = Visibility.Visible;
+            RecordingListPanel.Visibility = Visibility.Visible;
         }
 
-        _playerDataContextBeforeFullScreen = DependencyProperty.UnsetValue;
+        RecordingPlayer.IsFullScreen = isFullScreen;
     }
 
     private static bool ShouldLeaveShortcutToFocusedControl(object? source, WpfKey key)
