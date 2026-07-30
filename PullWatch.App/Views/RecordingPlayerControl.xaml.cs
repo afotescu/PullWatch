@@ -33,6 +33,7 @@ public partial class RecordingPlayerControl : UserControl
     private const double FallbackUnmuteVolume = 0.5;
     private const int KeyboardSeekCommitDelayMilliseconds = 150;
     private static readonly TimeSpan EndSeekInset = TimeSpan.FromMilliseconds(50);
+    private static int _nextPlayerInstanceId;
 
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(
         nameof(Source),
@@ -64,8 +65,12 @@ public partial class RecordingPlayerControl : UserControl
 
     private readonly ILogger<RecordingPlayerControl> _logger;
     private readonly Player _player;
+    private readonly RecordingPlayerLoadState _loadState = new();
+    private readonly int _playerInstanceId = Interlocked.Increment(ref _nextPlayerInstanceId);
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _keyboardSeekTimer;
+    private RecordingPlayerLoadRequest? _activeLoadRequest;
+    private CancellationTokenSource? _openRetryCancellation;
     private Uri? _currentSource;
     private Stopwatch? _openStopwatch;
     private bool _hasMedia;
@@ -78,7 +83,6 @@ public partial class RecordingPlayerControl : UserControl
     private bool _isUpdatingVolumeControls;
     private double _lastAudibleVolume;
     private double _volume = FallbackUnmuteVolume;
-    private int _sourceLoadVersion;
     private TimeSpan? _pendingPlaybackStartPosition;
     private TimeSpan? _pendingKeyboardSeekPosition;
     private bool _pendingKeyboardSeekNeedsCommit;
@@ -187,7 +191,9 @@ public partial class RecordingPlayerControl : UserControl
 
     public void StopPlayback()
     {
-        _sourceLoadVersion++;
+        CancelPendingOpenRetry();
+        _loadState.Clear();
+        _activeLoadRequest = null;
         StopPlaybackCore();
         _currentSource = null;
         ResetPlayerState(sourceAvailable: false);
@@ -301,10 +307,17 @@ public partial class RecordingPlayerControl : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
     {
-        if (!_isDisposed && Source is not null && !Equals(_currentSource, Source))
+        if (_isDisposed || Source is null)
         {
-            ScheduleLoadSource(Source);
+            return;
         }
+
+        if (_loadState.PendingRequest is { } pendingRequest && TryStartLoad(pendingRequest))
+        {
+            return;
+        }
+
+        ScheduleLoadSource(Source);
     }
 
     private void ScheduleLoadSource(Uri? source)
@@ -315,29 +328,53 @@ public partial class RecordingPlayerControl : UserControl
         }
 
         CancelPendingSurfaceInteraction();
-        var loadVersion = ++_sourceLoadVersion;
 
         if (source is null)
         {
-            LoadSource(null);
+            CancelPendingOpenRetry();
+            var loadVersion = _loadState.Clear();
+            _activeLoadRequest = null;
+            _logger.LogDebug(
+                "Flyleaf player {PlayerInstanceId} cleared source at load {LoadVersion}",
+                _playerInstanceId,
+                loadVersion
+            );
+            ClearSource();
             return;
         }
 
-        if (IsReadyToLoadSource())
+        var request = _loadState.Request(source);
+        if (request is null)
         {
-            LoadSource(source);
+            _logger.LogDebug(
+                "Flyleaf player {PlayerInstanceId} ignored duplicate source {RecordingFile}; state={LoadState}",
+                _playerInstanceId,
+                GetSourceDisplayName(source),
+                _loadState.Status
+            );
+            return;
+        }
+
+        CancelPendingOpenRetry();
+        StartOrScheduleLoad(request.Value);
+    }
+
+    private void StartOrScheduleLoad(RecordingPlayerLoadRequest request)
+    {
+        if (TryStartLoad(request))
+        {
             return;
         }
 
         Dispatcher.InvokeAsync(
             () =>
             {
-                if (loadVersion != _sourceLoadVersion || _isDisposed || !IsReadyToLoadSource())
+                if (_isDisposed || !_loadState.IsCurrent(request))
                 {
                     return;
                 }
 
-                LoadSource(source);
+                TryStartLoad(request);
             },
             DispatcherPriority.Loaded
         );
@@ -348,23 +385,41 @@ public partial class RecordingPlayerControl : UserControl
         return IsLoaded && PresentationSource.FromVisual(MediaPlayer) is not null;
     }
 
-    private void LoadSource(Uri? source)
+    private bool TryStartLoad(RecordingPlayerLoadRequest request)
+    {
+        if (!IsReadyToLoadSource() || !_loadState.TryStart(request))
+        {
+            return false;
+        }
+
+        LoadSource(request);
+        return true;
+    }
+
+    private void ClearSource()
     {
         StopPlaybackCore();
         _currentSource = null;
-        ResetPlayerState(source is not null);
+        ResetPlayerState(sourceAvailable: false);
+    }
 
-        if (source is null)
-        {
-            return;
-        }
+    private void LoadSource(RecordingPlayerLoadRequest request)
+    {
+        StopPlaybackCore();
+        _currentSource = null;
+        ResetPlayerState(sourceAvailable: true);
 
+        var source = request.Source;
+        _activeLoadRequest = request;
         _currentSource = source;
         _player.Audio.Mute = true;
         _openStopwatch = Stopwatch.StartNew();
         _logger.LogInformation(
-            "Flyleaf opening recording {RecordingFile}",
-            GetSourceDisplayName(source)
+            "Flyleaf player {PlayerInstanceId} opening recording {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt}",
+            _playerInstanceId,
+            GetSourceDisplayName(source),
+            request.Version,
+            request.Attempt
         );
         _player.OpenAsync(GetPlayerSource(source));
     }
@@ -444,12 +499,14 @@ public partial class RecordingPlayerControl : UserControl
 
     private void CompletePlayerOpen(OpenCompletedArgs eventArgs)
     {
+        var request = _activeLoadRequest;
         if (
             eventArgs.IsSubtitles
-            || _currentSource is null
+            || request is null
+            || !_loadState.IsCurrent(request.Value)
             || !string.Equals(
                 eventArgs.Url,
-                GetPlayerSource(_currentSource),
+                GetPlayerSource(request.Value.Source),
                 StringComparison.OrdinalIgnoreCase
             )
         )
@@ -459,14 +516,29 @@ public partial class RecordingPlayerControl : UserControl
 
         _openStopwatch?.Stop();
 
-        if (!eventArgs.Success || !string.IsNullOrWhiteSpace(eventArgs.Error))
+        var succeeded = eventArgs.Success && string.IsNullOrWhiteSpace(eventArgs.Error);
+        if (!_loadState.TryComplete(request.Value, succeeded))
+        {
+            return;
+        }
+
+        if (!succeeded)
         {
             var error = string.IsNullOrWhiteSpace(eventArgs.Error)
                 ? "Flyleaf could not open the recording."
                 : eventArgs.Error;
+            if (RecordingPlayerOpenRetryPolicy.ShouldRetry(request.Value, error))
+            {
+                ScheduleOpenRetry(request.Value, error);
+                return;
+            }
+
             _logger.LogWarning(
-                "Flyleaf failed to open {RecordingFile} after {ElapsedMilliseconds:F1} ms: {PlaybackError}",
-                _currentSource is null ? "(none)" : GetSourceDisplayName(_currentSource),
+                "Flyleaf player {PlayerInstanceId} failed to open {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt} after {ElapsedMilliseconds:F1} ms: {PlaybackError}",
+                _playerInstanceId,
+                GetSourceDisplayName(request.Value.Source),
+                request.Value.Version,
+                request.Value.Attempt,
                 _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
                 error
             );
@@ -490,8 +562,11 @@ public partial class RecordingPlayerControl : UserControl
         PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
 
         _logger.LogInformation(
-            "Flyleaf opened {RecordingFile} in {ElapsedMilliseconds:F1} ms; duration={Duration}; video={VideoCodec} {VideoWidth}x{VideoHeight} {PixelFormat} {FramesPerSecond:F2} FPS; hardwareAcceleration={HardwareAcceleration}; audio={AudioCodec} {AudioSampleRate} Hz {AudioChannels} channels",
-            GetSourceDisplayName(_currentSource),
+            "Flyleaf player {PlayerInstanceId} opened {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt} in {ElapsedMilliseconds:F1} ms; duration={Duration}; video={VideoCodec} {VideoWidth}x{VideoHeight} {PixelFormat} {FramesPerSecond:F2} FPS; hardwareAcceleration={HardwareAcceleration}; audio={AudioCodec} {AudioSampleRate} Hz {AudioChannels} channels",
+            _playerInstanceId,
+            GetSourceDisplayName(request.Value.Source),
+            request.Value.Version,
+            request.Value.Attempt,
             _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
             GetDuration(),
             _player.Video.Codec,
@@ -504,6 +579,67 @@ public partial class RecordingPlayerControl : UserControl
             _player.Audio.SampleRate,
             _player.Audio.Channels
         );
+    }
+
+    private void ScheduleOpenRetry(RecordingPlayerLoadRequest request, string error)
+    {
+        CancelPendingOpenRetry();
+        var delay = RecordingPlayerOpenRetryPolicy.GetDelay(request);
+        var cancellation = new CancellationTokenSource();
+        _openRetryCancellation = cancellation;
+        _logger.LogInformation(
+            "Flyleaf player {PlayerInstanceId} could not discover media in {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt}; retrying after {RetryDelayMilliseconds} ms: {PlaybackError}",
+            _playerInstanceId,
+            GetSourceDisplayName(request.Source),
+            request.Version,
+            request.Attempt,
+            delay.TotalMilliseconds,
+            error
+        );
+        _ = RetryOpenAsync(request, delay, cancellation);
+    }
+
+    private async Task RetryOpenAsync(
+        RecordingPlayerLoadRequest request,
+        TimeSpan delay,
+        CancellationTokenSource cancellation
+    )
+    {
+        try
+        {
+            await Task.Delay(delay, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (
+            cancellation.IsCancellationRequested
+            || _isDisposed
+            || !ReferenceEquals(_openRetryCancellation, cancellation)
+            || !_loadState.IsCurrent(request)
+            || _loadState.Status != RecordingPlayerLoadStatus.Failed
+        )
+        {
+            return;
+        }
+
+        _openRetryCancellation = null;
+        cancellation.Dispose();
+
+        if (_loadState.Request(request.Source, retryFailed: true) is { } retryRequest)
+        {
+            StartOrScheduleLoad(retryRequest);
+        }
+    }
+
+    private void CancelPendingOpenRetry()
+    {
+        var cancellation = _openRetryCancellation;
+        _openRetryCancellation = null;
+        cancellation?.Cancel();
+        cancellation?.Dispose();
     }
 
     private void OnPlayerOpeningVideoStream(object? sender, Player.OpeningVideoStreamArgs eventArgs)
@@ -525,6 +661,17 @@ public partial class RecordingPlayerControl : UserControl
 
             if (!eventArgs.Success)
             {
+                if (_loadState.Status != RecordingPlayerLoadStatus.Open)
+                {
+                    _logger.LogDebug(
+                        "Flyleaf player {PlayerInstanceId} ignored playback-stop failure while source load state is {LoadState}: {PlaybackError}",
+                        _playerInstanceId,
+                        _loadState.Status,
+                        eventArgs.Error
+                    );
+                    return;
+                }
+
                 ShowPlaybackError(
                     $"This recording could not be played: {eventArgs.Error ?? "Flyleaf playback failed."}"
                 );
