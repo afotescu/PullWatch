@@ -36,7 +36,7 @@
     <Setter Property="Background" Value="{StaticResource BorderSubtleBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ProgressBar">
@@ -55,11 +55,50 @@
                 Background="{TemplateBinding Foreground}"
                 CornerRadius="2"
               />
+              <Border
+                x:Name="IndeterminateIndicator"
+                Width="64"
+                HorizontalAlignment="Center"
+                Background="{TemplateBinding Foreground}"
+                CornerRadius="2"
+                Opacity="0"
+                RenderTransformOrigin="0.5,0.5"
+                Visibility="Collapsed"
+              >
+                <Border.RenderTransform>
+                  <ScaleTransform ScaleX="0.55" />
+                </Border.RenderTransform>
+              </Border>
             </Grid>
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsIndeterminate" Value="True">
-              <Setter TargetName="PART_Indicator" Property="Opacity" Value="0.7" />
+              <Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="IndeterminateIndicator" Property="Visibility" Value="Visible" />
+              <Setter TargetName="IndeterminateIndicator" Property="Opacity" Value="0.35" />
+              <Trigger.EnterActions>
+                <BeginStoryboard x:Name="IndeterminateProgressStoryboard">
+                  <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                    <DoubleAnimation
+                      Storyboard.TargetName="IndeterminateIndicator"
+                      Storyboard.TargetProperty="Opacity"
+                      From="0.35"
+                      To="0.85"
+                      Duration="0:0:0.7"
+                    />
+                    <DoubleAnimation
+                      Storyboard.TargetName="IndeterminateIndicator"
+                      Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                      From="0.55"
+                      To="1"
+                      Duration="0:0:0.7"
+                    />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <StopStoryboard BeginStoryboardName="IndeterminateProgressStoryboard" />
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter TargetName="ProgressRoot" Property="Opacity" Value="0.45" />
@@ -850,7 +889,7 @@
               <Setter
                 TargetName="CheckBoxGlyph"
                 Property="BorderBrush"
-                Value="{StaticResource AccentBrush}"
+                Value="{StaticResource TextSecondaryBrush}"
               />
             </Trigger>
             <Trigger Property="IsChecked" Value="True">

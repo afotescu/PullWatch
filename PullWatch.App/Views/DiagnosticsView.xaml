@@ -21,15 +21,32 @@
         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="System status" />
         <Border Height="1" Margin="0,8,0,12" Background="{StaticResource BorderSubtleBrush}" />
 
-        <ItemsControl ItemsSource="{Binding Sections}">
-          <ItemsControl.ItemContainerStyle>
-            <Style TargetType="ContentPresenter">
-              <Setter Property="Margin" Value="0,0,0,8" />
-            </Style>
-          </ItemsControl.ItemContainerStyle>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Border Style="{StaticResource SurfacePanelStyle}">
+        <Border Style="{StaticResource SurfacePanelStyle}">
+          <ItemsControl AlternationCount="3" ItemsSource="{Binding Sections}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border BorderBrush="{StaticResource BorderSubtleBrush}">
+                  <Border.Style>
+                    <Style TargetType="Border">
+                      <Setter Property="BorderThickness" Value="0,0,0,1" />
+                      <Setter Property="Padding" Value="0,12" />
+                      <Style.Triggers>
+                        <DataTrigger
+                          Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}"
+                          Value="0"
+                        >
+                          <Setter Property="Padding" Value="0,0,0,12" />
+                        </DataTrigger>
+                        <DataTrigger
+                          Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}"
+                          Value="2"
+                        >
+                          <Setter Property="BorderThickness" Value="0" />
+                          <Setter Property="Padding" Value="0,12,0,0" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Border.Style>
                   <StackPanel>
                     <Grid>
                       <Grid.ColumnDefinitions>
@@ -119,10 +136,11 @@
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
                   </StackPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
 
         <TextBlock
           Margin="0,32,0,0"
