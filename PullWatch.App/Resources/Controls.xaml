@@ -925,6 +925,273 @@
     </Setter>
   </Style>
 
+  <Style x:Key="RecordingFilterListStyle" TargetType="ListBox">
+    <Setter Property="AlternationCount" Value="3" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+  </Style>
+
+  <Style
+    x:Key="RecordingLibraryHeaderTextStyle"
+    BasedOn="{StaticResource SecondaryTextStyle}"
+    TargetType="TextBlock"
+  >
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Opacity" Value="0.76" />
+    <Setter Property="Padding" Value="0,3" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+  </Style>
+
+  <Style x:Key="RecordingFilterFocusVisualStyle">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border
+            BorderBrush="{StaticResource AccentBrush}"
+            BorderThickness="1"
+            CornerRadius="5"
+          />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="RecordingFilterItemStyle" TargetType="ListBoxItem">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Cursor" Value="Arrow" />
+    <Setter
+      Property="FocusVisualStyle"
+      Value="{StaticResource RecordingFilterFocusVisualStyle}"
+    />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <Grid>
+            <Border
+              x:Name="ItemBorder"
+              Background="Transparent"
+              BorderBrush="{StaticResource BorderSubtleBrush}"
+              BorderThickness="0,0,1,0"
+              CornerRadius="0"
+              Padding="{TemplateBinding Padding}"
+            >
+              <ContentPresenter />
+            </Border>
+            <Border
+              x:Name="SelectionIndicator"
+              Height="2"
+              Margin="8,0"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Bottom"
+              Background="{StaticResource AccentBrush}"
+              CornerRadius="1"
+              Opacity="0"
+            />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="ItemsControl.AlternationIndex" Value="0">
+              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="5,0,0,5" />
+            </Trigger>
+            <Trigger Property="ItemsControl.AlternationIndex" Value="2">
+              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="0,5,5,0" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SurfaceHoverBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SurfaceSelectedBrush}"
+              />
+              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
+              <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="RecordingLibraryItemStyle" TargetType="ListBoxItem">
+    <Setter Property="MinHeight" Value="52" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    <Setter Property="Padding" Value="12,5" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Cursor" Value="Arrow" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <Grid>
+            <Border
+              x:Name="ItemBorder"
+              Background="Transparent"
+              BorderBrush="{StaticResource BorderSubtleBrush}"
+              BorderThickness="0,0,0,1"
+              Padding="{TemplateBinding Padding}"
+            >
+              <Grid>
+                <Border
+                  x:Name="SelectionIndicator"
+                  Width="3"
+                  Margin="-12,0,0,0"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Stretch"
+                  Background="{StaticResource AccentBrush}"
+                  CornerRadius="2"
+                  Opacity="0"
+                />
+                <ContentPresenter />
+              </Grid>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SurfaceHoverBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SurfaceSelectedBrush}"
+              />
+              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style
+    x:Key="RecordingOverflowButtonStyle"
+    BasedOn="{StaticResource ButtonChromeStyle}"
+    TargetType="Button"
+  >
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="Cursor" Value="Arrow" />
+    <Setter Property="Opacity" Value="0.65" />
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="Opacity" Value="1" />
+      </Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="Opacity" Value="1" />
+      </Trigger>
+      <DataTrigger
+        Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+        Value="True"
+      >
+        <Setter Property="Opacity" Value="1" />
+      </DataTrigger>
+      <DataTrigger
+        Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+        Value="True"
+      >
+        <Setter Property="Opacity" Value="1" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="ActionContextMenuStyle" TargetType="ContextMenu">
+    <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="4" />
+    <Setter Property="HasDropShadow" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContextMenu">
+          <Border
+            Background="{TemplateBinding Background}"
+            BorderBrush="{TemplateBinding BorderBrush}"
+            BorderThickness="{TemplateBinding BorderThickness}"
+            CornerRadius="6"
+            Padding="{TemplateBinding Padding}"
+          >
+            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ActionMenuItemStyle" TargetType="MenuItem">
+    <Setter Property="MinWidth" Value="190" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Cursor" Value="Arrow" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Border
+            x:Name="ItemBorder"
+            Background="Transparent"
+            CornerRadius="4"
+            Padding="{TemplateBinding Padding}"
+          >
+            <ContentPresenter
+              ContentSource="Header"
+              RecognizesAccessKey="True"
+            />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter
+                TargetName="ItemBorder"
+                Property="Background"
+                Value="{StaticResource SurfaceHoverBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style
+    x:Key="DangerActionMenuItemStyle"
+    BasedOn="{StaticResource ActionMenuItemStyle}"
+    TargetType="MenuItem"
+  >
+    <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+  </Style>
+
   <Style x:Key="NavigationListStyle" TargetType="ListBox">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />

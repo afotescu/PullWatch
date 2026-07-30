@@ -127,6 +127,9 @@
                 <DataTrigger Binding="{Binding IsRecorderError}" Value="True">
                   <Setter Property="Padding" Value="10,7" />
                 </DataTrigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                </Trigger>
               </Style.Triggers>
             </Style>
           </Button.Style>

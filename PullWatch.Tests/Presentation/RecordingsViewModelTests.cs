@@ -978,7 +978,62 @@ public sealed class RecordingsViewModelTests
             Assert.True(item.IsDurationVisible);
             Assert.Equal("Mythic", item.Context);
             Assert.Equal("Kill", item.Result);
+            Assert.Equal(RecordingResultKind.Success, item.ResultKind);
             Assert.Equal("07:46", item.Duration);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(RaidEncounterOutcome.Wipe, "Wipe", RecordingResultKind.Failure)]
+    [InlineData(RaidEncounterOutcome.Unknown, "Unknown", RecordingResultKind.Unknown)]
+    public void MapsRaidEncounterResultToSemanticPresentation(
+        RaidEncounterOutcome outcome,
+        string expectedText,
+        RecordingResultKind expectedKind
+    )
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var id = Guid.NewGuid();
+            var startedAtUtc = new DateTimeOffset(2026, 6, 17, 20, 28, 32, TimeSpan.Zero);
+            var recording = CatalogFile(
+                Path.Combine(directory, "raid-result.mp4"),
+                startedAtUtc.AddMinutes(5),
+                id: id,
+                kind: RecordingCatalogKind.Encounter,
+                raidEncounter: new RaidEncounterEntry(
+                    id,
+                    startedAtUtc,
+                    startedAtUtc.AddMinutes(5),
+                    3159,
+                    "Rotmire",
+                    WowDifficultyIds.MythicRaid,
+                    20,
+                    1592,
+                    startedAtUtc,
+                    outcome,
+                    startedAtUtc.AddMinutes(5),
+                    300000,
+                    4
+                )
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording])
+            );
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            var item = Assert.Single(viewModel.Recordings);
+
+            Assert.Equal(expectedText, item.Result);
+            Assert.Equal(expectedKind, item.ResultKind);
         }
         finally
         {
@@ -1044,6 +1099,7 @@ public sealed class RecordingsViewModelTests
             Assert.True(item.IsDurationVisible);
             Assert.Equal("+22", item.Context);
             Assert.Equal("Timed", item.Result);
+            Assert.Equal(RecordingResultKind.Success, item.ResultKind);
             Assert.Equal("31:20", item.Duration);
         }
         finally

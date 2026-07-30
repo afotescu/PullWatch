@@ -69,6 +69,7 @@
       TargetType="Button"
     >
       <Setter Property="MaxWidth" Value="190" />
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
       <Style.Triggers>
@@ -150,7 +151,7 @@
           <StackPanel DockPanel.Dock="Bottom" Margin="0,24,0,0">
             <TextBlock
               Margin="2,0,0,4"
-              Style="{StaticResource MutedTextStyle}"
+              Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding AppVersionShortLabel}"
             />
             <Button
@@ -159,6 +160,7 @@
               ToolTip="{Binding Updates.ActionToolTip}"
             >
               <TextBlock
+                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                 Text="{Binding Updates.ActionText}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="NoWrap"
@@ -310,7 +312,7 @@
               Margin="0,0,0,10"
               HorizontalAlignment="Center"
               FontSize="10"
-              Style="{StaticResource MutedTextStyle}"
+              Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding AppVersionShortLabel}"
               TextAlignment="Center"
               TextWrapping="NoWrap"
