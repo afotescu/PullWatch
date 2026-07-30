@@ -59,6 +59,23 @@ public partial class RecordingsView : UserControl, IDisposable
         SuspendPlayback();
     }
 
+    private void OnRecordingActionsClick(object sender, RoutedEventArgs eventArgs)
+    {
+        if (sender is not Button { ContextMenu: { } contextMenu } button)
+        {
+            return;
+        }
+
+        if (button.DataContext is RecordingListItem recording)
+        {
+            RecordingList.SelectedItem = recording;
+        }
+
+        contextMenu.PlacementTarget = button;
+        contextMenu.IsOpen = true;
+        eventArgs.Handled = true;
+    }
+
     internal void SuspendPlayback()
     {
         CloseFullScreen();

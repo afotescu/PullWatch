@@ -9,3 +9,13 @@ public enum RecordingStatusHealth
     Active,
     AttentionNeeded,
 }
+
+public enum RecorderPresentationState
+{
+    Idle,
+    Ready,
+    Starting,
+    Recording,
+    Stopping,
+    Error,
+}

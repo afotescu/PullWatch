@@ -15,7 +15,8 @@ public sealed class WpfRecordingDialogs : IRecordingDialogs
                     new ConfirmationDialogButton(
                         "Delete",
                         ConfirmationDialogResult.Primary,
-                        ConfirmationDialogButtonKind.Destructive
+                        ConfirmationDialogButtonKind.Destructive,
+                        IsDefault: true
                     ),
                     new ConfirmationDialogButton(
                         "Cancel",

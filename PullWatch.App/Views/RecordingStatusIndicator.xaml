@@ -14,43 +14,78 @@
       </Ellipse.RenderTransform>
       <Ellipse.Style>
         <Style TargetType="Ellipse">
-          <Setter Property="Fill" Value="{StaticResource StatusNeutralBrush}" />
+          <Setter Property="Fill" Value="{StaticResource IdleBrush}" />
           <Setter Property="Stroke" Value="{StaticResource BorderBrush}" />
           <Style.Triggers>
             <DataTrigger
               Binding="{Binding Health, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="{x:Static local:RecordingStatusHealth.Active}"
             >
-              <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
             </DataTrigger>
             <DataTrigger
               Binding="{Binding Health, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="{x:Static local:RecordingStatusHealth.Ready}"
             >
-              <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
             </DataTrigger>
             <DataTrigger
               Binding="{Binding Health, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="{x:Static local:RecordingStatusHealth.ManualOnly}"
             >
-              <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
             </DataTrigger>
             <DataTrigger
               Binding="{Binding Health, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}"
             >
-              <Setter Property="Fill" Value="{StaticResource FailureBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource FailureBrush}" />
+              <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource ErrorBrush}" />
+            </DataTrigger>
+            <DataTrigger
+              Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
+              Value="{x:Static local:RecorderPresentationState.Ready}"
+            >
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
+            </DataTrigger>
+            <DataTrigger
+              Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
+              Value="{x:Static local:RecorderPresentationState.Starting}"
+            >
+              <Setter Property="Fill" Value="{StaticResource WarningBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource WarningBrush}" />
+            </DataTrigger>
+            <DataTrigger
+              Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
+              Value="{x:Static local:RecorderPresentationState.Recording}"
+            >
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
+            </DataTrigger>
+            <DataTrigger
+              Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
+              Value="{x:Static local:RecorderPresentationState.Stopping}"
+            >
+              <Setter Property="Fill" Value="{StaticResource WarningBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource WarningBrush}" />
+            </DataTrigger>
+            <DataTrigger
+              Binding="{Binding State, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
+              Value="{x:Static local:RecorderPresentationState.Error}"
+            >
+              <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource ErrorBrush}" />
             </DataTrigger>
             <DataTrigger
               Binding="{Binding IsPulseActive, RelativeSource={RelativeSource AncestorType=local:RecordingStatusIndicator}}"
               Value="True"
             >
-              <Setter Property="Fill" Value="{StaticResource HealthyBrush}" />
-              <Setter Property="Stroke" Value="{StaticResource HealthyBrush}" />
+              <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+              <Setter Property="Stroke" Value="{StaticResource SuccessBrush}" />
               <DataTrigger.EnterActions>
                 <BeginStoryboard x:Name="RecordingPulseStoryboard">
                   <Storyboard RepeatBehavior="Forever" AutoReverse="True">

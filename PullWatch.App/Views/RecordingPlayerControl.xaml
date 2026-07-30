@@ -11,12 +11,11 @@
   <UserControl.Resources>
     <Style
       x:Key="PlayerIconButtonStyle"
-      BasedOn="{StaticResource BaseButtonStyle}"
+      BasedOn="{StaticResource IconButtonStyle}"
       TargetType="Button"
     >
-      <Setter Property="Width" Value="42" />
-      <Setter Property="Height" Value="38" />
-      <Setter Property="Padding" Value="0" />
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="34" />
     </Style>
     <Geometry x:Key="PlayIconGeometry">M 5 3 L 12 8 L 5 13 Z</Geometry>
     <Geometry x:Key="StopIconGeometry">M 4 4 L 12 4 L 12 12 L 4 12 Z</Geometry>
@@ -66,7 +65,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 FontSize="14"
-                Foreground="{StaticResource SecondaryTextBrush}"
+                Foreground="{StaticResource TextSecondaryBrush}"
                 TextAlignment="Center"
               />
             </Border>
@@ -132,7 +131,7 @@
         MinWidth="104"
         Margin="12,0,0,0"
         VerticalAlignment="Center"
-        FontFamily="Consolas"
+        FontFamily="{StaticResource MonospaceFontFamily}"
         Style="{StaticResource SecondaryTextStyle}"
         Text="00:00 / 00:00"
         TextAlignment="Right"

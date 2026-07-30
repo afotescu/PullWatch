@@ -16,6 +16,7 @@ internal static class RecordingListItemFactory
     private static RecordingListItem Create(RecordingCatalogFile file)
     {
         var displayName = Path.GetFileNameWithoutExtension(file.FilePath);
+        var result = FormatResult(file);
 
         return new RecordingListItem(
             file.Id,
@@ -27,11 +28,14 @@ internal static class RecordingListItemFactory
             GetActivity(file, displayName),
             GetActivityDetail(file),
             FormatContext(file),
-            FormatResult(file),
+            result.Text,
             FormatActivityDuration(file),
             file.ModifiedAtUtc.ToLocalTime(),
             file.SizeBytes
-        );
+        )
+        {
+            ResultKind = result.Kind,
+        };
     }
 
     private static string FormatStartedAt(RecordingCatalogFile file)
@@ -105,15 +109,15 @@ internal static class RecordingListItemFactory
             : MissingMetadataValue;
     }
 
-    private static string FormatResult(RecordingCatalogFile file)
+    private static RecordingResultPresentation FormatResult(RecordingCatalogFile file)
     {
         if (file.RaidEncounter is { } raidEncounter)
         {
             return raidEncounter.Outcome switch
             {
-                RaidEncounterOutcome.Kill => "Kill",
-                RaidEncounterOutcome.Wipe => "Wipe",
-                _ => "Unknown",
+                RaidEncounterOutcome.Kill => new("Kill", RecordingResultKind.Success),
+                RaidEncounterOutcome.Wipe => new("Wipe", RecordingResultKind.Failure),
+                _ => new("Unknown", RecordingResultKind.Unknown),
             };
         }
 
@@ -121,13 +125,15 @@ internal static class RecordingListItemFactory
         {
             return challengeMode.Outcome switch
             {
-                ChallengeModeOutcome.Timed => "Timed",
-                ChallengeModeOutcome.Depleted => "Depleted",
-                _ => "Unknown",
+                ChallengeModeOutcome.Timed => new("Timed", RecordingResultKind.Success),
+                ChallengeModeOutcome.Depleted => new("Depleted", RecordingResultKind.Failure),
+                _ => new("Unknown", RecordingResultKind.Unknown),
             };
         }
 
-        return file.Kind == RecordingCatalogKind.Manual ? "Saved" : MissingMetadataValue;
+        return file.Kind == RecordingCatalogKind.Manual
+            ? new RecordingResultPresentation("Saved", RecordingResultKind.Neutral)
+            : new RecordingResultPresentation(MissingMetadataValue, RecordingResultKind.Unknown);
     }
 
     private static string FormatActivityDuration(RecordingCatalogFile file)
@@ -160,4 +166,6 @@ internal static class RecordingListItemFactory
                 duration.Value < TimeSpan.Zero ? TimeSpan.Zero : duration.Value
             );
     }
+
+    private sealed record RecordingResultPresentation(string Text, RecordingResultKind Kind);
 }

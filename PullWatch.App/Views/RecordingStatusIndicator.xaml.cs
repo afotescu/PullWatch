@@ -4,6 +4,13 @@ namespace PullWatch;
 
 public partial class RecordingStatusIndicator : UserControl
 {
+    public static readonly DependencyProperty StateProperty = DependencyProperty.Register(
+        nameof(State),
+        typeof(RecorderPresentationState),
+        typeof(RecordingStatusIndicator),
+        new PropertyMetadata(RecorderPresentationState.Idle)
+    );
+
     public static readonly DependencyProperty HealthProperty = DependencyProperty.Register(
         nameof(Health),
         typeof(RecordingStatusHealth),
@@ -29,6 +36,12 @@ public partial class RecordingStatusIndicator : UserControl
     public RecordingStatusIndicator()
     {
         InitializeComponent();
+    }
+
+    public RecorderPresentationState State
+    {
+        get => (RecorderPresentationState)GetValue(StateProperty);
+        set => SetValue(StateProperty, value);
     }
 
     public RecordingStatusHealth Health

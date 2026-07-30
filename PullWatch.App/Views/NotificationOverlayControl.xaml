@@ -8,18 +8,18 @@
   <UserControl.Resources>
     <Style
       x:Key="NotificationActionButtonStyle"
-      BasedOn="{StaticResource AccentButtonStyle}"
+      BasedOn="{StaticResource PrimaryButtonStyle}"
       TargetType="Button"
     >
       <Setter Property="MinWidth" Value="122" />
       <Setter Property="MaxWidth" Value="180" />
-      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Padding" Value="14,7" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <Style
       x:Key="NotificationDismissButtonStyle"
-      BasedOn="{StaticResource BaseButtonStyle}"
+      BasedOn="{StaticResource IconButtonStyle}"
       TargetType="Button"
     >
       <Setter Property="Width" Value="34" />
@@ -38,10 +38,10 @@
       <DataTemplate DataType="{x:Type local:NotificationViewModel}">
         <Border
           Margin="0,0,0,10"
-          Background="{StaticResource SurfaceRaisedBrush}"
+          Background="{StaticResource SurfaceBrush}"
           BorderBrush="{StaticResource BorderBrush}"
           BorderThickness="1"
-          CornerRadius="8"
+          CornerRadius="7"
           Padding="0"
         >
           <Grid MinHeight="72">
@@ -52,7 +52,7 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" CornerRadius="7,0,0,7">
+            <Border Grid.Column="0" CornerRadius="6,0,0,6">
               <Border.Style>
                 <Style TargetType="Border">
                   <Setter Property="Background" Value="{StaticResource AccentBrush}" />
@@ -61,19 +61,19 @@
                       Binding="{Binding Severity}"
                       Value="{x:Static local:NotificationSeverity.Success}"
                     >
-                      <Setter Property="Background" Value="{StaticResource HealthyBrush}" />
+                      <Setter Property="Background" Value="{StaticResource SuccessBrush}" />
                     </DataTrigger>
                     <DataTrigger
                       Binding="{Binding Severity}"
                       Value="{x:Static local:NotificationSeverity.Warning}"
                     >
-                      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                      <Setter Property="Background" Value="{StaticResource WarningBrush}" />
                     </DataTrigger>
                     <DataTrigger
                       Binding="{Binding Severity}"
                       Value="{x:Static local:NotificationSeverity.Error}"
                     >
-                      <Setter Property="Background" Value="{StaticResource FailureBrush}" />
+                      <Setter Property="Background" Value="{StaticResource ErrorBrush}" />
                     </DataTrigger>
                   </Style.Triggers>
                 </Style>

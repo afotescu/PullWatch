@@ -51,9 +51,10 @@ public partial class ConfirmationDialogWindow : Window
     {
         return kind switch
         {
-            ConfirmationDialogButtonKind.Accent => TryFindResource("AccentButtonStyle") as Style,
-            ConfirmationDialogButtonKind.Destructive => TryFindResource("StopButtonStyle") as Style,
-            _ => TryFindResource("BaseButtonStyle") as Style,
+            ConfirmationDialogButtonKind.Accent => TryFindResource("PrimaryButtonStyle") as Style,
+            ConfirmationDialogButtonKind.Destructive => TryFindResource("DangerButtonStyle")
+                as Style,
+            _ => TryFindResource("SecondaryButtonStyle") as Style,
         };
     }
 }

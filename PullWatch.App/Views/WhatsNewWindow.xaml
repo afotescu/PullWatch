@@ -27,8 +27,7 @@
         <TextBlock
           Grid.Column="0"
           Margin="0,2,18,0"
-          FontSize="22"
-          FontWeight="SemiBold"
+          Style="{StaticResource PageTitleTextStyle}"
           Text="{Binding Heading}"
           TextWrapping="Wrap"
         />
@@ -84,12 +83,12 @@
 
                         <TextBlock
                           Grid.Column="0"
-                          Foreground="{StaticResource SecondaryTextBrush}"
+                          Foreground="{StaticResource TextSecondaryBrush}"
                           Text="•"
                         />
                         <TextBlock
                           Grid.Column="1"
-                          Foreground="{StaticResource PrimaryTextBrush}"
+                          Foreground="{StaticResource TextPrimaryBrush}"
                           LineHeight="21"
                           Text="{Binding}"
                           TextWrapping="Wrap"
@@ -113,7 +112,7 @@
         Content="Got it"
         IsCancel="True"
         IsDefault="True"
-        Style="{StaticResource AccentButtonStyle}"
+        Style="{StaticResource PrimaryButtonStyle}"
       />
     </Grid>
   </Border>

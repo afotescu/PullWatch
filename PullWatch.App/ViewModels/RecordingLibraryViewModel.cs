@@ -7,6 +7,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
 {
     private const string NoDirectoryMessage =
         "Choose a recordings directory in settings to review videos here.";
+    private const string LoadingMessage = "Loading recordings...";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
 
     private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
@@ -32,6 +33,9 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
     )
     {
         _recordingsDirectory = recordingsDirectory;
+        _status = string.IsNullOrWhiteSpace(recordingsDirectory)
+            ? NoDirectoryMessage
+            : LoadingMessage;
         _loadRecordings = loadRecordings;
         _deleteRecording = deleteRecording;
         _confirmPermanentDelete = confirmPermanentDelete;

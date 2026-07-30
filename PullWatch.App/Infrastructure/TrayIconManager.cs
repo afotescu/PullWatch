@@ -10,11 +10,11 @@ namespace PullWatch;
 
 public sealed class TrayIconManager : IDisposable
 {
-    private const string SurfaceRaisedBrushKey = "SurfaceRaisedBrush";
-    private const string PrimaryTextBrushKey = "PrimaryTextBrush";
-    private const string SecondaryTextBrushKey = "SecondaryTextBrush";
+    private const string SurfaceBrushKey = "SurfaceBrush";
+    private const string TextPrimaryBrushKey = "TextPrimaryBrush";
+    private const string TextSecondaryBrushKey = "TextSecondaryBrush";
     private const string BorderBrushKey = "BorderBrush";
-    private const string ListItemHoverBrushKey = "ListItemHoverBrush";
+    private const string SurfaceHoverBrushKey = "SurfaceHoverBrush";
 
     private static readonly Uri TrayIconUri = new(
         "pack://application:,,,/Assets/favicon.ico",
@@ -128,14 +128,14 @@ public sealed class TrayIconManager : IDisposable
 
     private static ContextMenu CreateContextMenu()
     {
-        var backgroundBrush = GetBrush(SurfaceRaisedBrushKey, Color.FromRgb(0x2A, 0x30, 0x38));
-        var foregroundBrush = GetBrush(PrimaryTextBrushKey, Color.FromRgb(0xF2, 0xF4, 0xF7));
+        var backgroundBrush = GetBrush(SurfaceBrushKey, Color.FromRgb(0x1B, 0x1F, 0x24));
+        var foregroundBrush = GetBrush(TextPrimaryBrushKey, Color.FromRgb(0xF0, 0xF2, 0xF4));
         var disabledForegroundBrush = GetBrush(
-            SecondaryTextBrushKey,
-            Color.FromRgb(0xAA, 0xB2, 0xBD)
+            TextSecondaryBrushKey,
+            Color.FromRgb(0xA8, 0xB0, 0xBA)
         );
-        var borderBrush = GetBrush(BorderBrushKey, Color.FromRgb(0x40, 0x49, 0x56));
-        var hoverBrush = GetBrush(ListItemHoverBrushKey, Color.FromRgb(0x30, 0x37, 0x42));
+        var borderBrush = GetBrush(BorderBrushKey, Color.FromRgb(0x30, 0x36, 0x3D));
+        var hoverBrush = GetBrush(SurfaceHoverBrushKey, Color.FromRgb(0x22, 0x27, 0x2E));
 
         var menu = new ContextMenu
         {

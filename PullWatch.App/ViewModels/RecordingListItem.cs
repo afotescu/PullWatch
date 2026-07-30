@@ -20,6 +20,8 @@ public sealed record RecordingListItem(
 {
     public Uri Source { get; } = new(Path, UriKind.Absolute);
 
+    public RecordingResultKind ResultKind { get; init; }
+
     public bool IsPullNumberVisible => Category is RecordingListCategory.RaidEncounter;
 
     public bool IsContextVisible =>

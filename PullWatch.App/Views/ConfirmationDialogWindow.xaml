@@ -32,8 +32,7 @@
             x:Name="TitleTextBlock"
             Grid.Column="0"
             Margin="0,2,18,0"
-            FontSize="18"
-            FontWeight="SemiBold"
+            Style="{StaticResource DialogTitleTextStyle}"
             TextWrapping="Wrap"
           />
 

@@ -12,6 +12,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         "Video encoding needs to be tested before recording.";
     private const string VideoEncodingSetupRequiredSuffix =
         "Manual and automatic recording stay disabled until setup is complete.";
+    private const string RecorderFailureFallbackDescription =
+        "The recorder could not complete its last operation";
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
     private readonly Func<Task> _testVideoEncoding;
@@ -130,6 +132,65 @@ public sealed partial class RecordingsViewModel : ObservableObject
         IsVideoEncodingSetupRequired
             ? RecordingStatusHealth.AttentionNeeded
             : GetStatusHealth(_recording, _combatLog, _wowProcess);
+
+    public RecorderPresentationState RecorderState =>
+        GetRecorderPresentationState(
+            _recording,
+            _combatLog,
+            _wowProcess,
+            IsVideoEncodingSetupRequired
+        );
+
+    public string RecorderStateLabel =>
+        RecorderState switch
+        {
+            RecorderPresentationState.Starting => "Starting",
+            RecorderPresentationState.Recording => "Recording",
+            RecorderPresentationState.Stopping => "Stopping",
+            RecorderPresentationState.Error when IsVideoEncodingSetupRequired => "Setup needed",
+            RecorderPresentationState.Error when HasRecorderFailure => "Recording failed",
+            RecorderPresentationState.Error => "Needs attention",
+            RecorderPresentationState.Ready => "Ready",
+            _ => "Waiting",
+        };
+
+    public string RecorderDescription =>
+        RecorderState switch
+        {
+            RecorderPresentationState.Idle
+                when _wowProcess.State == WowProcessState.WaitingForWindow =>
+                "Waiting for the WoW game window",
+            RecorderPresentationState.Idle => "WoW is not running",
+            RecorderPresentationState.Ready => "World of Warcraft detected",
+            RecorderPresentationState.Starting => "Preparing the recording",
+            RecorderPresentationState.Recording => "Capture is active",
+            RecorderPresentationState.Stopping => "Saving the recording",
+            RecorderPresentationState.Error => GetRecorderErrorDescription(
+                _recording,
+                _combatLog,
+                IsVideoEncodingSetupRequired
+            ),
+            _ => string.Empty,
+        };
+
+    public bool IsRecorderTimerVisible =>
+        _recording.State == RecordingCoordinatorState.Recording && _recording.Context is not null;
+
+    public bool IsRecorderContextVisible =>
+        _recording.State != RecordingCoordinatorState.Idle && _recording.Context is not null;
+
+    public bool IsRecorderError => RecorderState == RecorderPresentationState.Error;
+
+    public string? RecorderContextDisplay =>
+        _recording.Context switch
+        {
+            ManualRecordingContext => "Manual recording",
+            ChallengeRecordingContext challenge =>
+                $"{challenge.DungeonName} · Mythic+ · +{challenge.KeystoneLevel}",
+            EncounterRecordingContext encounter =>
+                $"{encounter.EncounterName} · {FormatEncounterContextMetadata(encounter)}",
+            _ => null,
+        };
 
     public bool IsVideoEncodingSetupRequired =>
         _recording.State == RecordingCoordinatorState.Idle
@@ -256,7 +317,15 @@ public sealed partial class RecordingsViewModel : ObservableObject
             ? IsTestingVideoEncoding
                 ? "Testing video encoding..."
                 : "Test video encoding"
-            : ManualRecordingButtonText;
+            : _recording.State == RecordingCoordinatorState.Starting
+                ? "Preparing..."
+                : _recording.State == RecordingCoordinatorState.Stopping
+                    ? "Stopping..."
+                    : HasRecorderFailure
+                        ? "Retry"
+                        : IsManualStopMode
+                            ? "Stop recording"
+                            : "Start recording";
 
     public bool IsTestingVideoEncoding
     {
@@ -335,6 +404,11 @@ public sealed partial class RecordingsViewModel : ObservableObject
             && _wowProcess.IsWindowAvailable
             && !IsVideoEncodingSetupRequired
         );
+
+    private bool HasRecorderFailure =>
+        _recording.LastFailure is not null
+        && !IsTargetUnavailableFailure(_recording.LastFailure)
+        && !IsVideoEncodingSetupFailure(_recording.LastFailure);
 
     private bool CanRunStatusCardCommand =>
         IsVideoEncodingSetupRequired
@@ -596,6 +670,87 @@ public sealed partial class RecordingsViewModel : ObservableObject
         return IsAutomaticRecordingReady(combatLog)
             ? RecordingStatusHealth.Ready
             : RecordingStatusHealth.ManualOnly;
+    }
+
+    private static RecorderPresentationState GetRecorderPresentationState(
+        RecordingCoordinatorStatus recording,
+        CombatLogReaderStatus combatLog,
+        WowProcessStatus wowProcess,
+        bool isVideoEncodingSetupRequired
+    )
+    {
+        if (recording.State == RecordingCoordinatorState.Starting)
+        {
+            return RecorderPresentationState.Starting;
+        }
+
+        if (recording.State == RecordingCoordinatorState.Recording)
+        {
+            return RecorderPresentationState.Recording;
+        }
+
+        if (recording.State == RecordingCoordinatorState.Stopping)
+        {
+            return RecorderPresentationState.Stopping;
+        }
+
+        if (
+            isVideoEncodingSetupRequired
+            || (
+                recording.LastFailure is not null
+                && !IsTargetUnavailableFailure(recording.LastFailure)
+            )
+            || combatLog.LastFileSystemError is not null
+        )
+        {
+            return RecorderPresentationState.Error;
+        }
+
+        return wowProcess.IsWindowAvailable
+            ? RecorderPresentationState.Ready
+            : RecorderPresentationState.Idle;
+    }
+
+    private static string GetRecorderErrorDescription(
+        RecordingCoordinatorStatus recording,
+        CombatLogReaderStatus combatLog,
+        bool isVideoEncodingSetupRequired
+    )
+    {
+        if (isVideoEncodingSetupRequired)
+        {
+            return "Test video encoding before recording";
+        }
+
+        if (recording.LastFailure is not null)
+        {
+            return GetRecorderFailureSummary(recording.LastFailure);
+        }
+
+        return combatLog.LastFileSystemError is not null
+            ? "Automatic recording cannot read combat logs"
+            : "The recorder needs attention";
+    }
+
+    private static string GetRecorderFailureSummary(Exception failure)
+    {
+        if (string.IsNullOrWhiteSpace(failure.Message))
+        {
+            return RecorderFailureFallbackDescription;
+        }
+
+        var message = failure.Message.Trim();
+        var firstLineEnd = message.IndexOfAny('\r', '\n');
+        var firstLine = firstLineEnd < 0 ? message : message[..firstLineEnd];
+        return firstLine.TrimEnd('.', ' ', '\t');
+    }
+
+    private static string FormatEncounterContextMetadata(EncounterRecordingContext encounter)
+    {
+        var difficulty = WowRaidDifficultyFormatter.FormatDisplayName(encounter.DifficultyId);
+        return encounter.PullNumber is { } pullNumber
+            ? $"{difficulty} · Pull {pullNumber}"
+            : difficulty;
     }
 
     private static bool IsAutomaticRecordingReady(CombatLogReaderStatus combatLog)

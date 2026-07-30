@@ -15,6 +15,10 @@ public sealed class RecordingsViewModelTests
         true,
         false,
         "Manual start",
+        "Start recording",
+        RecorderPresentationState.Ready,
+        "Ready",
+        "World of Warcraft detected",
         "Idle. Click to start manual recording."
     )]
     [InlineData(
@@ -23,6 +27,10 @@ public sealed class RecordingsViewModelTests
         false,
         false,
         "Manual start",
+        "Preparing...",
+        RecorderPresentationState.Starting,
+        "Starting",
+        "Preparing the recording",
         "WoW is running.\r\nStarting recording."
     )]
     [InlineData(
@@ -31,6 +39,10 @@ public sealed class RecordingsViewModelTests
         true,
         true,
         "Manual stop",
+        "Stop recording",
+        RecorderPresentationState.Recording,
+        "Recording",
+        "Capture is active",
         "Recording. Click to stop."
     )]
     [InlineData(
@@ -39,6 +51,10 @@ public sealed class RecordingsViewModelTests
         false,
         false,
         "Manual start",
+        "Stopping...",
+        RecorderPresentationState.Stopping,
+        "Stopping",
+        "Saving the recording",
         "WoW recording is being saved."
     )]
     public void AppliesEveryRecordingState(
@@ -47,6 +63,10 @@ public sealed class RecordingsViewModelTests
         bool canRunManualCommand,
         bool isManualStopMode,
         string expectedManualButtonText,
+        string expectedStatusCardButtonText,
+        RecorderPresentationState expectedRecorderState,
+        string expectedRecorderStateLabel,
+        string expectedRecorderDescription,
         string expectedCollapsedStatusToolTip
     )
     {
@@ -57,7 +77,10 @@ public sealed class RecordingsViewModelTests
         Assert.Equal(canRunManualCommand, viewModel.StatusCardCommand.CanExecute(null));
         Assert.Equal(isManualStopMode, viewModel.IsManualStopMode);
         Assert.Equal(expectedManualButtonText, viewModel.ManualRecordingButtonText);
-        Assert.Equal(expectedManualButtonText, viewModel.StatusCardButtonText);
+        Assert.Equal(expectedStatusCardButtonText, viewModel.StatusCardButtonText);
+        Assert.Equal(expectedRecorderState, viewModel.RecorderState);
+        Assert.Equal(expectedRecorderStateLabel, viewModel.RecorderStateLabel);
+        Assert.Equal(expectedRecorderDescription, viewModel.RecorderDescription);
         Assert.Equal(
             expectedCollapsedStatusToolTip.Replace("\r\n", Environment.NewLine),
             viewModel.CollapsedStatusToolTip
@@ -141,6 +164,9 @@ public sealed class RecordingsViewModelTests
             viewModel.ReadinessDetail
         );
         Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
+        Assert.Equal(RecorderPresentationState.Error, viewModel.RecorderState);
+        Assert.Equal("Setup needed", viewModel.RecorderStateLabel);
+        Assert.Equal("Test video encoding before recording", viewModel.RecorderDescription);
         Assert.True(viewModel.IsVideoEncodingSetupRequired);
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
         Assert.True(viewModel.StatusCardCommand.CanExecute(null));
@@ -297,6 +323,9 @@ public sealed class RecordingsViewModelTests
             viewModel.ReadinessDetail
         );
         Assert.Equal(RecordingStatusHealth.AttentionNeeded, viewModel.StatusHealth);
+        Assert.Equal(RecorderPresentationState.Error, viewModel.RecorderState);
+        Assert.Equal("Needs attention", viewModel.RecorderStateLabel);
+        Assert.Equal("Automatic recording cannot read combat logs", viewModel.RecorderDescription);
         Assert.True(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -314,7 +343,86 @@ public sealed class RecordingsViewModelTests
 
         Assert.Equal("Waiting", viewModel.StateTitle);
         Assert.Equal(RecordingStatusHealth.Waiting, viewModel.StatusHealth);
+        Assert.Equal(RecorderPresentationState.Idle, viewModel.RecorderState);
+        Assert.Equal("Waiting", viewModel.RecorderStateLabel);
+        Assert.Equal("WoW is not running", viewModel.RecorderDescription);
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ActiveEncounterContextProvidesCompactRecorderMetadata()
+    {
+        var startedAt = new DateTimeOffset(2026, 7, 30, 18, 15, 0, TimeSpan.Zero);
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Recording,
+                new EncounterRecordingContext(
+                    startedAt,
+                    42,
+                    "Nexus-Princess Ky'veza",
+                    WowDifficultyIds.MythicRaid,
+                    PullNumber: 15
+                )
+            )
+        );
+
+        Assert.True(viewModel.IsRecorderTimerVisible);
+        Assert.True(viewModel.IsRecorderContextVisible);
+        Assert.Equal("Nexus-Princess Ky'veza · Mythic · Pull 15", viewModel.RecorderContextDisplay);
+    }
+
+    [Fact]
+    public void StartingCaptureShowsContextWithoutTimer()
+    {
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Starting,
+                new ManualRecordingContext(DateTimeOffset.Now)
+            )
+        );
+
+        Assert.False(viewModel.IsRecorderTimerVisible);
+        Assert.True(viewModel.IsRecorderContextVisible);
+        Assert.Equal("Manual recording", viewModel.RecorderContextDisplay);
+        Assert.Equal("Preparing...", viewModel.StatusCardButtonText);
+    }
+
+    [Fact]
+    public void RecorderFailureUsesDistinctRetryPresentation()
+    {
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException("Could not start the encoder.")
+            )
+        );
+
+        Assert.Equal(RecorderPresentationState.Error, viewModel.RecorderState);
+        Assert.True(viewModel.IsRecorderError);
+        Assert.Equal("Recording failed", viewModel.RecorderStateLabel);
+        Assert.Equal("Could not start the encoder", viewModel.RecorderDescription);
+        Assert.Equal("Retry", viewModel.StatusCardButtonText);
+        Assert.True(viewModel.StatusCardCommand.CanExecute(null));
+        Assert.False(viewModel.IsStatusCardStopMode);
+    }
+
+    [Fact]
+    public void RecorderFailureUsesOnlyFirstMessageLineInSidebar()
+    {
+        const string failureMessage = """
+            FFmpeg exited with code -1073741819.
+            Recent FFmpeg output:
+            [q] command received. Exiting.
+            """;
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException(failureMessage)
+            )
+        );
+
+        Assert.Equal("FFmpeg exited with code -1073741819", viewModel.RecorderDescription);
+        Assert.Equal(failureMessage, viewModel.FailureMessage);
     }
 
     [Fact]
@@ -329,6 +437,9 @@ public sealed class RecordingsViewModelTests
         );
 
         Assert.Equal("Waiting", viewModel.StateTitle);
+        Assert.Equal(RecorderPresentationState.Idle, viewModel.RecorderState);
+        Assert.Equal("Waiting", viewModel.RecorderStateLabel);
+        Assert.Equal("Waiting for the WoW game window", viewModel.RecorderDescription);
         Assert.False(viewModel.ManualRecordingCommand.CanExecute(null));
     }
 
@@ -886,7 +997,62 @@ public sealed class RecordingsViewModelTests
             Assert.True(item.IsDurationVisible);
             Assert.Equal("Mythic", item.Context);
             Assert.Equal("Kill", item.Result);
+            Assert.Equal(RecordingResultKind.Success, item.ResultKind);
             Assert.Equal("07:46", item.Duration);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(RaidEncounterOutcome.Wipe, "Wipe", RecordingResultKind.Failure)]
+    [InlineData(RaidEncounterOutcome.Unknown, "Unknown", RecordingResultKind.Unknown)]
+    public void MapsRaidEncounterResultToSemanticPresentation(
+        RaidEncounterOutcome outcome,
+        string expectedText,
+        RecordingResultKind expectedKind
+    )
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var id = Guid.NewGuid();
+            var startedAtUtc = new DateTimeOffset(2026, 6, 17, 20, 28, 32, TimeSpan.Zero);
+            var recording = CatalogFile(
+                Path.Combine(directory, "raid-result.mp4"),
+                startedAtUtc.AddMinutes(5),
+                id: id,
+                kind: RecordingCatalogKind.Encounter,
+                raidEncounter: new RaidEncounterEntry(
+                    id,
+                    startedAtUtc,
+                    startedAtUtc.AddMinutes(5),
+                    3159,
+                    "Rotmire",
+                    WowDifficultyIds.MythicRaid,
+                    20,
+                    1592,
+                    startedAtUtc,
+                    outcome,
+                    startedAtUtc.AddMinutes(5),
+                    300000,
+                    4
+                )
+            );
+            var viewModel = CreateViewModel(
+                Status(RecordingCoordinatorState.Idle, recordingsDirectory: directory),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([recording])
+            );
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            var item = Assert.Single(viewModel.Recordings);
+
+            Assert.Equal(expectedText, item.Result);
+            Assert.Equal(expectedKind, item.ResultKind);
         }
         finally
         {
@@ -952,6 +1118,7 @@ public sealed class RecordingsViewModelTests
             Assert.True(item.IsDurationVisible);
             Assert.Equal("+22", item.Context);
             Assert.Equal("Timed", item.Result);
+            Assert.Equal(RecordingResultKind.Success, item.ResultKind);
             Assert.Equal("31:20", item.Duration);
         }
         finally

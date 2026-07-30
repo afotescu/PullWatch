@@ -22,6 +22,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         [
             new(
                 "Combat log reader",
+                GetCombatLogIndicator(_status.CombatLog),
                 [
                     new("State", _status.CombatLog.State.ToString()),
                     new(
@@ -40,6 +41,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
             ),
             new(
                 "World of Warcraft",
+                GetWowProcessIndicator(_status.WowProcess),
                 [
                     new("State", _status.WowProcess.State.ToString()),
                     new(
@@ -62,6 +64,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
             ),
             new(
                 "Recorder",
+                GetRecordingIndicator(_status.Recording),
                 [
                     new("State", _status.Recording.State.ToString()),
                     new("Owner", DiagnosticsValueFormatter.Format(_status.Recording.Owner)),
@@ -141,6 +144,49 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         );
     }
 
+    private static DiagnosticIndicatorKind GetCombatLogIndicator(CombatLogReaderStatus status)
+    {
+        if (status.LastFileSystemError is not null)
+        {
+            return DiagnosticIndicatorKind.Error;
+        }
+
+        return status.State switch
+        {
+            CombatLogReaderState.ReadingCombatLog => DiagnosticIndicatorKind.Success,
+            CombatLogReaderState.SwitchingCombatLog => DiagnosticIndicatorKind.Warning,
+            _ => DiagnosticIndicatorKind.Idle,
+        };
+    }
+
+    private static DiagnosticIndicatorKind GetWowProcessIndicator(WowProcessStatus status)
+    {
+        if (status.LastError is not null)
+        {
+            return DiagnosticIndicatorKind.Error;
+        }
+
+        return status.State == WowProcessState.WindowAvailable
+            ? DiagnosticIndicatorKind.Success
+            : DiagnosticIndicatorKind.Idle;
+    }
+
+    private static DiagnosticIndicatorKind GetRecordingIndicator(RecordingCoordinatorStatus status)
+    {
+        if (status.LastFailure is not null)
+        {
+            return DiagnosticIndicatorKind.Error;
+        }
+
+        return status.State switch
+        {
+            RecordingCoordinatorState.Recording => DiagnosticIndicatorKind.Recording,
+            RecordingCoordinatorState.Starting or RecordingCoordinatorState.Stopping =>
+                DiagnosticIndicatorKind.Warning,
+            _ => DiagnosticIndicatorKind.Idle,
+        };
+    }
+
     private static string FormatLogs(IReadOnlyList<ApplicationLogEntry> logs)
     {
         return logs.Count == 0
@@ -154,9 +200,24 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     }
 }
 
+public enum DiagnosticIndicatorKind
+{
+    Idle,
+    Success,
+    Warning,
+    Recording,
+    Error,
+}
+
 public sealed record DiagnosticsSectionViewModel(
     string Title,
+    DiagnosticIndicatorKind Indicator,
     IReadOnlyList<DiagnosticRowViewModel> Rows
-);
+)
+{
+    public string State => Rows[0].Value;
+
+    public IEnumerable<DiagnosticRowViewModel> Details => Rows.Skip(1);
+}
 
 public sealed record DiagnosticRowViewModel(string Label, string Value);
