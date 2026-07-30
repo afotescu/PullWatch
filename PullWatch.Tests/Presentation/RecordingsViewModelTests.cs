@@ -407,6 +407,25 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public void RecorderFailureUsesOnlyFirstMessageLineInSidebar()
+    {
+        const string failureMessage = """
+            FFmpeg exited with code -1073741819.
+            Recent FFmpeg output:
+            [q] command received. Exiting.
+            """;
+        var viewModel = CreateViewModel(
+            Status(
+                RecordingCoordinatorState.Idle,
+                lastFailure: new InvalidOperationException(failureMessage)
+            )
+        );
+
+        Assert.Equal("FFmpeg exited with code -1073741819", viewModel.RecorderDescription);
+        Assert.Equal(failureMessage, viewModel.FailureMessage);
+    }
+
+    [Fact]
     public void WowProcessWithoutWindowDisablesManualRecording()
     {
         var viewModel = CreateViewModel(

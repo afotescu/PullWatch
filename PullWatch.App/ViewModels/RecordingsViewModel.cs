@@ -12,6 +12,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         "Video encoding needs to be tested before recording.";
     private const string VideoEncodingSetupRequiredSuffix =
         "Manual and automatic recording stay disabled until setup is complete.";
+    private const string RecorderFailureFallbackDescription =
+        "The recorder could not complete its last operation";
     private readonly Func<Task<RecordingCommandResult>> _startManual;
     private readonly Func<Task<RecordingCommandResult>> _stopManual;
     private readonly Func<Task> _testVideoEncoding;
@@ -722,14 +724,25 @@ public sealed partial class RecordingsViewModel : ObservableObject
 
         if (recording.LastFailure is not null)
         {
-            return string.IsNullOrWhiteSpace(recording.LastFailure.Message)
-                ? "The recorder could not complete its last operation"
-                : recording.LastFailure.Message.TrimEnd('.', ' ', '\t', '\r', '\n');
+            return GetRecorderFailureSummary(recording.LastFailure);
         }
 
         return combatLog.LastFileSystemError is not null
             ? "Automatic recording cannot read combat logs"
             : "The recorder needs attention";
+    }
+
+    private static string GetRecorderFailureSummary(Exception failure)
+    {
+        if (string.IsNullOrWhiteSpace(failure.Message))
+        {
+            return RecorderFailureFallbackDescription;
+        }
+
+        var message = failure.Message.Trim();
+        var firstLineEnd = message.IndexOfAny('\r', '\n');
+        var firstLine = firstLineEnd < 0 ? message : message[..firstLineEnd];
+        return firstLine.TrimEnd('.', ' ', '\t');
     }
 
     private static string FormatEncounterContextMetadata(EncounterRecordingContext encounter)

@@ -95,10 +95,23 @@
 
       <TextBlock
         Margin="17,5,0,0"
-        Style="{StaticResource SecondaryTextStyle}"
         Text="{Binding RecorderDescription}"
-        TextWrapping="Wrap"
-      />
+      >
+        <TextBlock.Style>
+          <Style
+            BasedOn="{StaticResource SecondaryTextStyle}"
+            TargetType="TextBlock"
+          >
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsRecorderError}" Value="True">
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
 
       <TextBlock
         Margin="17,12,0,0"
