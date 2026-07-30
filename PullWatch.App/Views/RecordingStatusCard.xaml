@@ -4,47 +4,10 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:local="clr-namespace:PullWatch"
 >
-  <UserControl.Resources>
-    <Style x:Key="StatusBorderStyle" TargetType="Border">
-      <Setter Property="BorderBrush" Value="{StaticResource StatusNeutralBrush}" />
-      <Style.Triggers>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Active}"
-        >
-          <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.Ready}"
-        >
-          <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.ManualOnly}"
-        >
-          <Setter Property="BorderBrush" Value="{StaticResource HealthyBrush}" />
-        </DataTrigger>
-        <DataTrigger
-          Binding="{Binding StatusHealth}"
-          Value="{x:Static local:RecordingStatusHealth.AttentionNeeded}"
-        >
-          <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding IsVideoEncodingSetupRequired}" Value="True">
-          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-        </DataTrigger>
-      </Style.Triggers>
-    </Style>
-  </UserControl.Resources>
-
   <Border
-    Background="{StaticResource SurfaceBrush}"
-    BorderThickness="1"
-    CornerRadius="8"
-    Padding="14"
-    Style="{StaticResource StatusBorderStyle}"
+    Padding="0,14"
+    BorderBrush="{StaticResource BorderSubtleBrush}"
+    BorderThickness="0,1"
     ToolTip="{Binding ReadinessDetail}"
     ToolTipService.InitialShowDelay="250"
     ToolTipService.ShowDuration="12000"
@@ -54,54 +17,131 @@
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
         <local:RecordingStatusIndicator
           Grid.Column="0"
           Width="9"
           Height="9"
-          Margin="0,5,8,0"
-          Health="{Binding StatusHealth}"
+          Margin="0,4,8,0"
           IsPulseActive="{Binding IsRecordingPulseActive}"
+          State="{Binding RecorderState}"
         />
 
-        <StackPanel Grid.Column="1">
-          <TextBlock
-            FontSize="13"
-            FontWeight="SemiBold"
-            Text="{Binding StateTitle}"
-            TextTrimming="CharacterEllipsis"
-          />
-          <TextBlock
-            Margin="0,4,0,0"
-            FontFamily="Consolas"
-            FontSize="22"
-            FontWeight="SemiBold"
-            Text="{Binding Duration}"
-          />
-        </StackPanel>
+        <TextBlock
+          Grid.Column="1"
+          FontSize="13"
+          FontWeight="SemiBold"
+          Text="{Binding RecorderStateLabel}"
+          TextTrimming="CharacterEllipsis"
+        >
+          <TextBlock.Style>
+            <Style
+              BasedOn="{StaticResource {x:Type TextBlock}}"
+              TargetType="TextBlock"
+            >
+              <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+              <Style.Triggers>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Idle}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource IdleBrush}" />
+                </DataTrigger>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Ready}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Starting}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Stopping}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger
+                  Binding="{Binding RecorderState}"
+                  Value="{x:Static local:RecorderPresentationState.Error}"
+                >
+                  <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+
+        <TextBlock
+          Grid.Column="2"
+          Margin="8,0,0,0"
+          FontFamily="{StaticResource MonospaceFontFamily}"
+          FontSize="12"
+          Foreground="{StaticResource TextSecondaryBrush}"
+          Text="{Binding Duration}"
+          Visibility="{Binding IsRecorderTimerVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+        />
       </Grid>
 
-      <Button
-        Margin="0,16,0,0"
-        HorizontalAlignment="Stretch"
-        Command="{Binding StatusCardCommand}"
-        Content="{Binding StatusCardButtonText}"
-      >
-        <Button.Style>
-          <Style TargetType="Button" BasedOn="{StaticResource FilledButtonStyle}">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Padding" Value="10,8" />
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding IsStatusCardStopMode}" Value="True">
-                <Setter Property="Background" Value="{StaticResource FailureBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </Button.Style>
-      </Button>
+      <TextBlock
+        Margin="17,5,0,0"
+        Style="{StaticResource SecondaryTextStyle}"
+        Text="{Binding RecorderDescription}"
+        TextWrapping="Wrap"
+      />
+
+      <TextBlock
+        Margin="17,12,0,0"
+        FontSize="13"
+        FontWeight="SemiBold"
+        Text="{Binding RecorderContextDisplay}"
+        TextTrimming="CharacterEllipsis"
+        Visibility="{Binding IsRecorderContextVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+      />
+
+      <Grid Margin="0,14,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Button
+          Grid.Column="0"
+          HorizontalAlignment="Stretch"
+          Command="{Binding StatusCardCommand}"
+          Content="{Binding StatusCardButtonText}"
+        >
+          <Button.Style>
+            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStatusCardStopMode}" Value="True">
+                  <Setter Property="Background" Value="{StaticResource RecordingBrush}" />
+                  <Setter Property="BorderBrush" Value="{StaticResource RecordingBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsRecorderError}" Value="True">
+                  <Setter Property="Padding" Value="10,7" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Button.Style>
+        </Button>
+
+        <Button
+          Grid.Column="1"
+          Margin="8,0,0,0"
+          Padding="10,7"
+          Command="{Binding ViewDiagnosticsCommand, RelativeSource={RelativeSource AncestorType=local:RecordingStatusCard}}"
+          Content="View diagnostics"
+          Style="{StaticResource SecondaryButtonStyle}"
+          Visibility="{Binding IsRecorderError, Converter={StaticResource BooleanToVisibilityConverter}}"
+        />
+      </Grid>
     </StackPanel>
   </Border>
 </UserControl>

@@ -5,8 +5,8 @@ namespace PullWatch;
 
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
-    private const double ExpandedSidebarWidth = 230;
-    private const double CollapsedSidebarWidth = 76;
+    private const double ExpandedSidebarWidth = 220;
+    private const double CollapsedSidebarWidth = 68;
 
     private readonly ApplicationController _controller;
     private readonly IUiDispatcher _dispatcher;
@@ -133,6 +133,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string AppVersionLabel => $"Version {AppVersion}";
 
+    public string AppVersionShortLabel => $"v{AppVersion}";
+
     public RecordingsViewModel Recordings { get; }
 
     public SettingsViewModel Settings { get; }
@@ -234,6 +236,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             // The visual preference can safely remain in-memory during shutdown.
         }
+    }
+
+    [RelayCommand]
+    private void ShowDiagnostics()
+    {
+        SelectedNavigationItem = NavigationItems[2];
     }
 
     private void OnStatusChanged(ApplicationStatus status)

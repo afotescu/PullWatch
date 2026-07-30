@@ -20,7 +20,7 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Cursor" Value="Arrow" />
       <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
       <Setter Property="Template">
         <Setter.Value>
@@ -46,11 +46,16 @@
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="HoverBackground" Property="Opacity" Value="1" />
               </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter
+                  TargetName="HoverBackground"
+                  Property="Background"
+                  Value="{StaticResource SurfaceSelectedBrush}"
+                />
+                <Setter TargetName="HoverBackground" Property="Opacity" Value="1" />
+              </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="FocusBorder" Property="Opacity" Value="1" />
-              </Trigger>
-              <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Cursor" Value="Arrow" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -59,16 +64,31 @@
     </Style>
 
     <Style
-      x:Key="SidebarUpdateButtonStyle"
-      BasedOn="{StaticResource BaseButtonStyle}"
+      x:Key="SidebarUpdateLinkStyle"
+      BasedOn="{StaticResource LinkButtonStyle}"
       TargetType="Button"
     >
       <Setter Property="MaxWidth" Value="190" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Updates.IsActionProminent}" Value="True">
+          <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style
+      x:Key="SidebarUpdateIconButtonStyle"
+      BasedOn="{StaticResource SidebarIconButtonStyle}"
+      TargetType="Button"
+    >
       <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
       <Style.Triggers>
         <DataTrigger Binding="{Binding Updates.IsActionProminent}" Value="True">
           <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-          <Setter Property="Foreground" Value="{StaticResource FilledButtonTextBrush}" />
+          <Setter Property="Foreground" Value="{StaticResource AccentForegroundBrush}" />
           <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
           <Setter
             Property="local:ButtonChrome.HoverOverlayBrush"
@@ -97,10 +117,10 @@
     >
       <Border.Style>
         <Style TargetType="Border">
-          <Setter Property="Padding" Value="20,24" />
+          <Setter Property="Padding" Value="16,20" />
           <Style.Triggers>
             <DataTrigger Binding="{Binding IsSidebarCollapsed}" Value="True">
-              <Setter Property="Padding" Value="10,24" />
+              <Setter Property="Padding" Value="8,20" />
             </DataTrigger>
           </Style.Triggers>
         </Style>
@@ -109,27 +129,33 @@
       <Grid>
         <DockPanel Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
           <StackPanel DockPanel.Dock="Top">
-            <StackPanel Margin="0,0,0,20" Orientation="Horizontal">
+            <StackPanel Margin="0,0,0,18" Orientation="Horizontal">
               <Image
-                Width="26"
-                Height="26"
+                Width="24"
+                Height="24"
                 Margin="0,2,10,0"
                 RenderOptions.BitmapScalingMode="HighQuality"
                 Source="Assets/favicon.ico"
               />
-              <TextBlock FontSize="26" FontWeight="SemiBold" Text="PullWatch" />
+              <TextBlock FontSize="22" FontWeight="SemiBold" Text="PullWatch" />
             </StackPanel>
 
-            <local:RecordingStatusCard Margin="0,0,0,22" DataContext="{Binding Recordings}" />
+            <local:RecordingStatusCard
+              Margin="0,0,0,20"
+              DataContext="{Binding Recordings}"
+              ViewDiagnosticsCommand="{Binding DataContext.ShowDiagnosticsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+            />
           </StackPanel>
 
           <StackPanel DockPanel.Dock="Bottom" Margin="0,24,0,0">
+            <TextBlock
+              Margin="2,0,0,4"
+              Style="{StaticResource MutedTextStyle}"
+              Text="{Binding AppVersionShortLabel}"
+            />
             <Button
-              Margin="0,0,0,8"
-              Width="190"
-              HorizontalAlignment="Left"
               Command="{Binding Updates.UpdateCommand}"
-              Style="{StaticResource SidebarUpdateButtonStyle}"
+              Style="{StaticResource SidebarUpdateLinkStyle}"
               ToolTip="{Binding Updates.ActionToolTip}"
             >
               <TextBlock
@@ -138,12 +164,8 @@
                 TextWrapping="NoWrap"
               />
             </Button>
-            <TextBlock
-              Style="{StaticResource SecondaryTextStyle}"
-              Text="{Binding AppVersionLabel}"
-            />
             <Button
-              Margin="0,14,0,0"
+              Margin="0,16,0,0"
               HorizontalAlignment="Left"
               Command="{Binding ToggleSidebarCommand}"
               Style="{StaticResource SidebarIconButtonStyle}"
@@ -174,7 +196,7 @@
                   <Path
                     Width="16"
                     Height="16"
-                    Margin="0,0,12,0"
+                    Margin="0,0,10,0"
                     Data="{Binding Icon}"
                     Fill="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}"
                     Stretch="Uniform"
@@ -221,6 +243,7 @@
                 Health="{Binding Recordings.StatusHealth}"
                 IndicatorStrokeThickness="1"
                 IsPulseActive="{Binding Recordings.IsRecordingPulseActive}"
+                State="{Binding Recordings.RecorderState}"
               />
             </Button>
           </StackPanel>
@@ -230,7 +253,7 @@
               Margin="0,0,0,8"
               HorizontalAlignment="Center"
               Command="{Binding Updates.UpdateCommand}"
-              Style="{StaticResource SidebarUpdateButtonStyle}"
+              Style="{StaticResource SidebarUpdateIconButtonStyle}"
               ToolTip="{Binding Updates.ActionToolTip}"
               ToolTipService.ShowOnDisabled="True"
             >
@@ -287,8 +310,8 @@
               Margin="0,0,0,10"
               HorizontalAlignment="Center"
               FontSize="10"
-              Style="{StaticResource SecondaryTextStyle}"
-              Text="{Binding AppVersion}"
+              Style="{StaticResource MutedTextStyle}"
+              Text="{Binding AppVersionShortLabel}"
               TextAlignment="Center"
               TextWrapping="NoWrap"
               ToolTip="{Binding AppVersionLabel}"

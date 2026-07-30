@@ -390,6 +390,54 @@
     <Setter Property="BorderBrush" Value="{StaticResource FailureBrush}" />
   </Style>
 
+  <Style x:Key="LinkButtonStyle" TargetType="Button">
+    <Setter Property="Padding" Value="2" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid x:Name="LinkRoot">
+            <ContentPresenter
+              Margin="{TemplateBinding Padding}"
+              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+              VerticalAlignment="Center"
+              RecognizesAccessKey="True"
+            />
+            <Border
+              x:Name="FocusBorder"
+              BorderBrush="{StaticResource FocusBrush}"
+              BorderThickness="1"
+              CornerRadius="3"
+              IsHitTestVisible="False"
+              Opacity="0"
+            />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="FocusBorder" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="LinkRoot" Property="Opacity" Value="0.45" />
+              <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style x:Key="TextInputStyle" TargetType="TextBox">
     <Setter Property="MinHeight" Value="34" />
     <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
@@ -887,10 +935,9 @@
 
   <Style x:Key="NavigationItemStyle" TargetType="ListBoxItem">
     <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
-    <Setter Property="Padding" Value="12,10" />
     <Setter Property="Margin" Value="0,2" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Cursor" Value="Arrow" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ListBoxItem">
@@ -898,8 +945,7 @@
             <Border
               x:Name="ItemBorder"
               Background="Transparent"
-              CornerRadius="6"
-              Padding="{TemplateBinding Padding}"
+              CornerRadius="5"
             >
               <Grid>
                 <Border
@@ -911,14 +957,14 @@
                   CornerRadius="2"
                   Opacity="0"
                 />
-                <ContentPresenter Margin="10,0,0,0" />
+                <ContentPresenter Margin="20,9,10,9" />
               </Grid>
             </Border>
             <Border
               x:Name="ItemFocusBorder"
               BorderBrush="{StaticResource FocusBrush}"
               BorderThickness="1"
-              CornerRadius="6"
+              CornerRadius="5"
               IsHitTestVisible="False"
               Opacity="0"
             />
@@ -928,24 +974,25 @@
               <Setter
                 TargetName="ItemBorder"
                 Property="Background"
-                Value="{StaticResource SurfaceRaisedBrush}"
+                Value="{StaticResource SurfaceHoverBrush}"
               />
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
+              <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+            </Trigger>
+            <Trigger Property="IsMouseCaptureWithin" Value="True">
               <Setter
                 TargetName="ItemBorder"
                 Property="Background"
-                Value="{StaticResource SurfaceRaisedBrush}"
+                Value="{StaticResource SurfaceSelectedBrush}"
               />
-              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
-              <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
               <Setter TargetName="ItemFocusBorder" Property="Opacity" Value="1" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Opacity" Value="0.45" />
-              <Setter Property="Cursor" Value="Arrow" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -961,13 +1008,13 @@
     <Setter Property="Margin" Value="0,2" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
-    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Cursor" Value="Arrow" />
     <Setter Property="ToolTip" Value="{Binding Title}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ListBoxItem">
           <Grid>
-            <Border x:Name="ItemBorder" Background="Transparent" CornerRadius="6">
+            <Border x:Name="ItemBorder" Background="Transparent" CornerRadius="5">
               <Grid>
                 <Border
                   x:Name="SelectionIndicator"
@@ -985,7 +1032,7 @@
               x:Name="ItemFocusBorder"
               BorderBrush="{StaticResource FocusBrush}"
               BorderThickness="1"
-              CornerRadius="6"
+              CornerRadius="5"
               IsHitTestVisible="False"
               Opacity="0"
             />
@@ -995,24 +1042,25 @@
               <Setter
                 TargetName="ItemBorder"
                 Property="Background"
-                Value="{StaticResource SurfaceRaisedBrush}"
+                Value="{StaticResource SurfaceHoverBrush}"
               />
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
+              <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+            </Trigger>
+            <Trigger Property="IsMouseCaptureWithin" Value="True">
               <Setter
                 TargetName="ItemBorder"
                 Property="Background"
-                Value="{StaticResource SurfaceRaisedBrush}"
+                Value="{StaticResource SurfaceSelectedBrush}"
               />
-              <Setter TargetName="SelectionIndicator" Property="Opacity" Value="1" />
-              <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
               <Setter TargetName="ItemFocusBorder" Property="Opacity" Value="1" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Opacity" Value="0.45" />
-              <Setter Property="Cursor" Value="Arrow" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
