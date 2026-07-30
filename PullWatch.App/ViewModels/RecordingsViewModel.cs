@@ -168,6 +168,8 @@ public sealed partial class RecordingsViewModel : ObservableObject
         private set => SetProperty(ref _isPlaybackMuted, value);
     }
 
+    public NotificationCenterViewModel? Notifications => _notifications;
+
     public RecordingStatusHealth RecorderHealth =>
         _recording.LastFailure is not null
         && !IsTargetUnavailableFailure(_recording.LastFailure)

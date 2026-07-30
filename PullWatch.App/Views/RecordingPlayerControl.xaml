@@ -2,6 +2,8 @@
   x:Class="PullWatch.RecordingPlayerControl"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:flyleaf="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
+  xmlns:local="clr-namespace:PullWatch"
   AutomationProperties.Name="Recording player"
   Focusable="True"
   FocusVisualStyle="{x:Null}"
@@ -45,38 +47,43 @@
       BorderThickness="0,0,0,1"
     >
       <Grid>
-        <MediaElement
+        <flyleaf:FlyleafHost
           x:Name="MediaPlayer"
-          LoadedBehavior="Manual"
-          MediaEnded="OnPlayerMediaEnded"
-          MediaFailed="OnPlayerMediaFailed"
-          MediaOpened="OnPlayerMediaOpened"
-          ScrubbingEnabled="True"
-          Stretch="Uniform"
-          UnloadedBehavior="Manual"
-        />
-        <Border
-          x:Name="PlayerPreviewCover"
-          Panel.ZIndex="1"
-          Background="{StaticResource PlayerSurfaceBrush}"
-          IsHitTestVisible="False"
+          KeyBindings="None"
+          MouseBindings="None"
+          OpenOnDrop="None"
+          SwapOnDrop="None"
+          VideoBackground="{StaticResource PlayerSurfaceBrush}"
         >
-          <TextBlock
-            x:Name="PlayerPlaceholder"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            FontSize="14"
-            Style="{StaticResource SecondaryTextStyle}"
-            TextAlignment="Center"
-          />
-        </Border>
-        <Border
-          Panel.ZIndex="2"
-          Background="Transparent"
-          MouseLeftButtonDown="OnVideoSurfaceMouseLeftButtonDown"
-          MouseLeftButtonUp="OnVideoSurfaceMouseLeftButtonUp"
-          MouseLeave="OnVideoSurfaceMouseLeave"
-        />
+          <Grid>
+            <Border
+              x:Name="PlayerPreviewCover"
+              Background="{StaticResource PlayerSurfaceBrush}"
+              IsHitTestVisible="False"
+            >
+              <TextBlock
+                x:Name="PlayerPlaceholder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="14"
+                Foreground="{StaticResource SecondaryTextBrush}"
+                TextAlignment="Center"
+              />
+            </Border>
+            <Border
+              Background="{StaticResource PlayerInputCaptureBrush}"
+              MouseLeftButtonDown="OnVideoSurfaceMouseLeftButtonDown"
+              MouseLeftButtonUp="OnVideoSurfaceMouseLeftButtonUp"
+              MouseLeave="OnVideoSurfaceMouseLeave"
+            />
+            <local:NotificationOverlayControl
+              x:Name="PlayerNotifications"
+              Margin="18,18,18,0"
+              Panel.ZIndex="10"
+              VerticalAlignment="Top"
+            />
+          </Grid>
+        </flyleaf:FlyleafHost>
       </Grid>
     </Border>
 

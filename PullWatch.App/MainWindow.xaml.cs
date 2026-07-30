@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
         ReferenceEqualityComparer.Instance
     );
     private Action? _fullScreenExitRequested;
+    private RecordingPlayerControl? _fullScreenPlayer;
     private Rect _windowBoundsBeforeFullScreen;
     private ResizeMode _resizeModeBeforeFullScreen;
     private WindowState _windowStateBeforeFullScreen;
@@ -291,7 +293,7 @@ public partial class MainWindow : Window
 
     internal bool EnterFullScreenPlayer(RecordingPlayerControl player, Action exitRequested)
     {
-        if (_fullScreenExitRequested is not null || FullScreenPlayerHost.Content is not null)
+        if (_fullScreenExitRequested is not null || _fullScreenPlayer is not null)
         {
             return false;
         }
@@ -302,31 +304,39 @@ public partial class MainWindow : Window
         _windowStateBeforeFullScreen = WindowState;
         _windowStyleBeforeFullScreen = WindowStyle;
         _fullScreenExitRequested = exitRequested;
+        _fullScreenPlayer = player;
 
-        FullScreenLayer.Visibility = Visibility.Visible;
-        WindowState = WindowState.Normal;
+        Grid.SetColumn(NavigationLayer, 0);
+        Grid.SetColumnSpan(NavigationLayer, 2);
+        Panel.SetZIndex(NavigationLayer, 100);
+        NavigationLayer.SetResourceReference(Panel.BackgroundProperty, "PlayerSurfaceBrush");
+
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        WindowState = WindowState.Maximized;
+        if (WindowState != WindowState.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
 
-        FullScreenPlayerHost.Content = player;
-        player.IsFullScreen = true;
         Activate();
         return true;
     }
 
     internal bool ExitFullScreenPlayer(RecordingPlayerControl player)
     {
-        if (!ReferenceEquals(FullScreenPlayerHost.Content, player))
+        if (!ReferenceEquals(_fullScreenPlayer, player))
         {
             return false;
         }
 
-        FullScreenPlayerHost.Content = null;
-        player.IsFullScreen = false;
+        _fullScreenPlayer = null;
         _fullScreenExitRequested = null;
         RestoreWindowAfterFullScreen();
-        FullScreenLayer.Visibility = Visibility.Collapsed;
+
+        Grid.SetColumn(NavigationLayer, 1);
+        Grid.SetColumnSpan(NavigationLayer, 1);
+        Panel.SetZIndex(NavigationLayer, 0);
+        NavigationLayer.ClearValue(Panel.BackgroundProperty);
         return true;
     }
 
@@ -337,6 +347,13 @@ public partial class MainWindow : Window
 
     private void RestoreWindowAfterFullScreen()
     {
+        if (_windowStateBeforeFullScreen == WindowState.Maximized)
+        {
+            WindowStyle = _windowStyleBeforeFullScreen;
+            ResizeMode = _resizeModeBeforeFullScreen;
+            return;
+        }
+
         WindowState = WindowState.Normal;
         WindowStyle = _windowStyleBeforeFullScreen;
         ResizeMode = _resizeModeBeforeFullScreen;
@@ -344,11 +361,6 @@ public partial class MainWindow : Window
         Top = _windowBoundsBeforeFullScreen.Top;
         Width = _windowBoundsBeforeFullScreen.Width;
         Height = _windowBoundsBeforeFullScreen.Height;
-
-        if (_windowStateBeforeFullScreen == WindowState.Maximized)
-        {
-            WindowState = WindowState.Maximized;
-        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
@@ -369,6 +381,8 @@ public partial class MainWindow : Window
         }
 
         NavigationContent.Content = view;
+        NotificationsOverlay.Visibility =
+            view is RecordingsView ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private FrameworkElement CreateNavigationView(object content)
