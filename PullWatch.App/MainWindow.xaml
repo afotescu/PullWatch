@@ -81,7 +81,6 @@
         </DataTrigger>
       </Style.Triggers>
     </Style>
-
   </Window.Resources>
 
   <Grid Background="{StaticResource WindowBrush}">

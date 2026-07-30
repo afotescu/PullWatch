@@ -11,9 +11,8 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationIcon>Assets\favicon.ico</ApplicationIcon>
     <StartupObject>PullWatch.Program</StartupObject>
-    <FlyleafFFmpegPath
-      Condition="'$(FlyleafFFmpegPath)' == ''"
-    >$(MSBuildProjectDirectory)\..\.tools\flyleaf\runtime-7.1\FFmpeg</FlyleafFFmpegPath>
+    <FlyleafFFmpegPath Condition="'$(FlyleafFFmpegPath)' == ''"
+      >$(MSBuildProjectDirectory)\..\.tools\flyleaf\runtime-7.1\FFmpeg</FlyleafFFmpegPath>
     <FlyleafRuntimeDirectoryName>FlyleafRuntime</FlyleafRuntimeDirectoryName>
   </PropertyGroup>
 
