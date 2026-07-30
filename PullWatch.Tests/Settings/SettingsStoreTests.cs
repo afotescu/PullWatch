@@ -68,6 +68,7 @@ public sealed class SettingsStoreTests
                         Width = 1920,
                         Height = 1080,
                         DurationSeconds = 2.0,
+                        FailureKind = VideoEncoderTestFailureKind.None,
                     },
                 ],
             },

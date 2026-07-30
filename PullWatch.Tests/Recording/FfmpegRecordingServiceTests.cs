@@ -30,6 +30,7 @@ public sealed class FfmpegRecordingServiceTests
         AssertArgumentValue(arguments, "-b:v", "9000k");
         AssertArgumentValue(arguments, "-maxrate", "13500k");
         AssertArgumentValue(arguments, "-bufsize", "18000k");
+        AssertArgumentValue(arguments, "-g", "60");
         AssertArgumentValue(arguments, "-rc", "vbr");
         AssertArgumentValue(arguments, "-cq", "20");
         AssertArgumentValue(arguments, "-bf", "0");
@@ -339,6 +340,73 @@ public sealed class FfmpegRecordingServiceTests
         );
     }
 
+    [Theory]
+    [InlineData(VideoCodec.H265, VideoEncoderProvider.NvidiaNvenc, "hevc_nvenc")]
+    [InlineData(VideoCodec.H265, VideoEncoderProvider.AmdAmf, "hevc_amf")]
+    [InlineData(VideoCodec.H265, VideoEncoderProvider.Software, "libx265")]
+    [InlineData(VideoCodec.H264, VideoEncoderProvider.NvidiaNvenc, "h264_nvenc")]
+    [InlineData(VideoCodec.H264, VideoEncoderProvider.AmdAmf, "h264_amf")]
+    [InlineData(VideoCodec.H264, VideoEncoderProvider.Software, "libx264")]
+    public void EncoderCalibrationStartInfoIsFiniteAndUsesOnlySelectedProviderArguments(
+        VideoCodec codec,
+        VideoEncoderProvider provider,
+        string encoderName
+    )
+    {
+        var settings = CreateSettings(codec, VideoQuality.Balanced, provider);
+        var outputSize = new VideoCaptureSize(1920, 1080);
+        var videoOptions = FfmpegEncoderOptionsFactory.CreateVideoEncoderOptions(
+            settings,
+            outputSize,
+            Capabilities(encoderName)
+        );
+
+        var startInfo = FfmpegEncoderTestService.CreateSyntheticTestStartInfo(
+            "ffmpeg",
+            settings,
+            @"D:\Recordings\calibration.mp4",
+            videoOptions,
+            TimeSpan.FromSeconds(2)
+        );
+        var arguments = startInfo.ArgumentList.ToArray();
+
+        AssertArgumentValue(arguments, "-c:v", encoderName);
+        AssertArgumentValue(arguments, "-f", "lavfi");
+        AssertArgumentValue(arguments, "-i", "testsrc2=size=1920x1080:rate=60");
+        AssertArgumentValue(arguments, "-frames:v", "120");
+        AssertArgumentValue(arguments, "-g", "120");
+        AssertArgumentValue(arguments, "-progress", "pipe:1");
+        AssertArgumentValue(arguments, "-stats_period", "0.5");
+        Assert.Contains("-an", arguments);
+        Assert.DoesNotContain("-c:a", arguments);
+        Assert.DoesNotContain("-t", arguments);
+        Assert.DoesNotContain("-filter_complex", arguments);
+        Assert.DoesNotContain(
+            arguments,
+            argument => argument.Contains("gfxcapture", StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (provider == VideoEncoderProvider.NvidiaNvenc)
+        {
+            Assert.Contains("-cq", arguments);
+            Assert.DoesNotContain("-usage", arguments);
+            AssertArgumentValue(arguments, "-pix_fmt", "nv12");
+        }
+        else if (provider == VideoEncoderProvider.AmdAmf)
+        {
+            Assert.Contains("-usage", arguments);
+            Assert.DoesNotContain("-cq", arguments);
+            AssertArgumentValue(arguments, "-pix_fmt", "nv12");
+        }
+        else
+        {
+            Assert.DoesNotContain("-usage", arguments);
+            Assert.DoesNotContain("-cq", arguments);
+            Assert.DoesNotContain("-rc", arguments);
+            AssertArgumentValue(arguments, "-pix_fmt", "yuv420p");
+        }
+    }
+
     [Fact]
     public void EncoderSelectionPriorityPrefersH265NvencOverH264Nvenc()
     {
@@ -444,6 +512,28 @@ public sealed class FfmpegRecordingServiceTests
         var detail = FfmpegEncoderTestService.SelectFailureDetail(stderr, string.Empty);
 
         Assert.Equal("Error initializing output stream 0:0 -- Error while opening encoder", detail);
+    }
+
+    [Fact]
+    public void EncoderTestOutputMetadataComesFromFfmpegInspection()
+    {
+        const string stderr = """
+            Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'encoder-test.mp4':
+              Metadata:
+                major_brand     : isom
+              Duration: 00:00:02.03, start: 0.000000, bitrate: 1000 kb/s
+              Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1918x1078, 60 fps
+            Stream mapping:
+              Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+            """;
+
+        var metadata = FfmpegEncoderTestService.ParseOutputMetadata(stderr);
+
+        Assert.Equal("h264", metadata.CodecName);
+        Assert.Equal(1918, metadata.Width);
+        Assert.Equal(1078, metadata.Height);
+        Assert.Equal(2.03, metadata.Duration, 2);
+        Assert.Contains("Video: h264", metadata.StreamInformation);
     }
 
     [Fact]

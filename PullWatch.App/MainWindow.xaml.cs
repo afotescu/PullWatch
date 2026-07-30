@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 
@@ -37,10 +36,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _controller = controller;
         _lifetime = lifetime;
-        _encoderTestService = new FfmpegEncoderTestService(
-            GetWindowHandleForEncoderTest,
-            encoderTestLogger
-        );
+        _encoderTestService = new FfmpegEncoderTestService(encoderTestLogger);
         _viewModel = new MainWindowViewModel(
             controller,
             new WpfUiDispatcher(Dispatcher),
@@ -185,6 +181,7 @@ public partial class MainWindow : Window
             ?? throw new InvalidOperationException("Settings are not available.");
         var testResults = await _encoderTestService.TestAsync(
             settings,
+            environment.FfmpegPath,
             progress,
             cancellationToken
         );
@@ -260,11 +257,6 @@ public partial class MainWindow : Window
                 Heading: "Video encoding test failed"
             )
         );
-    }
-
-    private nint GetWindowHandleForEncoderTest()
-    {
-        return new WindowInteropHelper(this).EnsureHandle();
     }
 
     private void OnClosing(object? sender, CancelEventArgs eventArgs)

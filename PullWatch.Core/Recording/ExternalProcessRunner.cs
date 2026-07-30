@@ -5,6 +5,8 @@ namespace PullWatch;
 
 internal static class ExternalProcessRunner
 {
+    private static readonly TimeSpan KillExitTimeout = TimeSpan.FromSeconds(3);
+
     public static async Task<ExternalProcessResult> RunAsync(
         ProcessStartInfo startInfo,
         TimeSpan timeout,
@@ -43,7 +45,7 @@ internal static class ExternalProcessRunner
         }
         catch (OperationCanceledException exception)
         {
-            TryKill(process);
+            await TryKillAndWaitForExitAsync(process);
             cancellationToken.ThrowIfCancellationRequested();
 
             var description = operationDescription ?? Path.GetFileName(startInfo.FileName);
@@ -60,7 +62,7 @@ internal static class ExternalProcessRunner
         );
     }
 
-    private static void TryKill(Process process)
+    private static async Task TryKillAndWaitForExitAsync(Process process)
     {
         try
         {
@@ -68,10 +70,16 @@ internal static class ExternalProcessRunner
             {
                 process.Kill(entireProcessTree: true);
             }
+
+            if (!process.HasExited)
+            {
+                await process.WaitForExitAsync().WaitAsync(KillExitTimeout);
+            }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception)
+            when (exception is InvalidOperationException or Win32Exception or TimeoutException)
         {
-            // The process exited while cancellation cleanup was running.
+            // The caller still receives its timeout or cancellation after best-effort cleanup.
         }
     }
 }

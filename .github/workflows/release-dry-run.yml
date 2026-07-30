@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           cache: true
@@ -129,9 +129,6 @@ jobs:
           ./scripts/package-velopack-win-x64.ps1 @packageArguments
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
-
-      - name: Add VideoLAN source assets
-        run: ./scripts/add-videolan-source-assets.ps1 -ReleaseDir ${{ steps.package.outputs.release_dir }}
 
       - name: Upload dry-run artifact
         uses: actions/upload-artifact@v7

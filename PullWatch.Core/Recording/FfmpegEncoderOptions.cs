@@ -292,6 +292,8 @@ internal sealed record FfmpegVideoEncoderOptions(
     IReadOnlyList<string> ProviderArguments
 )
 {
+    private const int KeyFrameInterval = 60;
+
     public IReadOnlyList<string> CreateArguments()
     {
         var arguments = new List<string>
@@ -304,6 +306,8 @@ internal sealed record FfmpegVideoEncoderOptions(
             FfmpegEncoderOptionsFactory.FormatBitrate(MaxRate),
             "-bufsize",
             FfmpegEncoderOptionsFactory.FormatBitrate(BufferSize),
+            "-g",
+            KeyFrameInterval.ToString(CultureInfo.InvariantCulture),
         };
 
         arguments.AddRange(ProviderArguments);

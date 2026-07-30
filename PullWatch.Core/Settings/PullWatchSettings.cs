@@ -72,7 +72,7 @@ public sealed record VideoProfileSelection
 
 public sealed record EncoderCalibrationSettings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public int Version { get; init; }
     public DateTimeOffset? TestedAt { get; init; }
@@ -92,6 +92,7 @@ public sealed record EncoderCalibrationResult
     public int Width { get; init; }
     public int Height { get; init; }
     public double DurationSeconds { get; init; }
+    public VideoEncoderTestFailureKind FailureKind { get; init; }
 }
 
 public enum VideoCodec

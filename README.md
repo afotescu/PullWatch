@@ -209,17 +209,12 @@ Create a local self-contained Windows x64 publish build:
 ```
 
 Publish builds include Gyan FFmpeg release essentials under the `ffmpeg` folder
-and the LibVLC runtime under the `libvlc` folder next to `PullWatch.exe`.
-PullWatch uses the bundled `ffmpeg.exe` before falling back to a machine-level
-FFmpeg install.
-
-Each GitHub Release also includes the pinned VLC, LibVLCSharp, and LibVLC NuGet
-packaging source archives used by the bundled playback runtime.
+next to `PullWatch.exe`. PullWatch uses the bundled `ffmpeg.exe` before falling
+back to a machine-level FFmpeg install.
 
 ## Key Dependencies
 
 - [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
-- [LibVLCSharp](https://code.videolan.org/videolan/LibVLCSharp) and [LibVLC](https://www.videolan.org/vlc/libvlc.html)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)
 
