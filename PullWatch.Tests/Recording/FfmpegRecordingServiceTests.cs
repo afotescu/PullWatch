@@ -374,7 +374,7 @@ public sealed class FfmpegRecordingServiceTests
         AssertArgumentValue(arguments, "-f", "lavfi");
         AssertArgumentValue(arguments, "-i", "testsrc2=size=1920x1080:rate=60");
         AssertArgumentValue(arguments, "-frames:v", "120");
-        AssertArgumentValue(arguments, "-g", "120");
+        AssertArgumentValue(arguments, "-g", "60");
         AssertArgumentValue(arguments, "-progress", "pipe:1");
         AssertArgumentValue(arguments, "-stats_period", "0.5");
         Assert.Contains("-an", arguments);
