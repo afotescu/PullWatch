@@ -35,10 +35,7 @@
           TextTrimming="CharacterEllipsis"
         >
           <TextBlock.Style>
-            <Style
-              BasedOn="{StaticResource ControlLabelTextStyle}"
-              TargetType="TextBlock"
-            >
+            <Style BasedOn="{StaticResource ControlLabelTextStyle}" TargetType="TextBlock">
               <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
               <Style.Triggers>
                 <DataTrigger
@@ -93,15 +90,9 @@
         />
       </Grid>
 
-      <TextBlock
-        Margin="17,5,0,0"
-        Text="{Binding RecorderDescription}"
-      >
+      <TextBlock Margin="17,5,0,0" Text="{Binding RecorderDescription}">
         <TextBlock.Style>
-          <Style
-            BasedOn="{StaticResource SecondaryTextStyle}"
-            TargetType="TextBlock"
-          >
+          <Style BasedOn="{StaticResource SecondaryTextStyle}" TargetType="TextBlock">
             <Setter Property="TextWrapping" Value="Wrap" />
             <Style.Triggers>
               <DataTrigger Binding="{Binding IsRecorderError}" Value="True">

@@ -149,11 +149,7 @@
                     <ColumnDefinition Width="42" />
                   </Grid.ColumnDefinitions>
 
-                  <Grid
-                    Grid.Column="0"
-                    Margin="0,0,16,0"
-                    VerticalAlignment="Center"
-                  >
+                  <Grid Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
                     <Grid.RowDefinitions>
                       <RowDefinition Height="Auto" />
                       <RowDefinition Height="Auto" />
@@ -294,10 +290,7 @@
             TextWrapping="Wrap"
           >
             <TextBlock.Style>
-              <Style
-                BasedOn="{StaticResource SecondaryTextStyle}"
-                TargetType="TextBlock"
-              >
+              <Style BasedOn="{StaticResource SecondaryTextStyle}" TargetType="TextBlock">
                 <Setter Property="Visibility" Value="Collapsed" />
                 <Style.Triggers>
                   <DataTrigger Binding="{Binding Recordings.Count}" Value="0">

@@ -33,18 +33,9 @@
   <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
   <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
   <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource SurfaceHoverColor}" />
-  <SolidColorBrush
-    x:Key="SurfaceSelectedBrush"
-    Color="{StaticResource SurfaceSelectedColor}"
-  />
-  <SolidColorBrush
-    x:Key="InputBackgroundBrush"
-    Color="{StaticResource InputBackgroundColor}"
-  />
-  <SolidColorBrush
-    x:Key="ConsoleBackgroundBrush"
-    Color="{StaticResource ConsoleBackgroundColor}"
-  />
+  <SolidColorBrush x:Key="SurfaceSelectedBrush" Color="{StaticResource SurfaceSelectedColor}" />
+  <SolidColorBrush x:Key="InputBackgroundBrush" Color="{StaticResource InputBackgroundColor}" />
+  <SolidColorBrush x:Key="ConsoleBackgroundBrush" Color="{StaticResource ConsoleBackgroundColor}" />
   <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
   <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
   <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
@@ -54,10 +45,7 @@
   <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
   <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
   <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}" />
-  <SolidColorBrush
-    x:Key="AccentForegroundBrush"
-    Color="{StaticResource AccentForegroundColor}"
-  />
+  <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
   <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
   <SolidColorBrush x:Key="RecordingBrush" Color="{StaticResource RecordingColor}" />
   <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />

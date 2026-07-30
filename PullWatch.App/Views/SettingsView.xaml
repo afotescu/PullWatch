@@ -91,11 +91,7 @@
                   Style="{StaticResource TextInputStyle}"
                   Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"
                 />
-                <TextBlock
-                  Margin="8,0,0,0"
-                  VerticalAlignment="Center"
-                  Text="GB"
-                />
+                <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="GB" />
                 <Button
                   Margin="12,0,0,0"
                   Command="{Binding ApplyRecordingStorageLimitCommand}"
@@ -188,11 +184,7 @@
               />
             </StackPanel>
 
-            <Border
-              Height="1"
-              Margin="0,20"
-              Background="{StaticResource BorderSubtleBrush}"
-            />
+            <Border Height="1" Margin="0,20" Background="{StaticResource BorderSubtleBrush}" />
 
             <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
@@ -305,20 +297,14 @@
 
         <local:SectionCard Header="Video" Style="{StaticResource FlatSettingsSectionStyle}">
           <StackPanel Margin="0,16,0,0">
-            <TextBlock
-              Style="{StaticResource ControlLabelTextStyle}"
-              Text="Video encoding"
-            />
+            <TextBlock Style="{StaticResource ControlLabelTextStyle}" Text="Video encoding" />
             <Grid Width="420" Margin="0,5,0,0" HorizontalAlignment="Left">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock
-                  FontWeight="SemiBold"
-                  Text="{Binding VideoEncodingSummary}"
-                />
+                <TextBlock FontWeight="SemiBold" Text="{Binding VideoEncodingSummary}" />
                 <TextBlock
                   Margin="0,4,0,0"
                   Style="{StaticResource SecondaryTextStyle}"
@@ -388,11 +374,7 @@
               Text="{Binding EstimatedRecordingSize}"
             />
 
-            <Border
-              Height="1"
-              Margin="0,20"
-              Background="{StaticResource BorderSubtleBrush}"
-            />
+            <Border Height="1" Margin="0,20" Background="{StaticResource BorderSubtleBrush}" />
 
             <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
