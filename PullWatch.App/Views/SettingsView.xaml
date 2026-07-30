@@ -5,10 +5,11 @@
   xmlns:local="clr-namespace:PullWatch"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <Grid x:Name="SettingsContentHost" Margin="32,24">
+    <Grid x:Name="SettingsContentHost" Margin="16,24,32,24">
       <StackPanel
+        x:Name="SettingsColumn"
         Width="{Binding ActualWidth, ElementName=SettingsContentHost}"
-        MaxWidth="1000"
+        MaxWidth="760"
         HorizontalAlignment="Center"
         IsEnabled="{Binding IsEditingEnabled}"
       >
@@ -22,6 +23,9 @@
         <local:SectionCard Header="Folders" Style="{StaticResource FlatSettingsSectionStyle}">
           <StackPanel>
             <local:PathSettingRow
+              Width="{Binding ActualWidth, ElementName=SettingsColumn}"
+              MaxWidth="700"
+              HorizontalAlignment="Left"
               Label="WoW logs directory"
               BrowseCommand="{Binding PickWowLogsDirectoryCommand}"
               CommitCommand="{Binding CommitWowLogsDirectoryCommand}"
@@ -29,6 +33,9 @@
               Text="{Binding WowLogsDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
             />
             <local:PathSettingRow
+              Width="{Binding ActualWidth, ElementName=SettingsColumn}"
+              MaxWidth="700"
+              HorizontalAlignment="Left"
               Label="Recordings directory"
               BrowseCommand="{Binding PickRecordingsDirectoryCommand}"
               CommitCommand="{Binding CommitRecordingsDirectoryCommand}"
@@ -40,7 +47,7 @@
 
         <local:SectionCard Header="Storage" Style="{StaticResource FlatSettingsSectionStyle}">
           <StackPanel>
-            <Grid Margin="0,18,0,0">
+            <Grid Margin="0,16,0,0" Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -65,42 +72,48 @@
               />
             </Grid>
 
-            <TextBlock
-              Margin="0,20,0,6"
-              Style="{StaticResource ControlLabelTextStyle}"
-              Text="Storage limit"
-            />
-            <StackPanel Orientation="Horizontal">
-              <TextBox
-                Width="100"
-                InputScope="Number"
-                IsEnabled="{Binding CanConfigureRecordingStorageLimit}"
-                local:TextBoxInput.AcceptsNonNegativeIntegerOnly="True"
-                local:TextBoxInput.FallbackTextWhenEmpty="1"
-                Style="{StaticResource TextInputStyle}"
-                Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"
-              />
+            <StackPanel
+              Margin="0,18,0,0"
+              IsEnabled="{Binding CanConfigureRecordingStorageLimit}"
+              Style="{StaticResource DependentSettingsContentStyle}"
+            >
               <TextBlock
-                Margin="8,0,0,0"
-                VerticalAlignment="Center"
-                Text="GB"
+                Margin="0,0,0,5"
+                Style="{StaticResource ControlLabelTextStyle}"
+                Text="Storage limit"
               />
-              <Button
-                Margin="12,0,0,0"
-                Command="{Binding ApplyRecordingStorageLimitCommand}"
-                Content="Apply"
-                Style="{StaticResource SecondaryButtonStyle}"
-              />
+              <StackPanel Orientation="Horizontal">
+                <TextBox
+                  Width="100"
+                  InputScope="Number"
+                  local:TextBoxInput.AcceptsNonNegativeIntegerOnly="True"
+                  local:TextBoxInput.FallbackTextWhenEmpty="1"
+                  Style="{StaticResource TextInputStyle}"
+                  Text="{Binding RecordingStorageLimitInputGigabytes, UpdateSourceTrigger=PropertyChanged}"
+                />
+                <TextBlock
+                  Margin="8,0,0,0"
+                  VerticalAlignment="Center"
+                  Text="GB"
+                />
+                <Button
+                  Margin="12,0,0,0"
+                  Command="{Binding ApplyRecordingStorageLimitCommand}"
+                  Content="Apply"
+                  Style="{StaticResource SecondaryButtonStyle}"
+                />
+              </StackPanel>
             </StackPanel>
             <TextBlock
-              Margin="0,16,0,0"
+              Margin="0,14,0,0"
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding RecordingStorageUsageText}"
             />
             <ProgressBar
-              Width="420"
+              Width="{Binding ActualWidth, ElementName=SettingsColumn}"
+              MaxWidth="700"
               HorizontalAlignment="Left"
-              Margin="0,8,0,0"
+              Margin="0,6,0,0"
               IsIndeterminate="{Binding IsRecordingStorageUsageIndeterminate, Mode=OneWay}"
               Maximum="100"
               Value="{Binding RecordingStorageUsagePercent, Mode=OneWay}"
@@ -117,7 +130,7 @@
               </ProgressBar.Style>
             </ProgressBar>
             <TextBlock
-              Margin="0,8,0,0"
+              Margin="0,6,0,0"
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding RecordingStorageStatusText}"
             />
@@ -128,8 +141,8 @@
           Header="Automatic recording"
           Style="{StaticResource FlatSettingsSectionStyle}"
         >
-          <StackPanel Margin="0,18,0,0">
-            <Grid>
+          <StackPanel Margin="0,16,0,0">
+            <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -149,7 +162,11 @@
               />
             </Grid>
 
-            <StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanConfigureMythicPlus}">
+            <StackPanel
+              Margin="0,10,0,0"
+              IsEnabled="{Binding CanConfigureMythicPlus}"
+              Style="{StaticResource DependentSettingsContentStyle}"
+            >
               <TextBlock
                 Margin="0,0,0,6"
                 Style="{StaticResource ControlLabelTextStyle}"
@@ -173,11 +190,11 @@
 
             <Border
               Height="1"
-              Margin="0,24"
+              Margin="0,20"
               Background="{StaticResource BorderSubtleBrush}"
             />
 
-            <Grid>
+            <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -197,7 +214,11 @@
               />
             </Grid>
 
-            <StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanConfigureRaidEncounters}">
+            <StackPanel
+              Margin="0,10,0,0"
+              IsEnabled="{Binding CanConfigureRaidEncounters}"
+              Style="{StaticResource DependentSettingsContentStyle}"
+            >
               <TextBlock
                 Margin="0,0,0,8"
                 Style="{StaticResource ControlLabelTextStyle}"
@@ -234,8 +255,8 @@
         </local:SectionCard>
 
         <local:SectionCard Header="Startup" Style="{StaticResource FlatSettingsSectionStyle}">
-          <StackPanel Margin="0,18,0,0">
-            <Grid>
+          <StackPanel Margin="0,16,0,0">
+            <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -255,7 +276,12 @@
               />
             </Grid>
 
-            <Grid Margin="0,16,0,0" IsEnabled="{Binding CanStartMinimizedToTray}">
+            <Grid
+              MaxWidth="684"
+              Margin="16,14,0,0"
+              IsEnabled="{Binding CanStartMinimizedToTray}"
+              Style="{StaticResource DependentSettingsRowStyle}"
+            >
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -278,33 +304,39 @@
         </local:SectionCard>
 
         <local:SectionCard Header="Video" Style="{StaticResource FlatSettingsSectionStyle}">
-          <StackPanel Margin="0,18,0,0">
+          <StackPanel Margin="0,16,0,0">
             <TextBlock
               Style="{StaticResource ControlLabelTextStyle}"
               Text="Video encoding"
             />
-            <TextBlock
-              Margin="0,6,0,0"
-              FontWeight="SemiBold"
-              Text="{Binding VideoEncodingSummary}"
-            />
-            <TextBlock
-              Width="420"
-              Margin="0,4,0,0"
-              HorizontalAlignment="Left"
-              Style="{StaticResource SecondaryTextStyle}"
-              Text="{Binding VideoEncodingStatus}"
-            />
-            <Button
-              Margin="0,12,0,0"
-              HorizontalAlignment="Left"
-              Command="{Binding TestVideoEncodingCommand}"
-              Content="{Binding TestVideoEncodingButtonText}"
-              Style="{StaticResource SecondaryButtonStyle}"
-            />
+            <Grid Width="420" Margin="0,5,0,0" HorizontalAlignment="Left">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock
+                  FontWeight="SemiBold"
+                  Text="{Binding VideoEncodingSummary}"
+                />
+                <TextBlock
+                  Margin="0,4,0,0"
+                  Style="{StaticResource SecondaryTextStyle}"
+                  Text="{Binding VideoEncodingStatus}"
+                />
+              </StackPanel>
+              <Button
+                Grid.Column="1"
+                Margin="16,0,0,0"
+                VerticalAlignment="Center"
+                Command="{Binding TestVideoEncodingCommand}"
+                Content="{Binding TestVideoEncodingButtonText}"
+                Style="{StaticResource SecondaryButtonStyle}"
+              />
+            </Grid>
 
             <TextBlock
-              Style="{StaticResource InputLabelStyle}"
+              Style="{StaticResource CompactInputLabelStyle}"
               Text="Encoder profile"
               Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
             />
@@ -319,7 +351,7 @@
               Visibility="{Binding HasVideoProfileOptions, Converter={StaticResource BooleanToVisibilityConverter}}"
             />
 
-            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Video quality" />
+            <TextBlock Style="{StaticResource CompactInputLabelStyle}" Text="Video quality" />
             <ComboBox
               Width="420"
               HorizontalAlignment="Left"
@@ -329,7 +361,7 @@
               SelectedValuePath="Value"
             />
 
-            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Frame rate" />
+            <TextBlock Style="{StaticResource CompactInputLabelStyle}" Text="Frame rate" />
             <ComboBox
               Width="420"
               HorizontalAlignment="Left"
@@ -339,7 +371,7 @@
               SelectedValuePath="Value"
             />
 
-            <TextBlock Style="{StaticResource InputLabelStyle}" Text="Output scaling" />
+            <TextBlock Style="{StaticResource CompactInputLabelStyle}" Text="Output scaling" />
             <ComboBox
               Width="420"
               HorizontalAlignment="Left"
@@ -350,7 +382,7 @@
             />
             <TextBlock
               Width="420"
-              Margin="0,10,0,0"
+              Margin="0,8,0,0"
               HorizontalAlignment="Left"
               Style="{StaticResource SecondaryTextStyle}"
               Text="{Binding EstimatedRecordingSize}"
@@ -358,11 +390,11 @@
 
             <Border
               Height="1"
-              Margin="0,24"
+              Margin="0,20"
               Background="{StaticResource BorderSubtleBrush}"
             />
 
-            <Grid>
+            <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -382,7 +414,7 @@
               />
             </Grid>
 
-            <Grid Margin="0,16,0,0">
+            <Grid Margin="0,14,0,0" Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -405,8 +437,8 @@
         </local:SectionCard>
 
         <local:SectionCard Header="Audio" Style="{StaticResource FlatSettingsSectionStyle}">
-          <StackPanel Margin="0,18,0,0">
-            <Grid>
+          <StackPanel Margin="0,16,0,0">
+            <Grid Style="{StaticResource SettingsSwitchRowStyle}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -426,7 +458,11 @@
               />
             </Grid>
 
-            <Grid Margin="0,16,0,0" IsEnabled="{Binding CanCaptureMicrophone}">
+            <Grid
+              Margin="0,14,0,0"
+              IsEnabled="{Binding CanCaptureMicrophone}"
+              Style="{StaticResource DependentSettingsRowStyle}"
+            >
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

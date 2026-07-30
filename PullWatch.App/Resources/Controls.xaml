@@ -117,7 +117,7 @@
     TargetType="TextBlock"
   >
     <Setter Property="FontSize" Value="13" />
-    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontWeight" Value="Medium" />
   </Style>
 
   <Style
@@ -154,7 +154,15 @@
     BasedOn="{StaticResource ControlLabelTextStyle}"
     TargetType="TextBlock"
   >
-    <Setter Property="Margin" Value="0,18,0,6" />
+    <Setter Property="Margin" Value="0,16,0,5" />
+  </Style>
+
+  <Style
+    x:Key="CompactInputLabelStyle"
+    BasedOn="{StaticResource ControlLabelTextStyle}"
+    TargetType="TextBlock"
+  >
+    <Setter Property="Margin" Value="0,12,0,5" />
   </Style>
 
   <Style
@@ -164,6 +172,14 @@
   >
     <Setter Property="Margin" Value="0,5,0,0" />
     <Setter Property="Foreground" Value="{StaticResource FailureBrush}" />
+    <Style.Triggers>
+      <Trigger Property="Text" Value="">
+        <Setter Property="Visibility" Value="Collapsed" />
+      </Trigger>
+      <Trigger Property="Text" Value="{x:Null}">
+        <Setter Property="Visibility" Value="Collapsed" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style
@@ -212,8 +228,11 @@
               Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
             />
             <Border
+              Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+              MaxWidth="700"
               Height="1"
-              Margin="0,8,0,0"
+              Margin="0,8,0,4"
+              HorizontalAlignment="Left"
               Background="{StaticResource BorderSubtleBrush}"
             />
             <ContentPresenter Margin="0,0,0,0" ContentSource="Content" />
@@ -221,6 +240,35 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+  </Style>
+
+  <Style x:Key="SettingsSwitchRowStyle" TargetType="Grid">
+    <Setter
+      Property="Width"
+      Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType={x:Type local:SectionCard}}}"
+    />
+    <Setter Property="MaxWidth" Value="700" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+
+  <Style
+    x:Key="DependentSettingsRowStyle"
+    BasedOn="{StaticResource SettingsSwitchRowStyle}"
+    TargetType="Grid"
+  >
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Opacity" Value="0.65" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="DependentSettingsContentStyle" TargetType="StackPanel">
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Opacity" Value="0.75" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <ControlTemplate x:Key="ButtonTemplate" TargetType="Button">
@@ -517,7 +565,7 @@
               <Setter TargetName="SwitchFocusBorder" Property="Opacity" Value="1" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter TargetName="SwitchRoot" Property="Opacity" Value="0.45" />
+              <Setter TargetName="SwitchRoot" Property="Opacity" Value="0.7" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
