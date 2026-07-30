@@ -14,6 +14,7 @@
     <FlyleafFFmpegPath
       Condition="'$(FlyleafFFmpegPath)' == ''"
     >$(MSBuildProjectDirectory)\..\.tools\flyleaf\runtime-7.1\FFmpeg</FlyleafFFmpegPath>
+    <FlyleafRuntimeDirectoryName>FlyleafRuntime</FlyleafRuntimeDirectoryName>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PullWatchBuildForTests)' == 'true'">
@@ -45,11 +46,38 @@
 
   <ItemGroup Condition="Exists('$(FlyleafFFmpegPath)')">
     <Content Include="$(FlyleafFFmpegPath)\*.dll">
-      <Link>FFmpeg\%(Filename)%(Extension)</Link>
+      <Link>$(FlyleafRuntimeDirectoryName)\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+
+  <Target Name="ValidateFlyleafRuntimeForPublish" BeforeTargets="PrepareForPublish">
+    <ItemGroup>
+      <_RequiredFlyleafRuntimeLibrary
+        Include="
+          avcodec-61.dll;
+          avdevice-61.dll;
+          avfilter-10.dll;
+          avformat-61.dll;
+          avutil-59.dll;
+          postproc-58.dll;
+          swresample-5.dll;
+          swscale-8.dll
+        "
+      />
+    </ItemGroup>
+
+    <Error
+      Condition="!Exists('$(FlyleafFFmpegPath)')"
+      Text="Flyleaf's FFmpeg runtime was not found at '$(FlyleafFFmpegPath)'. Run scripts/setup-flyleaf-runtime.ps1 before publishing."
+    />
+    <Error
+      Condition="!Exists('$(FlyleafFFmpegPath)\%(_RequiredFlyleafRuntimeLibrary.Identity)')"
+      Text="Flyleaf's FFmpeg runtime is incomplete. Missing: $(FlyleafFFmpegPath)\%(_RequiredFlyleafRuntimeLibrary.Identity)"
+    />
+  </Target>
 
   <Target
     Name="ExcludeUnneededFilesFromPublish"

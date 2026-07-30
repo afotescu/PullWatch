@@ -21,7 +21,7 @@ internal static class FlyleafEngineBootstrapper
                 return;
             }
 
-            var ffmpegPath = Path.Combine(AppContext.BaseDirectory, "FFmpeg");
+            var ffmpegPath = Path.Combine(AppContext.BaseDirectory, "FlyleafRuntime");
             if (!Directory.Exists(ffmpegPath))
             {
                 throw new DirectoryNotFoundException(

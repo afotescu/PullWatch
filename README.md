@@ -209,12 +209,14 @@ Create a local self-contained Windows x64 publish build:
 ```
 
 Publish builds include Gyan FFmpeg release essentials under the `ffmpeg` folder
-next to `PullWatch.exe`. PullWatch uses the bundled `ffmpeg.exe` before falling
-back to a machine-level FFmpeg install.
+and Flyleaf's playback libraries under the `FlyleafRuntime` folder next to
+`PullWatch.exe`. PullWatch uses the bundled `ffmpeg.exe` before falling back to
+a machine-level FFmpeg install.
 
 ## Key Dependencies
 
 - [FFmpeg](https://ffmpeg.org/) via [Gyan FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
+- [Flyleaf](https://github.com/SuRGeoNix/Flyleaf)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)
 

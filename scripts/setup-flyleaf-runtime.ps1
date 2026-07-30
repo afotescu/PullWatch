@@ -11,7 +11,6 @@ $runtimePath = Join-Path $flyleafToolsPath "runtime-7.1"
 $archivePath = Join-Path $flyleafToolsPath "Flyleaf_v3.8.11_p2.7z"
 
 New-Item -ItemType Directory -Force -Path $flyleafToolsPath | Out-Null
-New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
 
 if (!(Test-Path -LiteralPath $archivePath -PathType Leaf)) {
     Write-Host "Downloading Flyleaf's FFmpeg 7.1 runtime bundle."
@@ -22,6 +21,12 @@ $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.
 if ($actualSha256 -ne $ExpectedSha256.ToLowerInvariant()) {
     throw "Flyleaf runtime SHA256 mismatch. Expected $ExpectedSha256 but found $actualSha256."
 }
+
+if (Test-Path -LiteralPath $runtimePath) {
+    Remove-Item -LiteralPath $runtimePath -Recurse -Force
+}
+
+New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
 
 tar -xf $archivePath -C $runtimePath "FFmpeg"
 if ($LASTEXITCODE -ne 0) {
