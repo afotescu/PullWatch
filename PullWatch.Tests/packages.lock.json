@@ -366,8 +366,8 @@
         "dependencies": {
           "Dapper": "[2.1.79, )",
           "FluentMigrator.Runner.SQLite": "[8.0.1, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.0.10, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.0.10, )",
           "Microsoft.Extensions.Logging": "[10.0.0, )",
           "NAudio.Wasapi": "[2.3.0, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.4, )"
