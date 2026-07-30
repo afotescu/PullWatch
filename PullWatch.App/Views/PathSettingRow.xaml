@@ -13,11 +13,13 @@
         Margin="10,0,0,0"
         Command="{Binding BrowseCommand, ElementName=Root}"
         Content="{Binding BrowseButtonText, ElementName=Root}"
+        Style="{StaticResource SecondaryButtonStyle}"
       />
       <TextBox
         x:Name="PathTextBox"
         KeyDown="OnPathTextBoxKeyDown"
         LostFocus="OnPathTextBoxLostFocus"
+        Style="{StaticResource TextInputStyle}"
         Text="{Binding Text, ElementName=Root, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
       />
     </DockPanel>

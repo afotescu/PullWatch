@@ -4,29 +4,94 @@
 >
   <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
-  <SolidColorBrush x:Key="WindowBrush" Color="#15181D" />
-  <SolidColorBrush x:Key="SidebarBrush" Color="#1B1F25" />
-  <SolidColorBrush x:Key="SurfaceBrush" Color="#22272E" />
-  <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#2A3038" />
-  <SolidColorBrush x:Key="BorderBrush" Color="#404956" />
-  <SolidColorBrush x:Key="ProgressTrackBrush" Color="#343C47" />
-  <SolidColorBrush x:Key="ProgressTrackBorderBrush" Color="#46505E" />
-  <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F4F7" />
-  <SolidColorBrush x:Key="SecondaryTextBrush" Color="#AAB2BD" />
-  <SolidColorBrush x:Key="AccentBrush" Color="#D59B45" />
-  <SolidColorBrush x:Key="FocusBrush" Color="#80AAB2BD" />
-  <SolidColorBrush x:Key="FilledButtonTextBrush" Color="#171A1F" />
-  <SolidColorBrush x:Key="StatusNeutralBrush" Color="#7D8794" />
-  <SolidColorBrush x:Key="HealthyBrush" Color="#66B58A" />
-  <SolidColorBrush x:Key="FailureBrush" Color="#E06C75" />
+  <Color x:Key="BackgroundColor">#101214</Color>
+  <Color x:Key="SidebarColor">#15181C</Color>
+  <Color x:Key="SurfaceColor">#1B1F24</Color>
+  <Color x:Key="SurfaceHoverColor">#22272E</Color>
+  <Color x:Key="SurfaceSelectedColor">#292F37</Color>
+  <Color x:Key="InputBackgroundColor">#20252B</Color>
+  <Color x:Key="ConsoleBackgroundColor">#0C0E10</Color>
+  <Color x:Key="BorderColor">#30363D</Color>
+  <Color x:Key="BorderSubtleColor">#262B31</Color>
+  <Color x:Key="TextPrimaryColor">#F0F2F4</Color>
+  <Color x:Key="TextSecondaryColor">#A8B0BA</Color>
+  <Color x:Key="TextMutedColor">#727C87</Color>
+  <Color x:Key="AccentColor">#5D8FCA</Color>
+  <Color x:Key="AccentHoverColor">#6D9FD9</Color>
+  <Color x:Key="AccentPressedColor">#4E7EB4</Color>
+  <Color x:Key="AccentMutedColor">#182433</Color>
+  <Color x:Key="AccentForegroundColor">#101214</Color>
+  <Color x:Key="SuccessColor">#52A875</Color>
+  <Color x:Key="RecordingColor">#DC6670</Color>
+  <Color x:Key="ErrorColor">#D75C66</Color>
+  <Color x:Key="DangerColor">#D75C66</Color>
+  <Color x:Key="DangerMutedColor">#B05C65</Color>
+  <Color x:Key="WarningColor">#D89B3C</Color>
+  <Color x:Key="IdleColor">#727C87</Color>
+
+  <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+  <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
+  <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
+  <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource SurfaceHoverColor}" />
+  <SolidColorBrush
+    x:Key="SurfaceSelectedBrush"
+    Color="{StaticResource SurfaceSelectedColor}"
+  />
+  <SolidColorBrush
+    x:Key="InputBackgroundBrush"
+    Color="{StaticResource InputBackgroundColor}"
+  />
+  <SolidColorBrush
+    x:Key="ConsoleBackgroundBrush"
+    Color="{StaticResource ConsoleBackgroundColor}"
+  />
+  <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+  <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+  <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
+  <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}" />
+  <SolidColorBrush
+    x:Key="AccentForegroundBrush"
+    Color="{StaticResource AccentForegroundColor}"
+  />
+  <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+  <SolidColorBrush x:Key="RecordingBrush" Color="{StaticResource RecordingColor}" />
+  <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />
+  <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+  <SolidColorBrush x:Key="DangerMutedBrush" Color="{StaticResource DangerMutedColor}" />
+  <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+  <SolidColorBrush x:Key="IdleBrush" Color="{StaticResource IdleColor}" />
+
+  <!-- Compatibility aliases retained until later redesign milestones migrate their consumers. -->
+  <SolidColorBrush x:Key="WindowBrush" Color="{StaticResource BackgroundColor}" />
+  <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{StaticResource SurfaceHoverColor}" />
+  <SolidColorBrush x:Key="ProgressTrackBrush" Color="{StaticResource BorderSubtleColor}" />
+  <SolidColorBrush x:Key="ProgressTrackBorderBrush" Color="{StaticResource BorderColor}" />
+  <SolidColorBrush x:Key="PrimaryTextBrush" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource TextSecondaryColor}" />
+  <SolidColorBrush x:Key="FocusBrush" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush
+    x:Key="FilledButtonTextBrush"
+    Color="{StaticResource AccentForegroundColor}"
+  />
+  <SolidColorBrush x:Key="StatusNeutralBrush" Color="{StaticResource IdleColor}" />
+  <SolidColorBrush x:Key="HealthyBrush" Color="{StaticResource SuccessColor}" />
+  <SolidColorBrush x:Key="FailureBrush" Color="{StaticResource ErrorColor}" />
 
   <SolidColorBrush x:Key="ButtonHoverOverlayBrush" Color="#24FFFFFF" />
   <SolidColorBrush x:Key="ButtonPressedOverlayBrush" Color="#22000000" />
   <SolidColorBrush x:Key="FilledButtonHoverOverlayBrush" Color="#14000000" />
   <SolidColorBrush x:Key="FilledButtonPressedOverlayBrush" Color="#26000000" />
-  <SolidColorBrush x:Key="ListItemSurfaceBrush" Color="#252B33" />
-  <SolidColorBrush x:Key="ListItemHoverBrush" Color="#303742" />
-  <SolidColorBrush x:Key="SelectedSurfaceBrush" Color="#35404C" />
-  <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="#111318" />
+  <SolidColorBrush x:Key="ListItemSurfaceBrush" Color="{StaticResource SurfaceColor}" />
+  <SolidColorBrush x:Key="ListItemHoverBrush" Color="{StaticResource SurfaceHoverColor}" />
+  <SolidColorBrush
+    x:Key="SelectedSurfaceBrush"
+    Color="{StaticResource SurfaceSelectedColor}"
+  />
+  <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="{StaticResource ConsoleBackgroundColor}" />
   <SolidColorBrush x:Key="PlayerInputCaptureBrush" Color="#01000000" />
 </ResourceDictionary>
