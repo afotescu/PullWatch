@@ -29,6 +29,7 @@ public sealed class DiagnosticsViewModelTests
             combatLog =>
             {
                 Assert.Equal("Combat log reader", combatLog.Title);
+                Assert.Equal(DiagnosticIndicatorKind.Idle, combatLog.Indicator);
                 AssertRows(
                     combatLog.Rows,
                     ("State", "WaitingForCombatLog"),
@@ -40,6 +41,7 @@ public sealed class DiagnosticsViewModelTests
             wowProcess =>
             {
                 Assert.Equal("World of Warcraft", wowProcess.Title);
+                Assert.Equal(DiagnosticIndicatorKind.Idle, wowProcess.Indicator);
                 AssertRows(
                     wowProcess.Rows,
                     ("State", "WaitingForProcess"),
@@ -52,6 +54,7 @@ public sealed class DiagnosticsViewModelTests
             recording =>
             {
                 Assert.Equal("Recorder", recording.Title);
+                Assert.Equal(DiagnosticIndicatorKind.Idle, recording.Indicator);
                 AssertRows(
                     recording.Rows,
                     ("State", "Idle"),
@@ -60,6 +63,41 @@ public sealed class DiagnosticsViewModelTests
                     ("Last failure", "(none)")
                 );
             }
+        );
+    }
+
+    [Fact]
+    public void MapsDiagnosticStatesToSemanticIndicators()
+    {
+        using var logs = new InMemoryLogProvider();
+        var status = new ApplicationStatus(
+            new PullWatchSettings(),
+            new RecordingCoordinatorStatus(
+                RecordingCoordinatorState.Recording,
+                RecordingOwner.Manual,
+                null,
+                null,
+                null,
+                null,
+                null,
+                @"C:\Temp\recording.mp4"
+            ),
+            new CombatLogReaderStatus(CombatLogReaderState.SwitchingCombatLog, null, null, null),
+            new WowProcessStatus(
+                WowProcessState.WindowAvailable,
+                42,
+                DateTimeOffset.UtcNow,
+                "World of Warcraft",
+                null
+            )
+        );
+        var viewModel = new DiagnosticsViewModel(status, logs, new FakeDiagnosticsDialogs());
+
+        Assert.Collection(
+            viewModel.Sections,
+            combatLog => Assert.Equal(DiagnosticIndicatorKind.Warning, combatLog.Indicator),
+            wowProcess => Assert.Equal(DiagnosticIndicatorKind.Success, wowProcess.Indicator),
+            recording => Assert.Equal(DiagnosticIndicatorKind.Recording, recording.Indicator)
         );
     }
 

@@ -198,6 +198,31 @@
     <Setter Property="Padding" Value="22" />
   </Style>
 
+  <Style x:Key="SurfacePanelStyle" TargetType="Border">
+    <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="7" />
+    <Setter Property="Padding" Value="16" />
+  </Style>
+
+  <Style
+    x:Key="WarningPanelStyle"
+    BasedOn="{StaticResource SurfacePanelStyle}"
+    TargetType="Border"
+  >
+    <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="CornerRadius" Value="0,7,7,0" />
+  </Style>
+
+  <Style x:Key="SemanticStatusDotStyle" TargetType="Ellipse">
+    <Setter Property="Width" Value="8" />
+    <Setter Property="Height" Value="8" />
+    <Setter Property="Fill" Value="{StaticResource IdleBrush}" />
+    <Setter Property="Stroke" Value="{StaticResource IdleBrush}" />
+  </Style>
+
   <Style TargetType="{x:Type local:SectionCard}">
     <Setter Property="Margin" Value="0,0,0,18" />
     <Setter Property="Template">
@@ -505,6 +530,17 @@
     <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
     <Setter Property="CaretBrush" Value="{StaticResource PrimaryTextBrush}" />
     <Setter Property="Padding" Value="10,8" />
+  </Style>
+
+  <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox">
+    <Setter Property="Background" Value="{StaticResource ConsoleBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontFamily" Value="{StaticResource MonospaceFontFamily}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Padding" Value="12" />
+    <Setter Property="SelectionBrush" Value="{StaticResource AccentMutedBrush}" />
   </Style>
 
   <Style x:Key="SwitchStyle" TargetType="ToggleButton">
