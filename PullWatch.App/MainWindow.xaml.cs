@@ -310,8 +310,6 @@ public partial class MainWindow : Window
         Grid.SetColumnSpan(NavigationLayer, 2);
         Panel.SetZIndex(NavigationLayer, 100);
         NavigationLayer.SetResourceReference(Panel.BackgroundProperty, "PlayerSurfaceBrush");
-        NotificationsOverlay.Opacity = 0;
-        NotificationsOverlay.IsHitTestVisible = false;
 
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -339,8 +337,6 @@ public partial class MainWindow : Window
         Grid.SetColumnSpan(NavigationLayer, 1);
         Panel.SetZIndex(NavigationLayer, 0);
         NavigationLayer.ClearValue(Panel.BackgroundProperty);
-        NotificationsOverlay.Opacity = 1;
-        NotificationsOverlay.IsHitTestVisible = true;
         return true;
     }
 
@@ -385,6 +381,8 @@ public partial class MainWindow : Window
         }
 
         NavigationContent.Content = view;
+        NotificationsOverlay.Visibility =
+            view is RecordingsView ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private FrameworkElement CreateNavigationView(object content)

@@ -55,6 +55,13 @@ public partial class RecordingPlayerControl : UserControl
         new PropertyMetadata(false, OnIsFullScreenChanged)
     );
 
+    public static readonly DependencyProperty NotificationsProperty = DependencyProperty.Register(
+        nameof(Notifications),
+        typeof(NotificationCenterViewModel),
+        typeof(RecordingPlayerControl),
+        new PropertyMetadata(null, OnNotificationsChanged)
+    );
+
     private readonly ILogger<RecordingPlayerControl> _logger;
     private readonly Player _player;
     private readonly DispatcherTimer _positionTimer;
@@ -151,6 +158,12 @@ public partial class RecordingPlayerControl : UserControl
     {
         get => (bool)GetValue(IsFullScreenProperty);
         set => SetValue(IsFullScreenProperty, value);
+    }
+
+    public NotificationCenterViewModel? Notifications
+    {
+        get => (NotificationCenterViewModel?)GetValue(NotificationsProperty);
+        set => SetValue(NotificationsProperty, value);
     }
 
     internal void ApplyPlaybackAudioState(int volumePercent, bool isMuted)
@@ -274,6 +287,16 @@ public partial class RecordingPlayerControl : UserControl
     {
         var player = (RecordingPlayerControl)dependencyObject;
         player.UpdateFullScreenButton();
+        player.UpdateNotificationOverlayVisibility();
+    }
+
+    private static void OnNotificationsChanged(
+        DependencyObject dependencyObject,
+        DependencyPropertyChangedEventArgs eventArgs
+    )
+    {
+        var player = (RecordingPlayerControl)dependencyObject;
+        player.PlayerNotifications.DataContext = eventArgs.NewValue;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs eventArgs)
@@ -908,6 +931,14 @@ public partial class RecordingPlayerControl : UserControl
 
         FullScreenIcon.Data = (Geometry)FindResource(EnterFullScreenIconGeometryKey);
         FullScreenButton.ToolTip = "Enter fullscreen";
+    }
+
+    private void UpdateNotificationOverlayVisibility()
+    {
+        PlayerNotifications.SetCurrentValue(
+            VisibilityProperty,
+            IsFullScreen ? Visibility.Collapsed : Visibility.Visible
+        );
     }
 
     private void UpdateVolumeControls()

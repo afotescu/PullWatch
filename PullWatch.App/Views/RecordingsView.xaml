@@ -16,6 +16,7 @@
         <ContentControl x:Name="PlayerHost">
           <local:RecordingPlayerControl
             x:Name="RecordingPlayer"
+            Notifications="{Binding Notifications}"
             PlaceholderText="{Binding RecordingLibraryStatus}"
             Source="{Binding SelectedRecording.Source}"
           />
