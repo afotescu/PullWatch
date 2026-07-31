@@ -59,6 +59,7 @@
               ItemContainerStyle="{StaticResource RecordingFilterItemStyle}"
               ItemsSource="{Binding RecordingCategories}"
               SelectedItem="{Binding SelectedRecordingCategory, Mode=TwoWay}"
+              SelectionChanged="OnRecordingCategoryChanged"
               Style="{StaticResource RecordingFilterListStyle}"
             >
               <ListBox.ItemsPanel>

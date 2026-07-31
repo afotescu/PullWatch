@@ -1000,6 +1000,117 @@ public sealed class RecordingsViewModelTests
     }
 
     [Fact]
+    public void ChangingCategorySelectsTheNewestRowOfTheNewTab()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var newerChallengeId = Guid.Parse("4C9A1E77-1B0D-4E2F-9C51-8A3D6E0B2F14");
+            var raidId = Guid.Parse("8E5D2C1B-6F40-4A93-9B27-0D4E1F3A5C68");
+            var olderChallengeId = Guid.Parse("2B7C4F91-5A38-4D06-8E1A-7F9B3C2D5E40");
+            var newerChallenge = CatalogFile(
+                Path.Combine(directory, "newer-key.mp4"),
+                new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero),
+                id: newerChallengeId,
+                kind: RecordingCatalogKind.ChallengeMode
+            );
+            var raid = CatalogFile(
+                Path.Combine(directory, "boss.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                id: raidId,
+                kind: RecordingCatalogKind.Encounter
+            );
+            var olderChallenge = CatalogFile(
+                Path.Combine(directory, "older-key.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                id: olderChallengeId,
+                kind: RecordingCatalogKind.ChallengeMode
+            );
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.ChallengeMode
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([
+                        newerChallenge,
+                        raid,
+                        olderChallenge,
+                    ])
+            );
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
+                recording.Id == olderChallengeId
+            );
+
+            SelectCategory(viewModel, RecordingListCategory.All);
+
+            Assert.Equal(newerChallengeId, viewModel.SelectedRecording?.Id);
+
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
+                recording.Id == olderChallengeId
+            );
+            SelectCategory(viewModel, RecordingListCategory.ChallengeMode);
+
+            Assert.Equal(newerChallengeId, viewModel.SelectedRecording?.Id);
+
+            SelectCategory(viewModel, RecordingListCategory.RaidEncounter);
+
+            Assert.Equal(raidId, viewModel.SelectedRecording?.Id);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task OrdinaryRefreshKeepsTheSelectedRecordingInTheAllCategory()
+    {
+        var directory = CreateTempDirectory();
+
+        try
+        {
+            var challengeId = Guid.Parse("6F1B0A45-3E27-4C8D-95B0-1A7C4E2D8F36");
+            var raidId = Guid.Parse("D3A8C5E2-704B-4916-8F2D-5B6E1C0A9374");
+            var challengeMode = CatalogFile(
+                Path.Combine(directory, "key.mp4"),
+                new DateTimeOffset(2026, 6, 15, 11, 0, 0, TimeSpan.Zero),
+                id: challengeId,
+                kind: RecordingCatalogKind.ChallengeMode
+            );
+            var raid = CatalogFile(
+                Path.Combine(directory, "boss.mp4"),
+                new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero),
+                id: raidId,
+                kind: RecordingCatalogKind.Encounter
+            );
+            var viewModel = CreateViewModel(
+                Status(
+                    RecordingCoordinatorState.Idle,
+                    recordingsDirectory: directory,
+                    selectedRecordingCategory: RecordingListCategory.All
+                ),
+                loadRecordings: _ =>
+                    Task.FromResult<IReadOnlyList<RecordingCatalogFile>>([challengeMode, raid])
+            );
+            viewModel.SelectedRecording = viewModel.Recordings.Single(recording =>
+                recording.Id == raidId
+            );
+
+            await viewModel.RefreshRecordingsAsync();
+
+            Assert.Equal(RecordingListCategory.All, viewModel.SelectedRecordingCategory.Category);
+            Assert.Equal(raidId, viewModel.SelectedRecording?.Id);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void DefaultsToAllCategoryWhenNoSelectionHasBeenSaved()
     {
         var status = Status(RecordingCoordinatorState.Idle);

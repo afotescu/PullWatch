@@ -76,6 +76,24 @@ public partial class RecordingsView : UserControl, IDisposable
         eventArgs.Handled = true;
     }
 
+    private void OnRecordingCategoryChanged(object sender, SelectionChangedEventArgs eventArgs)
+    {
+        if (eventArgs.AddedItems.Count == 0)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(ScrollRecordingListToTop, DispatcherPriority.Background);
+    }
+
+    private void ScrollRecordingListToTop()
+    {
+        if (!_isDisposed && RecordingList.Items.Count > 0)
+        {
+            RecordingList.ScrollIntoView(RecordingList.Items[0]);
+        }
+    }
+
     internal void SuspendPlayback()
     {
         CloseFullScreen();

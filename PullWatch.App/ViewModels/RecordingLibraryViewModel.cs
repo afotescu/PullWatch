@@ -99,7 +99,8 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
             }
 
             NotifyColumnPresentationChanged();
-            ApplyFilter();
+            ApplyFilter(preferMostRecent: true);
+
             _ = SaveSelectedCategoryAsync(value.Category);
         }
     }
