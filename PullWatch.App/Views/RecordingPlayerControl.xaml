@@ -2,7 +2,6 @@
   x:Class="PullWatch.RecordingPlayerControl"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-  xmlns:flyleaf="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
   xmlns:local="clr-namespace:PullWatch"
   AutomationProperties.Name="Recording player"
   Focusable="True"
@@ -46,8 +45,9 @@
       BorderThickness="0,0,0,1"
     >
       <Grid>
-        <flyleaf:FlyleafHost
+        <local:FlyleafPlaybackView
           x:Name="MediaPlayer"
+          Background="{StaticResource PlayerSurfaceBrush}"
           KeyBindings="None"
           MouseBindings="None"
           OpenOnDrop="None"
@@ -82,7 +82,7 @@
               VerticalAlignment="Top"
             />
           </Grid>
-        </flyleaf:FlyleafHost>
+        </local:FlyleafPlaybackView>
       </Grid>
     </Border>
 

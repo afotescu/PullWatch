@@ -1,14 +1,9 @@
-using System.Diagnostics;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using FlyleafLib;
-using FlyleafLib.MediaPlayer;
-using Microsoft.Extensions.Logging;
 
 namespace PullWatch;
 
@@ -30,10 +25,7 @@ public partial class RecordingPlayerControl : UserControl
     private const double SeekStepSeconds = 5;
     private const double VolumeStep = 0.1;
     private const double VolumeSliderScale = 100;
-    private const double FallbackUnmuteVolume = 0.5;
     private const int KeyboardSeekCommitDelayMilliseconds = 150;
-    private static readonly TimeSpan EndSeekInset = TimeSpan.FromMilliseconds(50);
-    private static int _nextPlayerInstanceId;
 
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(
         nameof(Source),
@@ -63,47 +55,30 @@ public partial class RecordingPlayerControl : UserControl
         new PropertyMetadata(null, OnNotificationsChanged)
     );
 
-    private readonly ILogger<RecordingPlayerControl> _logger;
-    private readonly Player _player;
-    private readonly RecordingPlayerLoadState _loadState = new();
-    private readonly int _playerInstanceId = Interlocked.Increment(ref _nextPlayerInstanceId);
+    private readonly IPlaybackSession _session;
+    private readonly PlaybackCoordinator _coordinator;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _keyboardSeekTimer;
-    private RecordingPlayerLoadRequest? _activeLoadRequest;
-    private CancellationTokenSource? _openRetryCancellation;
-    private Uri? _currentSource;
-    private Stopwatch? _openStopwatch;
-    private bool _hasMedia;
-    private bool _hasPlaybackEnded;
-    private bool _isPlaying;
     private bool _isSeeking;
     private int _surfacePressClickCount;
-    private bool _isMuted;
     private bool _isAdjustingVolume;
     private bool _isUpdatingVolumeControls;
-    private double _lastAudibleVolume;
-    private double _volume = FallbackUnmuteVolume;
-    private TimeSpan? _pendingPlaybackStartPosition;
     private TimeSpan? _pendingKeyboardSeekPosition;
     private bool _pendingKeyboardSeekNeedsCommit;
-    private string? _playbackErrorText;
     private bool _isDisposed;
 
     public RecordingPlayerControl()
     {
-        _logger = ((App)Application.Current).CreateLogger<RecordingPlayerControl>();
-        FlyleafEngineBootstrapper.Start(_logger);
-
-        var playerConfig = new Config();
-        playerConfig.Player.AutoPlay = false;
-        playerConfig.Player.Stats = true;
-        _player = new Player(playerConfig);
-        _player.OpenCompleted += OnPlayerOpenCompleted;
-        _player.OpeningVideoStream += OnPlayerOpeningVideoStream;
-        _player.PlaybackStopped += OnPlayerPlaybackStopped;
-
+        var app = (App)Application.Current;
+        var logger = app.CreateLogger<RecordingPlayerControl>();
         InitializeComponent();
-        MediaPlayer.Player = _player;
+
+        var uiDispatcher = new WpfUiDispatcher(Dispatcher);
+        _session = app.CreatePlaybackSession(uiDispatcher, logger);
+        MediaPlayer.Attach(_session);
+        _coordinator = new PlaybackCoordinator(_session, uiDispatcher, logger);
+        _coordinator.StateChanged += OnPlaybackStateChanged;
+
         PlayerPlaceholder.SetCurrentValue(TextBlock.TextProperty, PlaceholderText);
         _positionTimer = new DispatcherTimer(
             TimeSpan.FromMilliseconds(250),
@@ -134,9 +109,7 @@ public partial class RecordingPlayerControl : UserControl
             Thumb.DragCompletedEvent,
             new DragCompletedEventHandler(OnVolumeThumbDragCompleted)
         );
-        _lastAudibleVolume = _volume;
-        ApplyPlayerAudioState();
-        UpdateVolumeControls();
+        RenderPlaybackState();
         Loaded += OnLoaded;
     }
 
@@ -173,36 +146,20 @@ public partial class RecordingPlayerControl : UserControl
     internal void ApplyPlaybackAudioState(int volumePercent, bool isMuted)
     {
         _isAdjustingVolume = false;
-        _volume = Math.Clamp(volumePercent, 0, 100) / VolumeSliderScale;
-
-        if (_volume > 0)
-        {
-            _lastAudibleVolume = _volume;
-        }
-        else if (_lastAudibleVolume <= 0)
-        {
-            _lastAudibleVolume = FallbackUnmuteVolume;
-        }
-
-        _isMuted = isMuted || _volume <= 0;
-        ApplyPlayerAudioState();
-        UpdateVolumeControls();
+        _coordinator.ApplyAudioState(volumePercent, isMuted);
     }
 
     public void StopPlayback()
     {
-        CancelPendingOpenRetry();
-        _loadState.Clear();
-        _activeLoadRequest = null;
-        StopPlaybackCore();
-        _currentSource = null;
-        ResetPlayerState(sourceAvailable: false);
+        CancelPendingSurfaceInteraction();
+        CancelPendingKeyboardSeek();
+        _coordinator.Stop();
     }
 
     public void SuspendPlayback()
     {
         CancelPendingSurfaceInteraction();
-        PausePlayback();
+        _coordinator.Pause();
     }
 
     public void DisposePlayback()
@@ -214,31 +171,18 @@ public partial class RecordingPlayerControl : UserControl
 
         _isDisposed = true;
         Loaded -= OnLoaded;
-        StopPlayback();
-        _player.OpenCompleted -= OnPlayerOpenCompleted;
-        _player.OpeningVideoStream -= OnPlayerOpeningVideoStream;
-        _player.PlaybackStopped -= OnPlayerPlaybackStopped;
-        _player.Dispose();
+        _positionTimer.Stop();
+        _keyboardSeekTimer.Stop();
+        _coordinator.StateChanged -= OnPlaybackStateChanged;
+        _coordinator.Dispose();
+        MediaPlayer.DetachSession();
+        _session.Dispose();
         MediaPlayer.Dispose();
     }
 
     public bool TogglePlayback()
     {
-        if (_currentSource is null || !_hasMedia)
-        {
-            return false;
-        }
-
-        if (_isPlaying)
-        {
-            PausePlayback();
-        }
-        else
-        {
-            StartPlayback();
-        }
-
-        return true;
+        return _coordinator.TogglePlayback();
     }
 
     public bool HandlePlaybackKey(Key key, bool isRepeat = false)
@@ -258,12 +202,14 @@ public partial class RecordingPlayerControl : UserControl
 
     public bool SeekBy(TimeSpan offset)
     {
-        return SeekTo((_pendingPlaybackStartPosition ?? GetPosition()) + offset);
+        CancelPendingKeyboardSeek();
+        return _coordinator.SeekBy(offset);
     }
 
     public bool AdjustVolume(double delta)
     {
-        SetVolume(_volume + delta, unmute: true);
+        var volume = _coordinator.State.VolumePercent + delta * VolumeSliderScale;
+        _coordinator.SetVolumePercent((int)Math.Round(volume), unmute: true);
         RaisePlaybackAudioStateChanged();
         return true;
     }
@@ -312,7 +258,7 @@ public partial class RecordingPlayerControl : UserControl
             return;
         }
 
-        if (_loadState.PendingRequest is { } pendingRequest && TryStartLoad(pendingRequest))
+        if (TryStartPendingOpen())
         {
             return;
         }
@@ -328,40 +274,17 @@ public partial class RecordingPlayerControl : UserControl
         }
 
         CancelPendingSurfaceInteraction();
-
-        if (source is null)
+        CancelPendingKeyboardSeek();
+        _coordinator.RequestSource(source);
+        if (source is not null)
         {
-            CancelPendingOpenRetry();
-            var loadVersion = _loadState.Clear();
-            _activeLoadRequest = null;
-            _logger.LogDebug(
-                "Flyleaf player {PlayerInstanceId} cleared source at load {LoadVersion}",
-                _playerInstanceId,
-                loadVersion
-            );
-            ClearSource();
-            return;
+            StartOrSchedulePendingOpen();
         }
-
-        var request = _loadState.Request(source);
-        if (request is null)
-        {
-            _logger.LogDebug(
-                "Flyleaf player {PlayerInstanceId} ignored duplicate source {RecordingFile}; state={LoadState}",
-                _playerInstanceId,
-                GetSourceDisplayName(source),
-                _loadState.Status
-            );
-            return;
-        }
-
-        CancelPendingOpenRetry();
-        StartOrScheduleLoad(request.Value);
     }
 
-    private void StartOrScheduleLoad(RecordingPlayerLoadRequest request)
+    private void StartOrSchedulePendingOpen()
     {
-        if (TryStartLoad(request))
+        if (TryStartPendingOpen())
         {
             return;
         }
@@ -369,59 +292,23 @@ public partial class RecordingPlayerControl : UserControl
         Dispatcher.InvokeAsync(
             () =>
             {
-                if (_isDisposed || !_loadState.IsCurrent(request))
+                if (!_isDisposed)
                 {
-                    return;
+                    TryStartPendingOpen();
                 }
-
-                TryStartLoad(request);
             },
             DispatcherPriority.Loaded
         );
     }
 
+    private bool TryStartPendingOpen()
+    {
+        return IsReadyToLoadSource() && _coordinator.StartPendingOpen();
+    }
+
     private bool IsReadyToLoadSource()
     {
         return IsLoaded && PresentationSource.FromVisual(MediaPlayer) is not null;
-    }
-
-    private bool TryStartLoad(RecordingPlayerLoadRequest request)
-    {
-        if (!IsReadyToLoadSource() || !_loadState.TryStart(request))
-        {
-            return false;
-        }
-
-        LoadSource(request);
-        return true;
-    }
-
-    private void ClearSource()
-    {
-        StopPlaybackCore();
-        _currentSource = null;
-        ResetPlayerState(sourceAvailable: false);
-    }
-
-    private void LoadSource(RecordingPlayerLoadRequest request)
-    {
-        StopPlaybackCore();
-        _currentSource = null;
-        ResetPlayerState(sourceAvailable: true);
-
-        var source = request.Source;
-        _activeLoadRequest = request;
-        _currentSource = source;
-        _player.Audio.Mute = true;
-        _openStopwatch = Stopwatch.StartNew();
-        _logger.LogInformation(
-            "Flyleaf player {PlayerInstanceId} opening recording {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt}",
-            _playerInstanceId,
-            GetSourceDisplayName(source),
-            request.Version,
-            request.Attempt
-        );
-        _player.OpenAsync(GetPlayerSource(source));
     }
 
     private void OnPlayPauseClicked(object sender, RoutedEventArgs eventArgs)
@@ -454,14 +341,12 @@ public partial class RecordingPlayerControl : UserControl
 
         var clickCount = _surfacePressClickCount;
         _surfacePressClickCount = 0;
-
         if (clickCount == 0)
         {
             return;
         }
 
         var handled = PlayPauseButton.IsEnabled && TogglePlayback();
-
         if (clickCount == 2 && FullScreenButton.IsEnabled)
         {
             handled = true;
@@ -492,227 +377,16 @@ public partial class RecordingPlayerControl : UserControl
         ToggleMute();
     }
 
-    private void OnPlayerOpenCompleted(object? sender, OpenCompletedArgs eventArgs)
+    private void OnPlaybackStateChanged(object? sender, EventArgs eventArgs)
     {
-        Dispatcher.InvokeAsync(() => CompletePlayerOpen(eventArgs));
-    }
-
-    private void CompletePlayerOpen(OpenCompletedArgs eventArgs)
-    {
-        var request = _activeLoadRequest;
-        if (
-            eventArgs.IsSubtitles
-            || request is null
-            || !_loadState.IsCurrent(request.Value)
-            || !string.Equals(
-                eventArgs.Url,
-                GetPlayerSource(request.Value.Source),
-                StringComparison.OrdinalIgnoreCase
-            )
-        )
-        {
-            return;
-        }
-
-        _openStopwatch?.Stop();
-
-        var succeeded = eventArgs.Success && string.IsNullOrWhiteSpace(eventArgs.Error);
-        if (!_loadState.TryComplete(request.Value, succeeded))
-        {
-            return;
-        }
-
-        if (!succeeded)
-        {
-            var error = string.IsNullOrWhiteSpace(eventArgs.Error)
-                ? "Flyleaf could not open the recording."
-                : eventArgs.Error;
-            if (RecordingPlayerOpenRetryPolicy.ShouldRetry(request.Value, error))
-            {
-                ScheduleOpenRetry(request.Value, error);
-                return;
-            }
-
-            _logger.LogWarning(
-                "Flyleaf player {PlayerInstanceId} failed to open {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt} after {ElapsedMilliseconds:F1} ms: {PlaybackError}",
-                _playerInstanceId,
-                GetSourceDisplayName(request.Value.Source),
-                request.Value.Version,
-                request.Value.Attempt,
-                _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
-                error
-            );
-            ShowPlaybackError($"This recording could not be played: {error}");
-            return;
-        }
-
-        _hasMedia = _player.CanPlay;
-        _hasPlaybackEnded = false;
-        _pendingPlaybackStartPosition = null;
-        _isPlaying = false;
-        _player.Pause();
-        SetPosition(TimeSpan.Zero);
-        ApplyPlayerAudioState();
-
-        PlayPauseButton.IsEnabled = _hasMedia;
-        FullScreenButton.IsEnabled = _hasMedia;
-        UpdatePlayPauseButton();
-        UpdateDurationFromPlayer();
-        UpdatePositionFromPlayer();
-        PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Collapsed);
-
-        _logger.LogInformation(
-            "Flyleaf player {PlayerInstanceId} opened {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt} in {ElapsedMilliseconds:F1} ms; duration={Duration}; video={VideoCodec} {VideoWidth}x{VideoHeight} {PixelFormat} {FramesPerSecond:F2} FPS; hardwareAcceleration={HardwareAcceleration}; audio={AudioCodec} {AudioSampleRate} Hz {AudioChannels} channels",
-            _playerInstanceId,
-            GetSourceDisplayName(request.Value.Source),
-            request.Value.Version,
-            request.Value.Attempt,
-            _openStopwatch?.Elapsed.TotalMilliseconds ?? 0,
-            GetDuration(),
-            _player.Video.Codec,
-            _player.Video.Width,
-            _player.Video.Height,
-            _player.Video.PixelFormat,
-            _player.Video.FPS,
-            _player.Video.VideoAcceleration,
-            _player.Audio.Codec,
-            _player.Audio.SampleRate,
-            _player.Audio.Channels
-        );
-    }
-
-    private void ScheduleOpenRetry(RecordingPlayerLoadRequest request, string error)
-    {
-        CancelPendingOpenRetry();
-        var delay = RecordingPlayerOpenRetryPolicy.GetDelay(request);
-        var cancellation = new CancellationTokenSource();
-        _openRetryCancellation = cancellation;
-        _logger.LogInformation(
-            "Flyleaf player {PlayerInstanceId} could not discover media in {RecordingFile} at load {LoadVersion}, attempt {LoadAttempt}; retrying after {RetryDelayMilliseconds} ms: {PlaybackError}",
-            _playerInstanceId,
-            GetSourceDisplayName(request.Source),
-            request.Version,
-            request.Attempt,
-            delay.TotalMilliseconds,
-            error
-        );
-        _ = RetryOpenAsync(request, delay, cancellation);
-    }
-
-    private async Task RetryOpenAsync(
-        RecordingPlayerLoadRequest request,
-        TimeSpan delay,
-        CancellationTokenSource cancellation
-    )
-    {
-        try
-        {
-            await Task.Delay(delay, cancellation.Token);
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-            return;
-        }
-
-        if (
-            cancellation.IsCancellationRequested
-            || _isDisposed
-            || !ReferenceEquals(_openRetryCancellation, cancellation)
-            || !_loadState.IsCurrent(request)
-            || _loadState.Status != RecordingPlayerLoadStatus.Failed
-        )
-        {
-            return;
-        }
-
-        _openRetryCancellation = null;
-        cancellation.Dispose();
-
-        if (_loadState.Request(request.Source, retryFailed: true) is { } retryRequest)
-        {
-            StartOrScheduleLoad(retryRequest);
-        }
-    }
-
-    private void CancelPendingOpenRetry()
-    {
-        var cancellation = _openRetryCancellation;
-        _openRetryCancellation = null;
-        cancellation?.Cancel();
-        cancellation?.Dispose();
-    }
-
-    private void OnPlayerOpeningVideoStream(object? sender, Player.OpeningVideoStreamArgs eventArgs)
-    {
-        _logger.LogInformation(
-            "Flyleaf selected video decoder; hardwareAcceleration={HardwareAcceleration}",
-            eventArgs.VideoAcceleration
-        );
-    }
-
-    private void OnPlayerPlaybackStopped(object? sender, PlaybackStoppedArgs eventArgs)
-    {
-        Dispatcher.InvokeAsync(() =>
-        {
-            if (_isDisposed || _currentSource is null)
-            {
-                return;
-            }
-
-            if (!eventArgs.Success)
-            {
-                if (_loadState.Status != RecordingPlayerLoadStatus.Open)
-                {
-                    _logger.LogDebug(
-                        "Flyleaf player {PlayerInstanceId} ignored playback-stop failure while source load state is {LoadState}: {PlaybackError}",
-                        _playerInstanceId,
-                        _loadState.Status,
-                        eventArgs.Error
-                    );
-                    return;
-                }
-
-                ShowPlaybackError(
-                    $"This recording could not be played: {eventArgs.Error ?? "Flyleaf playback failed."}"
-                );
-                return;
-            }
-
-            if (_player.Status == Status.Ended)
-            {
-                OnPlayerMediaEnded();
-            }
-        });
-    }
-
-    private void OnPlayerMediaEnded()
-    {
-        _positionTimer.Stop();
-        _isPlaying = false;
-        _hasPlaybackEnded = true;
-        _pendingPlaybackStartPosition = null;
-        UpdatePlayPauseButton();
-        PlaybackSlider.Value = PlaybackSlider.Maximum;
-        UpdatePlaybackTimeText(GetDuration(), GetDuration());
-    }
-
-    private void ShowPlaybackError(string message)
-    {
-        StopPlaybackCore();
-        _hasMedia = false;
-        _playbackErrorText = message;
-        PlayPauseButton.IsEnabled = false;
-        FullScreenButton.IsEnabled = false;
-        PlaybackSlider.IsEnabled = false;
-        UpdatePlaceholderText();
-        PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Visible);
+        RenderPlaybackState();
     }
 
     private void OnPositionTimerTick(object? sender, EventArgs eventArgs)
     {
         if (!_isSeeking && _pendingKeyboardSeekPosition is null)
         {
-            UpdatePositionFromPlayer();
+            _coordinator.RefreshPosition();
         }
     }
 
@@ -723,11 +397,12 @@ public partial class RecordingPlayerControl : UserControl
         var needsCommit = _pendingKeyboardSeekNeedsCommit;
         _pendingKeyboardSeekPosition = null;
         _pendingKeyboardSeekNeedsCommit = false;
-
         if (needsCommit && position is not null)
         {
             SeekTo(position.Value);
         }
+
+        RenderPlaybackState();
     }
 
     private void OnPlaybackSliderPreviewMouseDown(object sender, MouseButtonEventArgs eventArgs)
@@ -768,7 +443,7 @@ public partial class RecordingPlayerControl : UserControl
                 eventArgs.IsRepeat
             ),
             Key.Home => SeekTo(TimeSpan.Zero),
-            Key.End => SeekTo(GetDuration()),
+            Key.End => SeekTo(_coordinator.State.Duration),
             _ => false,
         };
     }
@@ -791,7 +466,10 @@ public partial class RecordingPlayerControl : UserControl
     {
         if (_isSeeking)
         {
-            UpdatePlaybackTimeText(TimeSpan.FromSeconds(PlaybackSlider.Value), GetDuration());
+            UpdatePlaybackTimeText(
+                TimeSpan.FromSeconds(PlaybackSlider.Value),
+                _coordinator.State.Duration
+            );
         }
     }
 
@@ -816,8 +494,10 @@ public partial class RecordingPlayerControl : UserControl
             return;
         }
 
-        SetVolume(eventArgs.NewValue / VolumeSliderScale, unmute: eventArgs.NewValue > 0);
-
+        _coordinator.SetVolumePercent(
+            (int)Math.Round(eventArgs.NewValue),
+            unmute: eventArgs.NewValue > 0
+        );
         if (!_isAdjustingVolume)
         {
             RaisePlaybackAudioStateChanged();
@@ -831,19 +511,7 @@ public partial class RecordingPlayerControl : UserControl
 
     private void ToggleMute()
     {
-        if (IsEffectivelyMuted())
-        {
-            _volume = _lastAudibleVolume;
-            _isMuted = false;
-        }
-        else
-        {
-            _lastAudibleVolume = _volume;
-            _isMuted = true;
-        }
-
-        ApplyPlayerAudioState();
-        UpdateVolumeControls();
+        _coordinator.ToggleMute();
         RaisePlaybackAudioStateChanged();
     }
 
@@ -867,57 +535,23 @@ public partial class RecordingPlayerControl : UserControl
     private bool SeekTo(TimeSpan requestedPosition)
     {
         CancelPendingKeyboardSeek();
-
-        if (!_hasMedia)
-        {
-            return false;
-        }
-
-        var duration = GetDuration();
-        if (duration <= TimeSpan.Zero)
-        {
-            return false;
-        }
-
-        var position = Clamp(requestedPosition, TimeSpan.Zero, duration);
-        if (_hasPlaybackEnded)
-        {
-            _pendingPlaybackStartPosition = position >= duration ? TimeSpan.Zero : position;
-        }
-        else
-        {
-            SetPosition(
-                position >= duration
-                    ? Clamp(duration - EndSeekInset, TimeSpan.Zero, duration)
-                    : position
-            );
-        }
-
-        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
-        UpdatePlaybackTimeText(position, duration);
-        return true;
+        return _coordinator.SeekTo(requestedPosition);
     }
 
     private bool SeekByFromKeyboard(TimeSpan offset, bool isRepeat)
     {
-        if (!_hasMedia)
+        var state = _coordinator.State;
+        if (!state.HasMedia || state.Duration <= TimeSpan.Zero)
         {
             return false;
         }
 
-        var duration = GetDuration();
-        if (duration <= TimeSpan.Zero)
-        {
-            return false;
-        }
-
-        var origin = _pendingKeyboardSeekPosition ?? _pendingPlaybackStartPosition ?? GetPosition();
-        var position = Clamp(origin + offset, TimeSpan.Zero, duration);
-
+        var origin = _pendingKeyboardSeekPosition ?? state.Position;
+        var position = Clamp(origin + offset, TimeSpan.Zero, state.Duration);
         if (isRepeat)
         {
             PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
-            UpdatePlaybackTimeText(position, duration);
+            UpdatePlaybackTimeText(position, state.Duration);
         }
         else
         {
@@ -931,43 +565,21 @@ public partial class RecordingPlayerControl : UserControl
         return true;
     }
 
-    private void SetVolume(double volume, bool unmute)
-    {
-        var clampedVolume = Math.Clamp(volume, 0, 1);
-        _volume = clampedVolume;
-
-        if (clampedVolume > 0)
-        {
-            _lastAudibleVolume = clampedVolume;
-        }
-
-        if (unmute && clampedVolume > 0)
-        {
-            _isMuted = false;
-        }
-        else if (clampedVolume <= 0)
-        {
-            _isMuted = true;
-        }
-
-        ApplyPlayerAudioState();
-        UpdateVolumeControls();
-    }
-
     private void RaisePlaybackAudioStateChanged()
     {
+        var state = _coordinator.State;
         PlaybackAudioStateChanged?.Invoke(
             this,
             new PlaybackAudioStateChangedEventArgs(
-                (int)Math.Round(_volume * VolumeSliderScale),
-                IsEffectivelyMuted()
+                state.VolumePercent,
+                state.IsMuted || state.VolumePercent <= 0
             )
         );
     }
 
     private void SeekToPoint(System.Windows.Point point)
     {
-        if (!_hasMedia || PlaybackSlider.ActualWidth <= 0)
+        if (!_coordinator.State.HasMedia || PlaybackSlider.ActualWidth <= 0)
         {
             return;
         }
@@ -993,70 +605,40 @@ public partial class RecordingPlayerControl : UserControl
         return false;
     }
 
-    private void UpdatePositionFromPlayer()
+    private void RenderPlaybackState()
     {
-        var position = GetPosition();
-        PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, position.TotalSeconds);
-        UpdatePlaybackTimeText(position, GetDuration());
-    }
-
-    private void StopPlaybackCore()
-    {
-        CancelPendingSurfaceInteraction();
-        CancelPendingKeyboardSeek();
-        _hasPlaybackEnded = false;
-        _pendingPlaybackStartPosition = null;
-        _positionTimer.Stop();
-        _isPlaying = false;
-        UpdatePlayPauseButton();
-
-        if (_currentSource is not null)
+        var state = _coordinator.State;
+        if (state.IsPlaying)
         {
-            _player.Stop();
+            _positionTimer.Start();
+        }
+        else
+        {
+            _positionTimer.Stop();
         }
 
-        ApplyPlayerAudioState();
-    }
-
-    private void StartPlayback()
-    {
-        var duration = GetDuration();
-        if (_hasPlaybackEnded || (duration > TimeSpan.Zero && GetPosition() >= duration))
+        PlayPauseButton.IsEnabled = state.HasMedia;
+        FullScreenButton.IsEnabled = state.IsOpening || state.HasMedia;
+        PlaybackSlider.IsEnabled = state.HasMedia && state.Duration > TimeSpan.Zero;
+        PlaybackSlider.Maximum = Math.Max(0, state.Duration.TotalSeconds);
+        if (!_isSeeking && _pendingKeyboardSeekPosition is null)
         {
-            var startPosition = Clamp(
-                _pendingPlaybackStartPosition ?? TimeSpan.Zero,
-                TimeSpan.Zero,
-                duration
-            );
-            SetPosition(startPosition);
-            PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, startPosition.TotalSeconds);
-            UpdatePlaybackTimeText(startPosition, duration);
+            PlaybackSlider.Value = Math.Min(PlaybackSlider.Maximum, state.Position.TotalSeconds);
+            UpdatePlaybackTimeText(state.Position, state.Duration);
         }
 
-        _hasPlaybackEnded = false;
-        _pendingPlaybackStartPosition = null;
-        ApplyPlayerAudioState();
-        _player.Play();
-        _isPlaying = true;
         UpdatePlayPauseButton();
-        _positionTimer.Start();
-    }
-
-    private void PausePlayback()
-    {
-        if (_currentSource is not null && _hasMedia)
-        {
-            _player.Pause();
-        }
-
-        _positionTimer.Stop();
-        _isPlaying = false;
-        UpdatePlayPauseButton();
+        UpdateVolumeControls();
+        UpdatePlaceholderText();
+        PlayerPreviewCover.SetCurrentValue(
+            VisibilityProperty,
+            state.IsOpen ? Visibility.Collapsed : Visibility.Visible
+        );
     }
 
     private void UpdatePlayPauseButton()
     {
-        if (_isPlaying)
+        if (_coordinator.State.IsPlaying)
         {
             PlayPauseIcon.Data = (Geometry)FindResource(StopIconGeometryKey);
             PlayPauseButton.ToolTip = "Pause";
@@ -1090,12 +672,13 @@ public partial class RecordingPlayerControl : UserControl
 
     private void UpdateVolumeControls()
     {
+        var state = _coordinator.State;
         _isUpdatingVolumeControls = true;
-        VolumeSlider.Value = Math.Round(_volume * VolumeSliderScale);
+        VolumeSlider.Value = state.VolumePercent;
         VolumeSlider.ToolTip = $"{VolumeSlider.Value:0}% volume";
         _isUpdatingVolumeControls = false;
 
-        if (IsEffectivelyMuted())
+        if (state.IsMuted || state.VolumePercent <= 0)
         {
             MuteIcon.Data = (Geometry)FindResource(MutedIconGeometryKey);
             MuteButton.ToolTip = "Unmute";
@@ -1110,7 +693,7 @@ public partial class RecordingPlayerControl : UserControl
     {
         PlayerPlaceholder.SetCurrentValue(
             TextBlock.TextProperty,
-            _playbackErrorText ?? PlaceholderText
+            _coordinator.State.ErrorText ?? PlaceholderText
         );
     }
 
@@ -1118,58 +701,6 @@ public partial class RecordingPlayerControl : UserControl
     {
         PlaybackTimeText.Text =
             $"{RecordingTimeFormatter.FormatPlaybackTime(position)} / {RecordingTimeFormatter.FormatPlaybackTime(duration)}";
-    }
-
-    private void ResetPlayerState(bool sourceAvailable)
-    {
-        CancelPendingSurfaceInteraction();
-        CancelPendingKeyboardSeek();
-        _hasMedia = false;
-        _hasPlaybackEnded = false;
-        _pendingPlaybackStartPosition = null;
-        _isSeeking = false;
-        _playbackErrorText = null;
-        PlayPauseButton.IsEnabled = false;
-        FullScreenButton.IsEnabled = sourceAvailable;
-        PlaybackSlider.IsEnabled = false;
-        PlaybackSlider.Maximum = 0;
-        PlaybackSlider.Value = 0;
-        UpdatePlaybackTimeText(TimeSpan.Zero, TimeSpan.Zero);
-        UpdatePlaceholderText();
-        PlayerPreviewCover.SetCurrentValue(VisibilityProperty, Visibility.Visible);
-    }
-
-    private void UpdateDurationFromPlayer()
-    {
-        var duration = GetDuration();
-        PlaybackSlider.Maximum = duration.TotalSeconds;
-        PlaybackSlider.IsEnabled = _hasMedia && duration > TimeSpan.Zero;
-    }
-
-    private void ApplyPlayerAudioState()
-    {
-        _player.Audio.Volume = (int)Math.Round(_volume * VolumeSliderScale);
-        _player.Audio.Mute = IsEffectivelyMuted();
-    }
-
-    private TimeSpan GetDuration()
-    {
-        return _player.Duration > 0 ? TimeSpan.FromTicks(_player.Duration) : TimeSpan.Zero;
-    }
-
-    private TimeSpan GetPosition()
-    {
-        return _player.CurTime > 0 ? TimeSpan.FromTicks(_player.CurTime) : TimeSpan.Zero;
-    }
-
-    private void SetPosition(TimeSpan position)
-    {
-        _player.CurTime = position.Ticks;
-    }
-
-    private bool IsEffectivelyMuted()
-    {
-        return _isMuted || _volume <= 0;
     }
 
     private void CancelPendingSurfaceInteraction()
@@ -1192,15 +723,5 @@ public partial class RecordingPlayerControl : UserControl
         }
 
         return value > maximum ? maximum : value;
-    }
-
-    private static string GetPlayerSource(Uri source)
-    {
-        return source.IsFile ? source.LocalPath : source.AbsoluteUri;
-    }
-
-    private static string GetSourceDisplayName(Uri source)
-    {
-        return source.IsFile ? Path.GetFileName(source.LocalPath) : source.Host;
     }
 }

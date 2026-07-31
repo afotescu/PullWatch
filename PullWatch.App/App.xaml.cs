@@ -29,6 +29,11 @@ public partial class App : Application
         ).CreateLogger<T>();
     }
 
+    internal IPlaybackSession CreatePlaybackSession(IUiDispatcher dispatcher, ILogger logger)
+    {
+        return new FlyleafPlaybackSession(dispatcher, logger);
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

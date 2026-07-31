@@ -7,12 +7,16 @@ internal static class RecordingPlayerOpenRetryPolicy
 
     public static bool ShouldRetry(RecordingPlayerLoadRequest request, string? error)
     {
-        return request.Attempt < MaximumAttempts
-            && string.Equals(
-                error?.Trim(),
-                MissingPlaylistItemsError,
-                StringComparison.OrdinalIgnoreCase
-            );
+        return request.Attempt < MaximumAttempts && IsMissingPlaylistItemsError(error);
+    }
+
+    public static bool IsMissingPlaylistItemsError(string? error)
+    {
+        return string.Equals(
+            error?.Trim(),
+            MissingPlaylistItemsError,
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     public static TimeSpan GetDelay(RecordingPlayerLoadRequest request)
