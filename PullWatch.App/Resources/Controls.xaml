@@ -923,7 +923,7 @@
   </Style>
 
   <Style x:Key="RecordingFilterListStyle" TargetType="ListBox">
-    <Setter Property="AlternationCount" Value="3" />
+    <Setter Property="AlternationCount" Value="4" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
@@ -948,7 +948,7 @@
     <Setter Property="Control.Template">
       <Setter.Value>
         <ControlTemplate>
-          <Border BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="5" />
+          <Border BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="6" />
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -968,7 +968,7 @@
               x:Name="ItemBorder"
               Background="Transparent"
               BorderBrush="{StaticResource BorderSubtleBrush}"
-              BorderThickness="0,0,1,0"
+              BorderThickness="1,1,0,1"
               CornerRadius="0"
               Padding="{TemplateBinding Padding}"
             >
@@ -977,7 +977,7 @@
             <Border
               x:Name="SelectionIndicator"
               Height="2"
-              Margin="8,0"
+              Margin="8,0,8,1"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Bottom"
               Background="{StaticResource AccentBrush}"
@@ -987,10 +987,15 @@
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="ItemsControl.AlternationIndex" Value="0">
-              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="5,0,0,5" />
+              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="6,0,0,6" />
             </Trigger>
             <Trigger Property="ItemsControl.AlternationIndex" Value="2">
-              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="0,5,5,0" />
+              <Setter TargetName="ItemBorder" Property="BorderThickness" Value="1" />
+              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="0,6,6,0" />
+            </Trigger>
+            <Trigger Property="ItemsControl.AlternationIndex" Value="3">
+              <Setter TargetName="ItemBorder" Property="BorderThickness" Value="1" />
+              <Setter TargetName="ItemBorder" Property="CornerRadius" Value="6" />
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
               <Setter
@@ -1015,6 +1020,11 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <Trigger Property="ItemsControl.AlternationIndex" Value="3">
+        <Setter Property="Margin" Value="10,0,0,0" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="RecordingLibraryItemStyle" TargetType="ListBoxItem">

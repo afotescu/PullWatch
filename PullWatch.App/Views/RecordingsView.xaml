@@ -46,47 +46,39 @@
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
 
-          <Border
+          <ListBox
             HorizontalAlignment="Left"
             VerticalAlignment="Center"
-            BorderBrush="{StaticResource BorderSubtleBrush}"
-            BorderThickness="1"
-            CornerRadius="6"
+            ItemContainerStyle="{StaticResource RecordingFilterItemStyle}"
+            ItemsSource="{Binding RecordingCategories}"
+            SelectedItem="{Binding SelectedRecordingCategory, Mode=TwoWay}"
+            SelectionChanged="OnRecordingCategoryChanged"
+            Style="{StaticResource RecordingFilterListStyle}"
           >
-            <ListBox
-              HorizontalAlignment="Left"
-              VerticalAlignment="Center"
-              ItemContainerStyle="{StaticResource RecordingFilterItemStyle}"
-              ItemsSource="{Binding RecordingCategories}"
-              SelectedItem="{Binding SelectedRecordingCategory, Mode=TwoWay}"
-              SelectionChanged="OnRecordingCategoryChanged"
-              Style="{StaticResource RecordingFilterListStyle}"
-            >
-              <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ListBox.ItemsPanel>
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock
-                      Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                      Text="{Binding Title}"
-                      TextWrapping="NoWrap"
-                    />
-                    <TextBlock
-                      Margin="6,0,0,0"
-                      Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                      Opacity="0.72"
-                      Text="{Binding Count}"
-                      TextWrapping="NoWrap"
-                    />
-                  </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-          </Border>
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock
+                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                    Text="{Binding Title}"
+                    TextWrapping="NoWrap"
+                  />
+                  <TextBlock
+                    Margin="6,0,0,0"
+                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                    Opacity="0.72"
+                    Text="{Binding Count}"
+                    TextWrapping="NoWrap"
+                  />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
 
           <Button
             Grid.Column="1"
