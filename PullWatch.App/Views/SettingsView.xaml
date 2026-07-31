@@ -5,6 +5,9 @@
   xmlns:local="clr-namespace:PullWatch"
 >
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer.Resources>
+      <Style BasedOn="{StaticResource VerticalScrollBarStyle}" TargetType="ScrollBar" />
+    </ScrollViewer.Resources>
     <Grid x:Name="SettingsContentHost" Margin="16,24,32,24">
       <StackPanel
         x:Name="SettingsColumn"

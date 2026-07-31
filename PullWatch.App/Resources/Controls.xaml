@@ -1118,6 +1118,120 @@
     </Style.Triggers>
   </Style>
 
+  <Style x:Key="ScrollBarPageButtonStyle" TargetType="RepeatButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="RepeatButton">
+          <Border Background="Transparent" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="VerticalScrollBarThumbStyle" TargetType="Thumb">
+    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Thumb">
+          <Border Background="Transparent" SnapsToDevicePixels="True">
+            <Border
+              x:Name="ThumbFill"
+              Width="6"
+              HorizontalAlignment="Center"
+              Background="{StaticResource TextMutedBrush}"
+              CornerRadius="3"
+            />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter
+                TargetName="ThumbFill"
+                Property="Background"
+                Value="{StaticResource TextSecondaryBrush}"
+              />
+            </Trigger>
+            <Trigger Property="IsDragging" Value="True">
+              <Setter TargetName="ThumbFill" Property="Width" Value="8" />
+              <Setter TargetName="ThumbFill" Property="CornerRadius" Value="4" />
+              <Setter
+                TargetName="ThumbFill"
+                Property="Background"
+                Value="{StaticResource TextSecondaryBrush}"
+              />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <ControlTemplate x:Key="VerticalScrollBarTemplate" TargetType="ScrollBar">
+    <Grid x:Name="ScrollBarRoot" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+      <Border
+        Width="6"
+        HorizontalAlignment="Center"
+        Background="{StaticResource BorderSubtleBrush}"
+        CornerRadius="3"
+      />
+      <Track
+        x:Name="PART_Track"
+        IsDirectionReversed="True"
+        Maximum="{TemplateBinding Maximum}"
+        Minimum="{TemplateBinding Minimum}"
+        Value="{TemplateBinding Value}"
+        ViewportSize="{TemplateBinding ViewportSize}"
+      >
+        <Track.DecreaseRepeatButton>
+          <RepeatButton
+            Command="ScrollBar.PageUpCommand"
+            Style="{StaticResource ScrollBarPageButtonStyle}"
+          />
+        </Track.DecreaseRepeatButton>
+        <Track.Thumb>
+          <Thumb Style="{StaticResource VerticalScrollBarThumbStyle}" />
+        </Track.Thumb>
+        <Track.IncreaseRepeatButton>
+          <RepeatButton
+            Command="ScrollBar.PageDownCommand"
+            Style="{StaticResource ScrollBarPageButtonStyle}"
+          />
+        </Track.IncreaseRepeatButton>
+      </Track>
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter TargetName="ScrollBarRoot" Property="Opacity" Value="0.4" />
+      </Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+
+  <Style x:Key="VerticalScrollBarStyle" TargetType="ScrollBar">
+    <Style.Triggers>
+      <Trigger Property="Orientation" Value="Vertical">
+        <Setter Property="Width" Value="{x:Static SystemParameters.VerticalScrollBarWidth}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template" Value="{StaticResource VerticalScrollBarTemplate}" />
+      </Trigger>
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="Orientation" Value="Vertical" />
+          <Condition Property="Maximum" Value="0" />
+        </MultiTrigger.Conditions>
+        <Setter Property="IsEnabled" Value="False" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+      </MultiTrigger>
+    </Style.Triggers>
+  </Style>
+
   <Style x:Key="ActionContextMenuStyle" TargetType="ContextMenu">
     <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />

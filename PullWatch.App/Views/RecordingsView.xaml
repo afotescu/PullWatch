@@ -128,10 +128,13 @@
             ItemContainerStyle="{StaticResource RecordingLibraryItemStyle}"
             ItemsSource="{Binding Recordings}"
             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            ScrollViewer.VerticalScrollBarVisibility="Visible"
             SelectedItem="{Binding SelectedRecording, Mode=TwoWay}"
             VirtualizingPanel.ScrollUnit="Pixel"
           >
+            <ListBox.Resources>
+              <Style BasedOn="{StaticResource VerticalScrollBarStyle}" TargetType="ScrollBar" />
+            </ListBox.Resources>
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ToolTip="{Binding ToolTip}">
