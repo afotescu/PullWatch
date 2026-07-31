@@ -1172,7 +1172,11 @@
   </Style>
 
   <ControlTemplate x:Key="VerticalScrollBarTemplate" TargetType="ScrollBar">
-    <Grid x:Name="ScrollBarRoot" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+    <Grid
+      x:Name="ScrollBarRoot"
+      Background="{TemplateBinding Background}"
+      SnapsToDevicePixels="True"
+    >
       <Border
         Width="6"
         HorizontalAlignment="Center"
