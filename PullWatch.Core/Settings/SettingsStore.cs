@@ -182,7 +182,7 @@ public sealed class SettingsStore
         public WindowPlacementSettings? WindowPlacement { get; init; } = new();
         public bool SidebarCollapsed { get; init; }
         public RecordingListCategory SelectedRecordingCategory { get; init; } =
-            RecordingListCategory.ChallengeMode;
+            RecordingListCategory.All;
         public int PlaybackVolumePercent { get; init; } = UiSettings.DefaultPlaybackVolumePercent;
         public bool IsPlaybackMuted { get; init; }
 

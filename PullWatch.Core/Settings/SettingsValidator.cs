@@ -45,7 +45,7 @@ public static class SettingsValidator
         if (!Enum.IsDefined(settings.Ui.SelectedRecordingCategory))
         {
             errors.Add(
-                "Selected recording category must be ChallengeMode, RaidEncounter, or Manual."
+                "Selected recording category must be All, ChallengeMode, RaidEncounter, or Manual."
             );
         }
 

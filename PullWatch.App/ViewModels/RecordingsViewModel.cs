@@ -69,7 +69,7 @@ public sealed partial class RecordingsViewModel : ObservableObject
         _library = new RecordingLibraryViewModel(
             initialStatus.EffectiveSettings?.RecordingsDirectory,
             initialStatus.EffectiveSettings?.Ui.SelectedRecordingCategory
-                ?? RecordingListCategory.ChallengeMode,
+                ?? RecordingListCategory.All,
             loadRecordings,
             deleteRecording,
             confirmPermanentDelete,

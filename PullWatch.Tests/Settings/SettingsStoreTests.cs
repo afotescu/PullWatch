@@ -133,6 +133,86 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
+    public async Task LegacyUiSettingsWithoutRecordingCategoryDefaultToAll()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {
+              "Version": 1,
+              "Ui": {
+                "SidebarCollapsed": true
+              }
+            }
+            """,
+            cancellationToken
+        );
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(RecordingListCategory.All, result.Settings!.Ui.SelectedRecordingCategory);
+    }
+
+    [Theory]
+    [InlineData(0, RecordingListCategory.ChallengeMode)]
+    [InlineData(1, RecordingListCategory.RaidEncounter)]
+    [InlineData(2, RecordingListCategory.Manual)]
+    [InlineData(3, RecordingListCategory.All)]
+    public async Task LoadsPersistedRecordingCategoryNumericValues(
+        int persistedValue,
+        RecordingListCategory expected
+    )
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            $$"""
+            {
+              "Version": 1,
+              "Ui": {
+                "SelectedRecordingCategory": {{persistedValue}}
+              }
+            }
+            """,
+            cancellationToken
+        );
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(expected, result.Settings!.Ui.SelectedRecordingCategory);
+    }
+
+    [Fact]
+    public async Task RoundTripsAllRecordingCategorySelection()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        var store = new SettingsStore(path);
+
+        await store.SaveAsync(
+            new PullWatchSettings
+            {
+                Ui = new UiSettings { SelectedRecordingCategory = RecordingListCategory.All },
+            },
+            cancellationToken
+        );
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(RecordingListCategory.All, result.Settings!.Ui.SelectedRecordingCategory);
+    }
+
+    [Fact]
     public async Task RoundTripsLastEnabledStorageLimitWhileLimitIsDisabled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

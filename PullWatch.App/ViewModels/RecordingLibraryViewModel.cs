@@ -9,6 +9,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         "Choose a recordings directory in settings to review videos here.";
     private const string LoadingMessage = "Loading recordings...";
     private const string NoRecordingsMessage = "No finished .mp4 recordings found yet.";
+    private const string NoAutomaticRecordingsMessage = "No Mythic+ or Raid recordings found yet.";
 
     private readonly Func<string, Task<IReadOnlyList<RecordingCatalogFile>>> _loadRecordings;
     private readonly Func<Guid, Task> _deleteRecording;
@@ -43,6 +44,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         _setCommandMessage = setCommandMessage;
         RecordingCategories =
         [
+            new RecordingCategoryTab(RecordingListCategory.All, "All"),
             new RecordingCategoryTab(RecordingListCategory.ChallengeMode, "Mythic+"),
             new RecordingCategoryTab(RecordingListCategory.RaidEncounter, "Raid"),
             new RecordingCategoryTab(RecordingListCategory.Manual, "Manual"),
@@ -65,7 +67,9 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
     public string DurationColumnHeader => CurrentColumnHeaders.Duration;
 
     public bool IsPullNumberColumnVisible =>
-        SelectedRecordingCategory.Category == RecordingListCategory.RaidEncounter;
+        SelectedRecordingCategory.Category
+            is RecordingListCategory.RaidEncounter
+                or RecordingListCategory.All;
 
     public bool IsContextColumnVisible => CurrentColumnHeaders.IsContextVisible;
 
@@ -155,7 +159,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
             var preferredRecording = FindAllByPath(preferredSelectionPath);
             if (
                 preferredRecording is not null
-                && preferredRecording.Category != SelectedRecordingCategory.Category
+                && !IsInSelectedCategory(preferredRecording.Category)
             )
             {
                 SelectCategory(preferredRecording.Category);
@@ -206,6 +210,28 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
     private RecordingListColumnHeaders CurrentColumnHeaders =>
         GetColumnHeaders(SelectedRecordingCategory.Category);
 
+    private bool IsInSelectedCategory(RecordingListCategory itemCategory)
+    {
+        return Matches(SelectedRecordingCategory.Category, itemCategory);
+    }
+
+    /// <summary>
+    /// Decides whether an item belongs to a selected tab. <see cref="RecordingListCategory.All"/>
+    /// is a synthetic filter that matches both automatic categories; every other tab is an exact
+    /// match.
+    /// </summary>
+    private static bool Matches(
+        RecordingListCategory selectedCategory,
+        RecordingListCategory itemCategory
+    )
+    {
+        return selectedCategory == RecordingListCategory.All
+            ? itemCategory
+                is RecordingListCategory.ChallengeMode
+                    or RecordingListCategory.RaidEncounter
+            : selectedCategory == itemCategory;
+    }
+
     private bool IsCurrentRefresh(int refreshVersion, string recordingsDirectory)
     {
         return refreshVersion == _refreshVersion
@@ -239,7 +265,7 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
 
         foreach (
             var recording in _allRecordings.Where(recording =>
-                recording.Category == SelectedRecordingCategory.Category
+                IsInSelectedCategory(recording.Category)
             )
         )
         {
@@ -264,7 +290,9 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
     {
         foreach (var tab in RecordingCategories)
         {
-            tab.Count = _allRecordings.Count(recording => recording.Category == tab.Category);
+            tab.Count = _allRecordings.Count(recording =>
+                Matches(tab.Category, recording.Category)
+            );
         }
     }
 
@@ -344,17 +372,28 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
                 : removal.AllIndex;
         _allRecordings.Insert(allInsertIndex, recording);
 
-        if (recording.Category == SelectedRecordingCategory.Category)
+        if (IsInSelectedCategory(recording.Category))
         {
-            var visibleInsertIndex =
-                removal.VisibleIndex < 0 || removal.VisibleIndex > Recordings.Count
-                    ? Recordings.Count
-                    : removal.VisibleIndex;
-            Recordings.Insert(visibleInsertIndex, recording);
+            Recordings.Insert(GetVisibleInsertIndex(allInsertIndex), recording);
         }
 
         UpdateCategoryCounts();
         UpdateStatus();
+    }
+
+    private int GetVisibleInsertIndex(int allIndex)
+    {
+        var visibleIndex = 0;
+
+        for (var index = 0; index < allIndex; index++)
+        {
+            if (IsInSelectedCategory(_allRecordings[index].Category))
+            {
+                visibleIndex++;
+            }
+        }
+
+        return visibleIndex;
     }
 
     private void SelectNear(int removedIndex)
@@ -397,15 +436,25 @@ internal sealed class RecordingLibraryViewModel : ObservableObject
         }
 
         RecordingLibraryStatus =
-            _allRecordings.Count == 0
-                ? NoRecordingsMessage
-                : $"No {SelectedRecordingCategory.Title} recordings found yet.";
+            _allRecordings.Count == 0 ? NoRecordingsMessage
+            : SelectedRecordingCategory.Category == RecordingListCategory.All
+                ? NoAutomaticRecordingsMessage
+            : $"No {SelectedRecordingCategory.Title} recordings found yet.";
     }
 
     private static RecordingListColumnHeaders GetColumnHeaders(RecordingListCategory category)
     {
         return category switch
         {
+            RecordingListCategory.All => new RecordingListColumnHeaders(
+                "Recording",
+                "Details",
+                "Result",
+                "Length",
+                true,
+                true,
+                true
+            ),
             RecordingListCategory.ChallengeMode => new RecordingListColumnHeaders(
                 "Dungeon",
                 "Key",

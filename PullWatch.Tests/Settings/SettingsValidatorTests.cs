@@ -143,7 +143,25 @@ public sealed class SettingsValidatorTests
 
         Assert.False(result.IsValid);
         Assert.Null(result.Settings);
-        Assert.NotEmpty(result.Errors);
+        Assert.Contains(
+            "Selected recording category must be All, ChallengeMode, RaidEncounter, or Manual.",
+            result.Errors
+        );
+    }
+
+    [Theory]
+    [InlineData(RecordingListCategory.All)]
+    [InlineData(RecordingListCategory.ChallengeMode)]
+    [InlineData(RecordingListCategory.RaidEncounter)]
+    [InlineData(RecordingListCategory.Manual)]
+    public void AcceptsEverySelectedRecordingCategory(RecordingListCategory category)
+    {
+        var result = SettingsValidator.Validate(
+            new PullWatchSettings { Ui = new UiSettings { SelectedRecordingCategory = category } }
+        );
+
+        Assert.True(result.IsValid);
+        Assert.Equal(category, result.Settings!.Ui.SelectedRecordingCategory);
     }
 
     [Fact]
