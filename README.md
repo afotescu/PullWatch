@@ -14,15 +14,6 @@ in-app library.
 
 ![PullWatch playback and recordings view](.github/assets/pullwatch-recordings.png)
 
-## Status
-
-This project is in early development. Expect issues.
-
-The current release focuses on World of Warcraft Retail. Automatic logs folder
-detection looks for Retail `_retail_\Logs` directories. Classic, PTR, and other
-variants may work only with manual folder configuration and are not the primary
-target yet.
-
 ## Download
 
 [**Download the latest Windows x64 installer**](https://github.com/afotescu/PullWatch/releases/latest/download/PullWatch.Desktop-win-Setup.exe).
@@ -34,6 +25,15 @@ for new downloads.
 
 Closing the PullWatch window keeps the app running in the system tray. Use
 `Exit` from the tray icon menu to fully quit PullWatch.
+
+## Status
+
+This project is in early development. Expect issues.
+
+The current release focuses on World of Warcraft Retail. Automatic logs folder
+detection looks for Retail `_retail_\Logs` directories. Classic, PTR, and other
+variants may work only with manual folder configuration and are not the primary
+target yet.
 
 ## Features
 
@@ -47,9 +47,11 @@ Closing the PullWatch window keeps the app running in the system tray. Use
   raid difficulty, outcome, and duration.
 - Recording management actions for opening the recordings folder and deleting a
   selected finished recording.
-- Settings for combat-log and recordings directories, Mythic+ and raid toggles,
-  quality preset, frame rate, system audio, microphone, cursor capture, and
-  capture border.
+- Settings for combat-log and recordings directories, recording filters,
+  storage limits, encoder profile, quality preset, frame rate, output scaling,
+  system audio, microphone, cursor capture, capture border, and Windows startup.
+- Automatic video encoder testing with a choice of the H.264 and H.265 profiles
+  that pass on the current system.
 - Diagnostics view with combat-log, WoW process, recorder state, effective
   settings, and recent application logs.
 
@@ -58,6 +60,9 @@ Closing the PullWatch window keeps the app running in the system tray. Use
 These are PullWatch-specific shortcuts. Standard Windows keyboard behavior such
 as `Tab` navigation, `Enter` on focused buttons, and dialog cancellation is not
 repeated here.
+
+<details>
+<summary>View keyboard shortcuts</summary>
 
 ### Recording Player
 
@@ -93,6 +98,8 @@ The volume slider retains the standard Windows slider keyboard controls.
 | Shortcut | Scope | Action |
 | --- | --- | --- |
 | `Enter` | Editing the WoW logs or recordings directory path | Validate and save the edited path |
+
+</details>
 
 ## Requirements
 
@@ -135,9 +142,12 @@ before posting them publicly.
 
 ## Recording Behavior
 
-PullWatch captures the World of Warcraft window with calibrated H.264 or H.265
-video encoding. It uses simple quality presets instead of exposing raw bitrate
-controls:
+PullWatch tests the H.264 and H.265 hardware and software encoders available on
+your system. It automatically selects the highest-priority profile that passes
+the test, and you can choose another passing profile under **Settings > Video**.
+Recording stays disabled until an encoder profile passes.
+
+PullWatch uses simple quality presets instead of exposing raw bitrate controls:
 
 - `Compact` for smaller files
 - `Balanced` for the default quality and size tradeoff
@@ -152,46 +162,48 @@ a five-minute recording. FFmpeg uses the target bitrate shown here, plus a
 `1.5x` max rate and `2x` buffer size. Lower frame rates use proportionally less
 video bitrate.
 
+<details>
+<summary>View bitrate and file-size estimates</summary>
+
 ### Compact
 
 | Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
 | --- | ---: | ---: | ---: | ---: |
-| 4K / 3840x2160 | 24 Mbps | ~904 MB | 16 Mbps | ~604 MB |
-| 2K / 2560x1440 | 10 Mbps | ~379 MB | 7 Mbps | ~266 MB |
-| 1K / 1920x1080 | 6 Mbps | ~229 MB | 4 Mbps | ~154 MB |
-| 720p / 1280x720 | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
+| 2160p / 4K UHD (3840x2160) | 24 Mbps | ~904 MB | 16 Mbps | ~604 MB |
+| 1440p / QHD (2560x1440) | 10 Mbps | ~379 MB | 7 Mbps | ~266 MB |
+| 1080p / Full HD (1920x1080) | 6 Mbps | ~229 MB | 4 Mbps | ~154 MB |
+| 720p / HD (1280x720) | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
 
 ### Balanced
 
 | Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
 | --- | ---: | ---: | ---: | ---: |
-| 4K / 3840x2160 | 35 Mbps | ~1,316 MB | 20 Mbps | ~754 MB |
-| 2K / 2560x1440 | 16 Mbps | ~604 MB | 9 Mbps | ~341 MB |
-| 1K / 1920x1080 | 9 Mbps | ~341 MB | 5 Mbps | ~191 MB |
-| 720p / 1280x720 | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
+| 2160p / 4K UHD (3840x2160) | 35 Mbps | ~1,316 MB | 20 Mbps | ~754 MB |
+| 1440p / QHD (2560x1440) | 16 Mbps | ~604 MB | 9 Mbps | ~341 MB |
+| 1080p / Full HD (1920x1080) | 9 Mbps | ~341 MB | 5 Mbps | ~191 MB |
+| 720p / HD (1280x720) | 4 Mbps | ~154 MB | 4 Mbps | ~154 MB |
 
 ### High
 
 | Resolution | H.264 target | H.264 size | H.265 target | H.265 size |
 | --- | ---: | ---: | ---: | ---: |
-| 4K / 3840x2160 | 50 Mbps | ~1,879 MB | 30 Mbps | ~1,129 MB |
-| 2K / 2560x1440 | 22 Mbps | ~829 MB | 14 Mbps | ~529 MB |
-| 1K / 1920x1080 | 12 Mbps | ~454 MB | 8 Mbps | ~304 MB |
-| 720p / 1280x720 | 5 Mbps | ~191 MB | 4 Mbps | ~154 MB |
+| 2160p / 4K UHD (3840x2160) | 50 Mbps | ~1,879 MB | 30 Mbps | ~1,129 MB |
+| 1440p / QHD (2560x1440) | 22 Mbps | ~829 MB | 14 Mbps | ~529 MB |
+| 1080p / Full HD (1920x1080) | 12 Mbps | ~454 MB | 8 Mbps | ~304 MB |
+| 720p / HD (1280x720) | 5 Mbps | ~191 MB | 4 Mbps | ~154 MB |
+
+</details>
 
 Automatic recording starts only when PullWatch can see the WoW window and read
 the configured logs directory. If combat-log monitoring is unavailable, manual
 recording can still be used while the WoW window is available.
 
-Automatic recording is not retroactive. Start PullWatch before the Mythic+ key
-or raid pull so it can see the combat-log start event.
-
 Finished recordings are saved as `.mp4` files. File names include the recording
 start time and context, such as `manual`, `mythic-plus`, or `raid`.
 
-## Source
+## Building from Source
 
-Source is available for transparency. Building locally requires:
+Building locally requires:
 
 - Windows x64
 - .NET 10 SDK
@@ -219,6 +231,11 @@ a machine-level FFmpeg install.
 - [Flyleaf](https://github.com/SuRGeoNix/Flyleaf)
 - [Dapper](https://github.com/DapperLib/Dapper)
 - [FluentMigrator](https://fluentmigrator.github.io/)
+
+## License
+
+PullWatch is open source and licensed under the
+[GNU General Public License v3.0](LICENSE).
 
 ## Disclaimer
 
