@@ -114,6 +114,7 @@ public partial class App : Application
                 _loggerFactory.CreateLogger<FfmpegEncoderTestService>(),
                 windowsStartupShortcut,
                 applicationUpdater,
+                new WindowsExternalLinkLauncher(),
                 _controller.StartedWithCreatedSettingsFile
             );
             var whatsNewViewModel = CreateWhatsNewViewModel(applicationUpdater, logger);

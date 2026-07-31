@@ -61,6 +61,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IWindowsStartupShortcut windowsStartupShortcut,
         IApplicationUpdater applicationUpdater,
         Action requestShutdownForUpdate,
+        IExternalLinkLauncher externalLinkLauncher,
         bool showSettingsOnStartup = false
     )
     {
@@ -99,6 +100,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             requestShutdownForUpdate,
             notifications: Notifications
         );
+        Support = new SupportLinkViewModel(externalLinkLauncher, Notifications);
         NavigationItems =
         [
             new NavigationItemViewModel("Recordings", ShellIconGeometries.Recordings, Recordings),
@@ -144,6 +146,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public NotificationCenterViewModel Notifications { get; }
 
     public ApplicationUpdateViewModel Updates { get; }
+
+    public SupportLinkViewModel Support { get; }
 
     public void Dispose()
     {

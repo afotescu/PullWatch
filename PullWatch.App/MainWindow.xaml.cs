@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         ILogger<FfmpegEncoderTestService> encoderTestLogger,
         IWindowsStartupShortcut windowsStartupShortcut,
         IApplicationUpdater applicationUpdater,
+        IExternalLinkLauncher externalLinkLauncher,
         bool showSettingsOnStartup
     )
     {
@@ -50,6 +51,7 @@ public partial class MainWindow : Window
             windowsStartupShortcut,
             applicationUpdater,
             RequestShutdownForUpdate,
+            externalLinkLauncher,
             showSettingsOnStartup
         );
         DataContext = _viewModel;

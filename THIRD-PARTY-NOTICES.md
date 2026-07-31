@@ -46,5 +46,16 @@ Public License version 3 text shipped with PullWatch applies to this runtime.
 - Source: https://github.com/amerkoleci/Vortice.Windows
 - SharpGen source: https://github.com/SharpGenTools/SharpGenTools
 
+## Bootstrap Icons
+
+- Component: Bootstrap Icons (icon path data embedded in PullWatch shell icons)
+- Copyright: The Bootstrap Authors
+- License: MIT License
+- Source: https://github.com/twbs/icons
+- License text: https://github.com/twbs/icons/blob/main/LICENSE
+
+PullWatch embeds icon path data from Bootstrap Icons; no Bootstrap Icons
+package or asset file is redistributed.
+
 These notices are provided for attribution and license compliance. The
 respective licenses govern the listed third-party components.
