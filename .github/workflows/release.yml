@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      no_delta_base:
+        description: Package without a previous release, for the first release in a channel
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -35,6 +40,8 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
   PUBLISH_DIR: artifacts/publish/win-x64
   VELOPACK_VERSION: 1.2.0
+  VELOPACK_PACK_ID: PullWatch.Desktop
+  VELOPACK_WORK_DIR: artifacts/velopack/work
   VELOPACK_RELEASE_DIR: artifacts/velopack/releases
   FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip
   FFMPEG_SHA256: db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec
@@ -57,12 +64,15 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
           INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
+          INPUT_NO_DELTA_BASE: ${{ github.event.inputs.no_delta_base }}
         run: |
           $tag = $env:REF_NAME
           $prerelease = "false"
+          $noBase = "false"
           if ($env:EVENT_NAME -eq "workflow_dispatch") {
             $tag = $env:INPUT_TAG
             $prerelease = $env:INPUT_PRERELEASE
+            $noBase = $env:INPUT_NO_DELTA_BASE
           }
 
           if (-not $tag.StartsWith("v")) {
@@ -78,9 +88,14 @@ jobs:
             $prerelease = "true"
           }
 
+          if ([string]::IsNullOrWhiteSpace($noBase)) {
+            $noBase = "false"
+          }
+
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+          "no_base=$noBase" >> $env:GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -151,17 +166,72 @@ jobs:
       - name: Install Velopack CLI
         run: dotnet tool install --tool-path .tools vpk --version ${{ env.VELOPACK_VERSION }}
 
+      - name: Prepare Velopack work directory
+        shell: pwsh
+        run: |
+          $workDir = $env:VELOPACK_WORK_DIR
+          if (Test-Path -LiteralPath $workDir) {
+            Remove-Item -LiteralPath $workDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+
+      - name: Download previous release for delta generation
+        if: steps.release-tag.outputs.no_base != 'true'
+        shell: pwsh
+        env:
+          VPK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PRERELEASE: ${{ steps.release-tag.outputs.prerelease }}
+        run: |
+          $workDir = $env:VELOPACK_WORK_DIR
+          $downloadArguments = @(
+            "download",
+            "github",
+            "--repoUrl",
+            "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY",
+            "--outputDir",
+            $workDir
+          )
+
+          $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:RELEASE_PRERELEASE,
+            "true"
+          )
+          if ($prerelease) {
+            $downloadArguments += "--pre"
+          }
+
+          ./.tools/vpk.exe @downloadArguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download a previous release for delta generation. Re-run the workflow with no_delta_base when the channel has no previous release."
+          }
+
+          $basePackages = @(
+            Get-ChildItem -LiteralPath $workDir -Filter "$env:VELOPACK_PACK_ID-*-full.nupkg" -File |
+              Sort-Object Name
+          )
+          if ($basePackages.Count -eq 0) {
+            throw "Velopack reported a successful download but produced no $env:VELOPACK_PACK_ID base package in $workDir"
+          }
+
+          foreach ($basePackage in $basePackages) {
+            Write-Host ("Delta base package: {0} ({1:N0} bytes)" -f $basePackage.Name, $basePackage.Length)
+          }
+
       - name: Package Velopack release
         id: package
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+          RELEASE_NO_BASE: ${{ steps.release-tag.outputs.no_base }}
         run: |
           $packageArguments = @{
             PublishPath = $env:PUBLISH_DIR
+            WorkDir = $env:VELOPACK_WORK_DIR
             ReleaseDir = $env:VELOPACK_RELEASE_DIR
             Version = $env:RELEASE_VERSION
+            PackId = $env:VELOPACK_PACK_ID
             ChecksumFileName = "PullWatch-$($env:RELEASE_TAG)-win-x64.sha256"
           }
           $releaseNotesPath = ".github/release-notes/$($env:RELEASE_TAG).md"
@@ -169,9 +239,32 @@ jobs:
             $packageArguments.ReleaseNotesPath = $releaseNotesPath
           }
 
+          $noBase = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:RELEASE_NO_BASE,
+            "true"
+          )
+          if ($noBase) {
+            $packageArguments.NoBase = $true
+          }
+
           ./scripts/package-velopack-win-x64.ps1 @packageArguments
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
+
+      - name: Summarize release assets
+        shell: pwsh
+        run: |
+          $summary = @(
+            "### Velopack release assets",
+            "",
+            "| File | Size (bytes) |",
+            "| --- | ---: |"
+          )
+          $summary += Get-ChildItem -LiteralPath $env:VELOPACK_RELEASE_DIR -File |
+            Sort-Object Name |
+            ForEach-Object { "| {0} | {1:N0} |" -f $_.Name, $_.Length }
+
+          ($summary -join "`n") >> $env:GITHUB_STEP_SUMMARY
 
       - name: Upload Velopack artifact
         uses: actions/upload-artifact@v7

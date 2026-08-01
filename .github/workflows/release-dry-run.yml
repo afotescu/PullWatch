@@ -10,7 +10,12 @@ on:
         default: 0.0.1-dryrun.1
         type: string
       bundle_ffmpeg:
-        description: Bundle FFmpeg in the dry-run artifact
+        description: Bundle FFmpeg in the dry-run artifact. Required when delta_base is enabled.
+        required: false
+        default: false
+        type: boolean
+      delta_base:
+        description: Download the latest published release as a delta base. Requires bundle_ffmpeg and a version higher than that release.
         required: false
         default: false
         type: boolean
@@ -29,6 +34,8 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
   PUBLISH_DIR: artifacts/publish/win-x64-dry-run
   VELOPACK_VERSION: 1.2.0
+  VELOPACK_PACK_ID: PullWatch.Desktop
+  VELOPACK_WORK_DIR: artifacts/velopack/dry-run-work
   VELOPACK_RELEASE_DIR: artifacts/velopack/dry-run
   FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip
   FFMPEG_SHA256: db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec
@@ -40,11 +47,13 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Resolve dry-run version
+      - name: Resolve dry-run inputs
         id: dry-run-version
         shell: pwsh
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_BUNDLE_FFMPEG: ${{ github.event.inputs.bundle_ffmpeg }}
+          INPUT_DELTA_BASE: ${{ github.event.inputs.delta_base }}
         run: |
           $version = $env:INPUT_VERSION
           if ([string]::IsNullOrWhiteSpace($version)) {
@@ -55,7 +64,22 @@ jobs:
             throw "Dry-run version must look like 0.1.0 or 0.1.0-rc.1. Received: $version"
           }
 
+          $bundleFfmpeg = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:INPUT_BUNDLE_FFMPEG,
+            "true"
+          )
+          $deltaBase = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:INPUT_DELTA_BASE,
+            "true"
+          )
+          if ($deltaBase -and !$bundleFfmpeg) {
+            throw "delta_base requires bundle_ffmpeg. Published releases bundle FFmpeg, so a delta built from an unbundled dry-run build would measure FFmpeg removal instead of a production-equivalent update."
+          }
+
+          $prerelease = if ($version -match '^\d+\.\d+\.\d+-') { "true" } else { "false" }
+
           "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -106,18 +130,82 @@ jobs:
       - name: Install Velopack CLI
         run: dotnet tool install --tool-path .tools vpk --version ${{ env.VELOPACK_VERSION }}
 
+      - name: Prepare Velopack work directory
+        shell: pwsh
+        run: |
+          $workDir = $env:VELOPACK_WORK_DIR
+          if (Test-Path -LiteralPath $workDir) {
+            Remove-Item -LiteralPath $workDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+
+      - name: Download previous release for delta generation
+        if: github.event.inputs.delta_base == 'true'
+        shell: pwsh
+        env:
+          VPK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN_PRERELEASE: ${{ steps.dry-run-version.outputs.prerelease }}
+        run: |
+          $workDir = $env:VELOPACK_WORK_DIR
+          $downloadArguments = @(
+            "download",
+            "github",
+            "--repoUrl",
+            "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY",
+            "--outputDir",
+            $workDir
+          )
+
+          $prerelease = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:DRY_RUN_PRERELEASE,
+            "true"
+          )
+          if ($prerelease) {
+            $downloadArguments += "--pre"
+          }
+
+          ./.tools/vpk.exe @downloadArguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download a previous release for delta generation. Re-run the dry run with delta_base disabled when the channel has no previous release."
+          }
+
+          $basePackages = @(
+            Get-ChildItem -LiteralPath $workDir -Filter "$env:VELOPACK_PACK_ID-*-full.nupkg" -File |
+              Sort-Object Name
+          )
+          if ($basePackages.Count -eq 0) {
+            throw "Velopack reported a successful download but produced no $env:VELOPACK_PACK_ID base package in $workDir"
+          }
+
+          foreach ($basePackage in $basePackages) {
+            Write-Host ("Delta base package: {0} ({1:N0} bytes)" -f $basePackage.Name, $basePackage.Length)
+          }
+
       - name: Package Velopack release
         id: package
         shell: pwsh
         env:
           DRY_RUN_VERSION: ${{ steps.dry-run-version.outputs.version }}
+          DRY_RUN_DELTA_BASE: ${{ github.event.inputs.delta_base }}
         run: |
           $packageArguments = @{
             PublishPath = $env:PUBLISH_DIR
+            WorkDir = $env:VELOPACK_WORK_DIR
             ReleaseDir = $env:VELOPACK_RELEASE_DIR
             Version = $env:DRY_RUN_VERSION
+            PackId = $env:VELOPACK_PACK_ID
             ChecksumFileName = "PullWatch-dry-run-$($env:DRY_RUN_VERSION)-win-x64.sha256"
           }
+
+          $deltaBase = [System.StringComparer]::OrdinalIgnoreCase.Equals(
+            $env:DRY_RUN_DELTA_BASE,
+            "true"
+          )
+          if (!$deltaBase) {
+            $packageArguments.NoBase = $true
+          }
+
           $releaseNotesPath = ".github/release-notes/v$($env:DRY_RUN_VERSION).md"
           if (Test-Path -LiteralPath $releaseNotesPath -PathType Leaf) {
             $packageArguments.ReleaseNotesPath = $releaseNotesPath
@@ -129,6 +217,21 @@ jobs:
           ./scripts/package-velopack-win-x64.ps1 @packageArguments
 
           "release_dir=$env:VELOPACK_RELEASE_DIR" >> $env:GITHUB_OUTPUT
+
+      - name: Summarize dry-run assets
+        shell: pwsh
+        run: |
+          $summary = @(
+            "### Velopack dry-run assets",
+            "",
+            "| File | Size (bytes) |",
+            "| --- | ---: |"
+          )
+          $summary += Get-ChildItem -LiteralPath $env:VELOPACK_RELEASE_DIR -File |
+            Sort-Object Name |
+            ForEach-Object { "| {0} | {1:N0} |" -f $_.Name, $_.Length }
+
+          ($summary -join "`n") >> $env:GITHUB_STEP_SUMMARY
 
       - name: Upload dry-run artifact
         uses: actions/upload-artifact@v7
