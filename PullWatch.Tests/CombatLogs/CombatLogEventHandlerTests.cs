@@ -128,7 +128,7 @@ public sealed class CombatLogEventHandlerTests
             handler,
             "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
         );
-        await HandleLineAsync(handler, "6/23/2026 16:42:51.0000  SPELL_DAMAGE");
+        await HandleLineAsync(handler, "6/23/2026 16:43:00.0000  SPELL_DAMAGE");
 
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
@@ -188,13 +188,32 @@ public sealed class CombatLogEventHandlerTests
         );
         await HandleLineAsync(
             handler,
-            "6/23/2026 16:41:50.0000  MAP_CHANGE,572,\"Draenor\",11193.750000,-3964.583984,12243.750000,-10493.750000"
+            "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
         );
         await HandleLineAsync(
             handler,
             "6/23/2026 16:41:59.0000  MAP_CHANGE,601,\"Skyreach\",1367.989990,839.651978,2227.123535,1434.616577"
         );
         await HandleLineAsync(handler, "6/23/2026 16:43:10.0000  SPELL_DAMAGE");
+
+        Assert.Equal(["start"], recorder.Calls);
+    }
+
+    [Fact]
+    public async Task AwayMapChangeDoesNotStopChallengeRecording()
+    {
+        var recorder = new FakeRecordingService();
+        await using var handler = CreateHandler(recorder);
+
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:44.8003  CHALLENGE_MODE_START,\"Windrunner Spire\",2805,557,21,[10,9,147]"
+        );
+        await HandleLineAsync(
+            handler,
+            "6/23/2026 16:41:50.0000  MAP_CHANGE,2537,\"Quel'Thalas\",5462.500000,-1204.166626,7250.000000,-6533.333496"
+        );
+        await HandleLineAsync(handler, "6/23/2026 16:43:00.0000  SPELL_DAMAGE");
 
         Assert.Equal(["start"], recorder.Calls);
     }
@@ -214,7 +233,7 @@ public sealed class CombatLogEventHandlerTests
             handler,
             "6/23/2026 16:41:50.0010  MAP_CHANGE,601,\"Skyreach\",1367.989990,839.651978,2227.123535,1434.616577"
         );
-        await HandleLineAsync(handler, "6/23/2026 16:42:01.0000  SPELL_DAMAGE");
+        await HandleLineAsync(handler, "6/23/2026 16:43:00.0000  SPELL_DAMAGE");
 
         Assert.Equal(["start", "stop"], recorder.Calls);
     }
@@ -280,7 +299,7 @@ public sealed class CombatLogEventHandlerTests
             handler,
             "6/23/2026 16:41:50.0000  ZONE_CHANGE,1116,\"Spires of Arak\",0"
         );
-        await HandleLineAsync(handler, "6/23/2026 16:42:51.0000  SPELL_DAMAGE");
+        await HandleLineAsync(handler, "6/23/2026 16:43:00.0000  SPELL_DAMAGE");
 
         var recordings = await catalog.ListAvailableFilesAsync(
             database.DirectoryPath,
@@ -289,6 +308,47 @@ public sealed class CombatLogEventHandlerTests
         var recording = Assert.Single(recordings);
         Assert.NotNull(recording.ChallengeMode);
         Assert.Equal(ChallengeModeOutcome.Depleted, recording.ChallengeMode.Outcome);
+    }
+
+    [Fact]
+    public async Task ParentMapBlipDuringChallengeCompletesChallengeAsTimed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var database = await TemporaryRecordingDatabase.CreateAsync(cancellationToken);
+        var outputPath = Path.Combine(database.DirectoryPath, "windrunner-spire.mp4");
+        var recorder = new FakeRecordingService { ActiveOutputPath = outputPath };
+        var catalog = new RecordingCatalog(database.Repository);
+        await using var handler = CreateHandler(recorder, recordingCatalog: catalog);
+
+        await HandleLineAsync(
+            handler,
+            "7/12/2026 21:03:12.1180  CHALLENGE_MODE_START,\"Windrunner Spire\",2805,557,8,[10,9,147]"
+        );
+        File.WriteAllText(outputPath, "recording");
+        await HandleLineAsync(
+            handler,
+            "7/12/2026 21:14:12.4210  MAP_CHANGE,2537,\"Quel'Thalas\",5462.500000,-1204.166626,7250.000000,-6533.333496"
+        );
+        await HandleLineAsync(handler, "7/12/2026 21:14:25.0000  SPELL_DAMAGE");
+        await HandleLineAsync(handler, "7/12/2026 21:14:55.0000  SPELL_HEAL");
+        await HandleLineAsync(handler, "7/12/2026 21:15:30.0000  SPELL_DAMAGE");
+        await HandleLineAsync(
+            handler,
+            "7/12/2026 21:15:32.7810  MAP_CHANGE,2497,\"Windrunner Spire\",2691.666748,-4429.166504,4179.166748,-6662.500000"
+        );
+        await HandleLineAsync(
+            handler,
+            "7/12/2026 21:26:05.3390  CHALLENGE_MODE_END,2805,1,8,1373239,89.000000,2841.000000"
+        );
+
+        var recordings = await catalog.ListAvailableFilesAsync(
+            database.DirectoryPath,
+            cancellationToken
+        );
+        var recording = Assert.Single(recordings);
+        Assert.Equal(["start", "stop"], recorder.Calls);
+        Assert.NotNull(recording.ChallengeMode);
+        Assert.Equal(ChallengeModeOutcome.Timed, recording.ChallengeMode.Outcome);
     }
 
     [Fact]

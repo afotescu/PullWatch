@@ -9,7 +9,7 @@ internal sealed class ChallengeModeLifecycle(
     TimeSpan? watchdogTimeout = null
 ) : IAsyncDisposable
 {
-    private static readonly TimeSpan DefaultWatchdogTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultWatchdogTimeout = TimeSpan.FromSeconds(60);
     private static readonly StringComparer DungeonNameComparer = StringComparer.OrdinalIgnoreCase;
 
     private readonly TimeSpan _watchdogTimeout = watchdogTimeout ?? DefaultWatchdogTimeout;
@@ -161,16 +161,7 @@ internal sealed class ChallengeModeLifecycle(
             return;
         }
 
-        if (
-            zoneChange.ZoneId != activeChallenge.MapId
-            || zoneChange.InstanceType != WowDifficultyIds.MythicPlus
-        )
-        {
-            StartOrRefreshWatchdog(
-                activeChallenge,
-                ChallengeSoftStopEvidence.FromZoneChange(zoneChange)
-            );
-        }
+        StartOrRefreshWatchdog(activeChallenge, zoneChange);
     }
 
     public void HandleMapChange(MapChangeContext mapChange)
@@ -192,10 +183,7 @@ internal sealed class ChallengeModeLifecycle(
                 activeChallenge,
                 mapChange: mapChange
             );
-            return;
         }
-
-        StartOrRefreshWatchdog(activeChallenge, ChallengeSoftStopEvidence.FromMapChange(mapChange));
     }
 
     private static async Task ObserveCanceledTaskAsync(
@@ -222,11 +210,9 @@ internal sealed class ChallengeModeLifecycle(
 
     private bool IsNonMythicPlusDungeonZoneSuspected(ChallengeRecordingContext activeChallenge)
     {
-        var evidence = _watchdog?.Evidence;
-
-        return evidence?.EventName == WowEvents.ZoneChange
-            && evidence.ZoneId == activeChallenge.MapId
-            && evidence.InstanceType != WowDifficultyIds.MythicPlus;
+        return _watchdog?.ZoneChange is { } zoneChange
+            && zoneChange.ZoneId == activeChallenge.MapId
+            && zoneChange.InstanceType != WowDifficultyIds.MythicPlus;
     }
 
     private async Task ExpireWatchdogIfDueAsync(
@@ -295,7 +281,7 @@ internal sealed class ChallengeModeLifecycle(
 
     private void StartOrRefreshWatchdog(
         ChallengeRecordingContext activeChallenge,
-        ChallengeSoftStopEvidence evidence
+        ZoneChangeContext zoneChange
     )
     {
         ClearWatchdog();
@@ -303,14 +289,14 @@ internal sealed class ChallengeModeLifecycle(
         var cancellation = new CancellationTokenSource();
         var state = new ChallengeWatchdogState(
             activeChallenge,
-            evidence,
-            evidence.OccurredAt + _watchdogTimeout
+            zoneChange,
+            zoneChange.ChangedAt + _watchdogTimeout
         );
 
         _watchdog = state;
         _watchdogCancellation = cancellation;
         _watchdogTask = RunWatchdogAsync(state, cancellation.Token);
-        LogSoftStopSuspected(activeChallenge, evidence);
+        LogSoftStopSuspected(activeChallenge, zoneChange);
     }
 
     private async Task RunWatchdogAsync(
@@ -518,31 +504,17 @@ internal sealed class ChallengeModeLifecycle(
 
     private void LogSoftStopSuspected(
         ChallengeRecordingContext activeChallenge,
-        ChallengeSoftStopEvidence evidence
+        ZoneChangeContext zoneChange
     )
     {
-        if (evidence.ZoneId is { } zoneId)
-        {
-            logger.LogInformation(
-                "M+ soft stop suspected: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} event={EventName} zone={ZoneId} zoneName={ZoneName} instanceType={InstanceType} watchdogTimeout={WatchdogTimeout}",
-                activeChallenge.DungeonName,
-                activeChallenge.MapId,
-                evidence.EventName,
-                zoneId,
-                evidence.ZoneName,
-                evidence.InstanceType,
-                _watchdogTimeout
-            );
-            return;
-        }
-
         logger.LogInformation(
-            "M+ soft stop suspected: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} event={EventName} uiMap={UiMapId} mapName={MapName} watchdogTimeout={WatchdogTimeout}",
+            "M+ soft stop suspected: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} event={EventName} zone={ZoneId} zoneName={ZoneName} instanceType={InstanceType} watchdogTimeout={WatchdogTimeout}",
             activeChallenge.DungeonName,
             activeChallenge.MapId,
-            evidence.EventName,
-            evidence.UiMapId,
-            evidence.MapName,
+            WowEvents.ZoneChange,
+            zoneChange.ZoneId,
+            zoneChange.ZoneName,
+            zoneChange.InstanceType,
             _watchdogTimeout
         );
     }
@@ -607,74 +579,23 @@ internal sealed class ChallengeModeLifecycle(
         DateTimeOffset expiredAt
     )
     {
-        var evidence = state.Evidence;
-
-        if (evidence.ZoneId is { } zoneId)
-        {
-            logger.LogInformation(
-                "M+ watchdog expired: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} firstSoftSignal={EventName} zone={ZoneId} zoneName={ZoneName} instanceType={InstanceType} elapsed={Elapsed} action=StopRecording",
-                activeChallenge.DungeonName,
-                activeChallenge.MapId,
-                evidence.EventName,
-                zoneId,
-                evidence.ZoneName,
-                evidence.InstanceType,
-                expiredAt - evidence.OccurredAt
-            );
-            return;
-        }
+        var zoneChange = state.ZoneChange;
 
         logger.LogInformation(
-            "M+ watchdog expired: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} firstSoftSignal={EventName} uiMap={UiMapId} mapName={MapName} elapsed={Elapsed} action=StopRecording",
+            "M+ watchdog expired: activeDungeon={ActiveDungeonName} activeMap={ActiveMapId} firstSoftSignal={EventName} zone={ZoneId} zoneName={ZoneName} instanceType={InstanceType} elapsed={Elapsed} action=StopRecording",
             activeChallenge.DungeonName,
             activeChallenge.MapId,
-            evidence.EventName,
-            evidence.UiMapId,
-            evidence.MapName,
-            expiredAt - evidence.OccurredAt
+            WowEvents.ZoneChange,
+            zoneChange.ZoneId,
+            zoneChange.ZoneName,
+            zoneChange.InstanceType,
+            expiredAt - zoneChange.ChangedAt
         );
     }
 
     private sealed record ChallengeWatchdogState(
         ChallengeRecordingContext Challenge,
-        ChallengeSoftStopEvidence Evidence,
+        ZoneChangeContext ZoneChange,
         DateTimeOffset ExpiresAt
     );
-
-    private sealed record ChallengeSoftStopEvidence(
-        string EventName,
-        DateTimeOffset OccurredAt,
-        int? ZoneId,
-        string? ZoneName,
-        int? InstanceType,
-        int? UiMapId,
-        string? MapName
-    )
-    {
-        public static ChallengeSoftStopEvidence FromZoneChange(ZoneChangeContext zoneChange)
-        {
-            return new ChallengeSoftStopEvidence(
-                WowEvents.ZoneChange,
-                zoneChange.ChangedAt,
-                zoneChange.ZoneId,
-                zoneChange.ZoneName,
-                zoneChange.InstanceType,
-                null,
-                null
-            );
-        }
-
-        public static ChallengeSoftStopEvidence FromMapChange(MapChangeContext mapChange)
-        {
-            return new ChallengeSoftStopEvidence(
-                WowEvents.MapChange,
-                mapChange.ChangedAt,
-                null,
-                null,
-                null,
-                mapChange.UiMapId,
-                mapChange.MapName
-            );
-        }
-    }
 }
