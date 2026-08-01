@@ -273,6 +273,56 @@ public sealed class SettingsStoreTests
         );
     }
 
+    [Theory]
+    [InlineData("""{ "Version": 1 }""")]
+    [InlineData("""{ "Version": 1, "Video": { "FrameRate": 60 } }""")]
+    public async Task MissingVideoScalingDefaultsToOriginal(string json)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(path, json, cancellationToken);
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(VideoScaling.Original, result.Settings!.Video.Scaling);
+    }
+
+    [Theory]
+    [InlineData(0, VideoScaling.Optimized)]
+    [InlineData(1, VideoScaling.Original)]
+    [InlineData(2, VideoScaling.Target1440p)]
+    [InlineData(3, VideoScaling.Target720p)]
+    public async Task LoadsPersistedVideoScalingNumericValues(
+        int persistedValue,
+        VideoScaling expected
+    )
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            path,
+            $$"""
+            {
+              "Version": 1,
+              "Video": {
+                "Scaling": {{persistedValue}}
+              }
+            }
+            """,
+            cancellationToken
+        );
+        var store = new SettingsStore(path);
+
+        var result = await store.LoadAsync(cancellationToken);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, result.Status);
+        Assert.Equal(expected, result.Settings!.Video.Scaling);
+    }
+
     [Fact]
     public async Task MalformedFileIsRejectedAndLeftUntouched()
     {

@@ -27,6 +27,8 @@ public sealed class SettingsBootstrapperTests
         Assert.Equal(SettingsLoadStatus.Loaded, persisted.Status);
         Assert.Equal(Path.GetFullPath(detectedLogsDirectory), persisted.Settings!.WowLogsDirectory);
         Assert.Equal(new VideoSettings(), persisted.Settings.Video);
+        Assert.Equal(VideoScaling.Original, persisted.Settings.Video.Scaling);
+        Assert.Equal(VideoScaling.Original, result.Settings.Video.Scaling);
         Assert.Equal(new AudioSettings(), persisted.Settings.Audio);
     }
 

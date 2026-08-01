@@ -59,7 +59,7 @@ public sealed record VideoSettings
     public VideoProfileSelection? SelectedProfile { get; init; }
     public VideoQuality Quality { get; init; } = VideoQuality.Balanced;
     public int FrameRate { get; init; } = VideoFrameRates.High;
-    public VideoScaling Scaling { get; init; } = VideoScaling.Optimized;
+    public VideoScaling Scaling { get; init; } = VideoScaling.Original;
     public bool CaptureCursor { get; init; } = true;
     public bool ShowCaptureBorder { get; init; }
 }
